@@ -1,0 +1,25 @@
+{
+    "name": "buzzu",
+    "version": "0.1.0",
+    "private": true,
+    "description": "BuzzU — Decentralized Anonymous Talk-to-Strangers for BracU Students",
+    "license": "AGPL-3.0",
+    "scripts": {
+        "dev": "turbo dev --filter=@buzzu/web",
+        "build": "turbo build",
+        "build:wasm": "turbo build:wasm --filter=@buzzu/wasm",
+        "test": "turbo test",
+        "lint": "turbo lint",
+        "deploy:signaling": "cd apps/signaling-worker && npx wrangler deploy",
+        "deploy:matchmaker": "cd apps/matchmaker-worker && npx wrangler deploy",
+        "deploy:web": "cd apps/web && npx wrangler pages deploy dist",
+        "deploy": "turbo deploy"
+    },
+    "devDependencies": {
+        "turbo": "^2.4.0"
+    },
+    "packageManager": "pnpm@9.15.0",
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

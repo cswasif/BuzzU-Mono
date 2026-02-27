@@ -1,0 +1,10 @@
+D:\Bumble\BuzzU\packages\wasm\target\wasm32-unknown-unknown\release\deps\ppv_lite86-955e810c3bacfdf5.d: C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\lib.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\soft.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\types.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\generic.rs
+
+D:\Bumble\BuzzU\packages\wasm\target\wasm32-unknown-unknown\release\deps\libppv_lite86-955e810c3bacfdf5.rlib: C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\lib.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\soft.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\types.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\generic.rs
+
+D:\Bumble\BuzzU\packages\wasm\target\wasm32-unknown-unknown\release\deps\libppv_lite86-955e810c3bacfdf5.rmeta: C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\lib.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\soft.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\types.rs C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\generic.rs
+
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\lib.rs:
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\soft.rs:
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\types.rs:
+C:\Users\Administrator\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ppv-lite86-0.2.21\src\generic.rs:

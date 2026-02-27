@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzzU Chat App - WASM Powered</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+        }
+        
+        .chat-app {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-header {
+            background: #2196F3;
+            color: white;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .chat-header h2 {
+            margin: 0;
+            font-size: 20px;
+        }
+        
+        .connection-status {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .chat-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        
+        .users-panel {
+            width: 250px;
+            background: #fafafa;
+            border-right: 1px solid #e0e0e0;
+            padding: 16px;
+        }
+        
+        .users-panel h3 {
+            margin: 0 0 16px 0;
+            font-size: 16px;
+            color: #333;
+        }
+        
+        .users-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .user-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .user-status {
+            font-size: 12px;
+        }
+        
+        .user-name {
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .messages-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .messages-container {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .no-messages {
+            text-align: center;
+            color: #999;
+            margin-top: 50px;
+        }
+        
+        .message {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            word-wrap: break-word;
+        }
+        
+        .own-message {
+            align-self: flex-end;
+            background: #2196F3;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .other-message {
+            align-self: flex-start;
+            background: #f1f3f4;
+            color: #333;
+            border-bottom-left-radius: 4px;
+        }
+        
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+        
+        .message-content {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .message-input-container {
+            display: flex;
+            padding: 16px;
+            border-top: 1px solid #e0e0e0;
+            gap: 12px;
+        }
+        
+        .message-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #e0e0e0;
+            border-radius: 24px;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .message-input:focus {
+            border-color: #2196F3;
+        }
+        
+        .send-button {
+            padding: 12px 24px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .send-button:hover:not(:disabled) {
+            background: #1976D2;
+        }
+        
+        .send-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .connection-controls {
+            padding: 16px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+        }
+        
+        .connect-button, .disconnect-button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .connect-button {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .connect-button:hover {
+            background: #45a049;
+        }
+        
+        .disconnect-button {
+            background: #f44336;
+            color: white;
+        }
+        
+        .disconnect-button:hover {
+            background: #da190b;
+        }
+        
+        .chat-app-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: #666;
+        }
+        
+        .chat-app-loading h2 {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="module">
+        import React from 'https://unpkg.com/react@18/umd/react.development.js';
+        import ReactDOM from 'https://unpkg.com/react-dom@18/umd/react-dom.development.js';
+        
+        // Note: In a real implementation, you would import your compiled WASM modules
+        // and TypeScript components here. This is a demonstration of the UI structure.
+        
+        const ChatAppDemo = () => {
+            const [isConnected, setIsConnected] = React.useState(false);
+            const [messages, setMessages] = React.useState([
+                { id: '1', from: 'User1', message: 'Hello everyone!', timestamp: Date.now() - 300000, isOwn: false },
+                { id: '2', from: 'me', message: 'Hi there! Welcome to BuzzU Chat!', timestamp: Date.now() - 240000, isOwn: true },
+                { id: '3', from: 'User2', message: 'This chat app is powered by Rust WASM!', timestamp: Date.now() - 180000, isOwn: false },
+                { id: '4', from: 'me', message: 'Yes! The WebSocket signaling and crypto operations run in Rust compiled to WASM.', timestamp: Date.now() - 120000, isOwn: true },
+            ]);
+            const [currentMessage, setCurrentMessage] = React.useState('');
+            const [users] = React.useState([
+                { peerId: 'user1', displayName: 'Alice', isOnline: true },
+                { peerId: 'user2', displayName: 'Bob', isOnline: true },
+                { peerId: 'user3', displayName: 'Charlie', isOnline: false },
+            ]);
+            
+            const roomId = 'demo-room';
+            
+            const sendMessage = () => {
+                if (!currentMessage.trim()) return;
+                
+                const newMessage = {
+                    id: Date.now().toString(),
+                    from: 'me',
+                    message: currentMessage.trim(),
+                    timestamp: Date.now(),
+                    isOwn: true
+                };
+                
+                setMessages(prev => [...prev, newMessage]);
+                setCurrentMessage('');
+            };
+            
+            const formatTimestamp = (timestamp) => {
+                const date = new Date(timestamp);
+                return date.toLocaleTimeString();
+            };
+            
+            return React.createElement('div', { className: 'chat-app' }, [
+                React.createElement('div', { className: 'chat-header', key: 'header' }, [
+                    React.createElement('h2', { key: 'title' }, `BuzzU Chat - Room: ${roomId}`),
+                    React.createElement('div', { className: 'connection-status', key: 'status' }, 
+                        `Status: ${isConnected ? '🟢 Connected' : '🔴 Disconnected'}`
+                    )
+                ]),
+                
+                React.createElement('div', { className: 'chat-container', key: 'container' }, [
+                    React.createElement('div', { className: 'users-panel', key: 'users' }, [
+                        React.createElement('h3', { key: 'users-title' }, `Online Users (${users.length})`),
+                        React.createElement('div', { className: 'users-list', key: 'users-list' },
+                            users.map(user => 
+                                React.createElement('div', { className: 'user-item', key: user.peerId }, [
+                                    React.createElement('span', { className: 'user-status', key: 'status' }, 
+                                        user.isOnline ? '🟢' : '🔴'
+                                    ),
+                                    React.createElement('span', { className: 'user-name', key: 'name' }, user.displayName)
+                                ])
+                            )
+                        )
+                    ]),
+                    
+                    React.createElement('div', { className: 'messages-panel', key: 'messages' }, [
+                        React.createElement('div', { className: 'messages-container', key: 'messages-container' },
+                            messages.map(message => 
+                                React.createElement('div', { 
+                                    className: `message ${message.isOwn ? 'own-message' : 'other-message'}`, 
+                                    key: message.id 
+                                }, [
+                                    React.createElement('div', { className: 'message-header', key: 'header' }, [
+                                        React.createElement('span', { className: 'message-sender', key: 'sender' },
+                                            message.isOwn ? 'You' : `User ${message.from.substr(0, 8)}`
+                                        ),
+                                        React.createElement('span', { className: 'message-timestamp', key: 'timestamp' },
+                                            formatTimestamp(message.timestamp)
+                                        )
+                                    ]),
+                                    React.createElement('div', { className: 'message-content', key: 'content' }, message.message)
+                                ])
+                            )
+                        ),
+                        
+                        React.createElement('div', { className: 'message-input-container', key: 'input' }, [
+                            React.createElement('input', {
+                                type: 'text',
+                                value: currentMessage,
+                                onChange: (e) => setCurrentMessage(e.target.value),
+                                onKeyPress: (e) => e.key === 'Enter' && sendMessage(),
+                                placeholder: 'Type your message...',
+                                disabled: !isConnected,
+                                className: 'message-input'
+                            }),
+                            React.createElement('button', {
+                                onClick: sendMessage,
+                                disabled: !isConnected || !currentMessage.trim(),
+                                className: 'send-button'
+                            }, 'Send')
+                        ])
+                    ])
+                ]),
+                
+                React.createElement('div', { className: 'connection-controls', key: 'controls' }, [
+                    !isConnected && React.createElement('button', {
+                        onClick: () => setIsConnected(true),
+                        className: 'connect-button'
+                    }, 'Connect to Room'),
+                    isConnected && React.createElement('button', {
+                        onClick: () => setIsConnected(false),
+                        className: 'disconnect-button'
+                    }, 'Disconnect')
+                ])
+            ]);
+        };
+        
+        const root = document.getElementById('root');
+        ReactDOM.render(React.createElement(ChatAppDemo), root);
+    </script>
+    
+    <div style="padding: 20px; background: #fff3cd; border: 1px solid #ffeaa7; margin: 20px;">
+        <h3>🚀 Chat App Demo</h3>
+        <p>This is a demonstration of the BuzzU Chat App UI. In a real implementation:</p>
+        <ul>
+            <li>✅ The WASM module provides secure crypto operations</li>
+            <li>✅ WebSocket signaling runs through the Rust WSS worker</li>
+            <li>✅ WebRTC peer-to-peer connections handle real-time messaging</li>
+            <li>✅ Connection quality monitoring optimizes performance</li>
+            <li>✅ All heavy operations run in Web Workers to prevent UI blocking</li>
+        </ul>
+        <p><strong>To implement this for real:</strong></p>
+        <ol>
+            <li>Build the WASM: <code>wasm-pack build --target web</code></li>
+            <li>Import the ChatApp component: <code>import { ChatApp } from './js-bridge/chat-app'</code></li>
+            <li>Set up a WebSocket signaling server (see workers/signaling/)</li>
+            <li>Deploy and enjoy your Rust-powered chat app!</li>
+        </ol>
+    </div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "@buzzu/wasm",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./js-bridge/index.ts",
+  "types": "./js-bridge/index.ts",
+  "exports": {
+    ".": "./js-bridge/index.ts",
+    "./bridge": "./js-bridge/bridge.ts",
+    "./wss-worker": "./js-bridge/wss-worker.ts",
+    "./worker-manager": "./js-bridge/worker-manager.ts",
+    "./types": "./js-bridge/types.ts",
+    "./chat-app": "./js-bridge/chat-app.tsx",
+    "./pkg/*": "./pkg/*"
+  },
+  "scripts": {
+    "build:wasm": "wasm-pack build --target web --out-dir pkg",
+    "build": "npm run build:wasm",
+    "test": "cargo test"
+  },
+  "files": [
+    "js-bridge/",
+    "pkg/",
+    "src/"
+  ]
+}

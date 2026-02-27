@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+@theme {
+    --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+    --color-background: hsl(var(--background));
+    --color-foreground: hsl(var(--foreground));
+    --color-card: hsl(var(--card));
+    --color-primary: hsl(var(--primary));
+    --color-border: hsl(var(--border));
+    --color-brightness: hsl(var(--brightness));
+
+    --radius-xl: 0.75rem;
+    --radius-md: calc(var(--radius) - 2px);
+}
+
+/* DM Sans Font Faces */
+@font-face {
+    font-family: DM Sans;
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100;
+    src:
+        url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-100-normal-ZwMKEyG7.woff2') format("woff2"),
+        url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-100-normal-CuNerm5Z.woff') format("woff");
+}
+
+@font-face {
+    font-family: DM Sans;
+    font-style: normal;
+    font-display: swap;
+    font-weight: 200;
+    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-200-normal-Db5rW57f.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-200-normal-Bn3cuIU8.woff') format("woff");
+}
+
+@font-face {
+    font-family: DM Sans;
+    font-style: normal;
+    font-display: swap;
+    font-weight: 300;
+    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-300-normal-C46oWILc.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-300-normal-CsNfKS1n.woff') format("woff");
+}
+
+@font-face {
+    font-family: DM Sans;
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-400-normal-CW0RaeGs.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-400-normal-BwCSEQnW.woff') format("woff");
+}
+
+@font-face {
+    font-family: DM Sans;
+    font-style: normal;
+    font-display: swap;
+    font-weight: 500;
+    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-500-normal-B9HHJjqV.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-500-normal-Dr3UlScf.woff') format("woff");
+}
+
+@font-face {
+    font-family: DM Sans;
+    font-style: normal;
+    font-display: swap;
+    font-weight: 600;
+    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-600-normal-Aqo67rzb.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-600-normal-BmdmIIQ2.woff') format("woff");
+}
+
+@font-face {
+    font-family: DM Sans;
+    font-style: normal;
+    font-display: swap;
+    font-weight: 700;
+    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-700-normal-DvUfVpUG.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-700-normal-CUSSCpQX.woff') format("woff");
+}
+
+@font-face {
+    font-family: DM Sans;
+    font-style: normal;
+    font-display: swap;
+    font-weight: 800;
+    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-800-normal-C2H8778U.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-800-normal-BwbkPQqB.woff') format("woff");
+}
+
+@font-face {
+    font-family: DM Sans;
+    font-style: normal;
+    font-display: swap;
+    font-weight: 900;
+    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-900-normal-BmOyECvA.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-900-normal-Bm36EmVp.woff') format("woff");
+}
+
+:root {
+    --brightness: 255 100% 100%;
+    --background: 234 10% 10%;
+    --foreground: 235 10% 90%;
+    --card: 235 10% 15%;
+    --border: 220 8% 30%;
+    --primary: 245 166 35;
+    /* BuzzU Amber Primary */
+    --radius: 0.75rem;
+}
+
+/* Google Sign-In Button Styles */
+.gsi-material-button {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    -webkit-appearance: none;
+    box-sizing: border-box;
+    color: #1f1f1f;
+    cursor: pointer;
+    letter-spacing: 0.25px;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+    background-color: #f2f2f2;
+    background-image: none;
+    border: none;
+    border-radius: 4px;
+    outline: none;
+    width: auto;
+    min-width: min-content;
+    max-width: 100%;
+    height: 44px;
+    padding: 0 12px;
+    font-family: Roboto, arial, sans-serif;
+    font-size: 14px;
+    transition: background-color 0.218s, border-color 0.218s, box-shadow 0.218s;
+    position: relative;
+    overflow: hidden;
+}
+
+.gsi-material-button .gsi-material-button-icon {
+    width: 20px;
+    min-width: 20px;
+    height: 20px;
+    margin-right: 12px;
+}
+
+.gsi-material-button .gsi-material-button-content-wrapper {
+    flex-flow: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    position: relative;
+}
+
+.gsi-material-button .gsi-material-button-contents {
+    text-overflow: ellipsis;
+    vertical-align: top;
+    flex-grow: 1;
+    font-family: Roboto, arial, sans-serif;
+    font-weight: 500;
+    overflow: hidden;
+}
+
+.gsi-material-button .gsi-material-button-state {
+    opacity: 0;
+    transition: opacity 0.218s;
+    position: absolute;
+    inset: 0;
+}
+
+.gsi-material-button:not(:disabled):hover {
+    box-shadow: 0 1px 2px #3c40434d, 0 1px 3px 1px #3c404326;
+    background-color: #fff;
+}

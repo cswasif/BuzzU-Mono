@@ -1,0 +1,312 @@
+/* Fully Scoped Chitchat Dashboard Styles */
+
+/* --- Fonts --- */
+@font-face {
+    font-family: 'DM Sans';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url('https://fonts.gstatic.com/s/dmsans/v11/rP2Hp2ywOTsxS8p-hS956G-m.woff2') format('woff2');
+}
+
+.chitchat-dashboard-theme {
+    /* Base Variables (Light) */
+    --radius: 0.5rem;
+    --brightness: 0 0% 0%;
+    --brightness-foreground: 0 0% 100%;
+    --placeholder: 230 10% 84%;
+    --placeholder-foreground: 264 3.9% 30%;
+    --background: 234 10% 95%;
+    --foreground: 235 10% 20%;
+    --popover: 232 10% 89%;
+    --popover-foreground: 235 10% 20%;
+    --panel: 230 10% 85%;
+    --panel-foreground: 235 10% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --primary: 255 42% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 10% 82%;
+    --muted-foreground: 235 5% 35%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --warning: 24 100% 61%;
+    --success: 116 46% 49%;
+    --border: 220 10% 85%;
+    --input: 264 19.5% 88.3%;
+    --field: 0 0% 100%;
+    --ring: 0 0% 3.9%;
+
+    /* Semantic variables */
+    --dashed-border: 0 0% 0%;
+    --dashed-border-opacity: 0.12;
+    --pill-bg: 0 0% 0%;
+    --pill-bg-opacity: 0.7;
+    --pill-text: var(--brightness-foreground);
+    --pill-text-opacity: 0.4;
+    --gender-male: 221 83% 53%;
+    --gender-female: 330 81% 60%;
+    --link-color: 226 71% 40%;
+    --input-bg: var(--popover);
+    --empty-state-opacity: 0.8;
+
+    /* Base Styling */
+    background-color: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+    font-family: 'DM Sans', sans-serif !important;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Dark Theme Overrides */
+.chitchat-dashboard-theme.theme-dark {
+    --brightness: 255 100% 100%;
+    --brightness-foreground: 0 0% 100%;
+    --placeholder: 233 6% 26.5%;
+    --placeholder-foreground: 264 3.9% 96.95%;
+    --background: 234 10% 20%;
+    --foreground: 235 10% 80%;
+    --popover: 232 10% 16%;
+    --popover-foreground: 0 0% 98%;
+    --panel: 230 10% 12%;
+    --panel-foreground: 235 10% 80%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --primary: 255 42% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 264 10% 11%;
+    --secondary-foreground: 264 5% 80%;
+    --muted: 240 10% 10%;
+    --muted-foreground: 235 5% 65%;
+    --accent: 233 6% 24%;
+    --accent-foreground: 264 3.9% 96.95%;
+    --destructive: 0 62.8% 50%;
+    --border: 220 15% 10%;
+    --input: 264 19.5% 8%;
+    --field: 264 19.5% 8%;
+    --ring: 264 39% 39%;
+    --warning: 24 100% 39%;
+    --success: 116 46% 49%;
+
+    /* Semantic variables override */
+    --dashed-border: 0 0% 100%;
+    --dashed-border-opacity: 0.08;
+    --pill-bg: 0 0% 100%;
+    --pill-bg-opacity: 0.1;
+    --pill-text: 0 0% 100%;
+    --pill-text-opacity: 1;
+    --gender-male: 217 91% 60%;
+    --gender-female: 327 87% 67%;
+    --link-color: 217 91% 60%;
+    --input-bg: var(--placeholder);
+    --empty-state-opacity: 0.25;
+}
+
+/* Comprehensive Utility Classes for Scoped Container */
+.chitchat-dashboard-theme .bg-background {
+    background-color: hsl(var(--background)) !important;
+}
+
+.chitchat-dashboard-theme .text-foreground {
+    color: hsl(var(--foreground)) !important;
+}
+
+/* Gradient Overrides for Scoped Theme */
+.chitchat-dashboard-theme .from-background {
+    --tw-gradient-from: hsl(var(--background)) !important;
+    --tw-gradient-to: hsla(var(--background), 0) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.chitchat-dashboard-theme .to-background {
+    --tw-gradient-to: hsl(var(--background)) !important;
+}
+
+.chitchat-dashboard-theme .bg-gradient-to-b {
+    background-image: linear-gradient(to bottom, var(--tw-gradient-stops)) !important;
+}
+
+.chitchat-dashboard-theme .bg-primary {
+    background-color: hsl(var(--primary)) !important;
+}
+
+.chitchat-dashboard-theme .text-primary-foreground {
+    color: hsl(var(--primary-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .bg-secondary {
+    background-color: hsl(var(--secondary)) !important;
+}
+
+.chitchat-dashboard-theme .text-secondary-foreground {
+    color: hsl(var(--secondary-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .bg-popover {
+    background-color: hsl(var(--popover)) !important;
+}
+
+.chitchat-dashboard-theme .text-popover-foreground {
+    color: hsl(var(--popover-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .bg-panel {
+    background-color: hsl(var(--panel)) !important;
+}
+
+.chitchat-dashboard-theme .text-panel-foreground {
+    color: hsl(var(--panel-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .bg-card {
+    background-color: hsl(var(--card)) !important;
+}
+
+.chitchat-dashboard-theme .text-card-foreground {
+    color: hsl(var(--card-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .bg-muted {
+    background-color: hsl(var(--muted)) !important;
+}
+
+.chitchat-dashboard-theme .text-muted-foreground {
+    color: hsl(var(--muted-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .bg-accent {
+    background-color: hsl(var(--accent)) !important;
+}
+
+.chitchat-dashboard-theme .text-accent-foreground {
+    color: hsl(var(--accent-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .bg-destructive {
+    background-color: hsl(var(--destructive)) !important;
+}
+
+.chitchat-dashboard-theme .text-destructive-foreground {
+    color: hsl(var(--destructive-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .bg-success {
+    background-color: hsl(var(--success)) !important;
+}
+
+.chitchat-dashboard-theme .bg-warning {
+    background-color: hsl(var(--warning)) !important;
+}
+
+.chitchat-dashboard-theme .bg-field {
+    background-color: hsl(var(--field)) !important;
+}
+
+.chitchat-dashboard-theme .bg-input {
+    background-color: hsl(var(--input)) !important;
+}
+
+.chitchat-dashboard-theme .bg-action {
+    background-color: hsl(var(--action)) !important;
+}
+
+.chitchat-dashboard-theme .bg-placeholder {
+    background-color: hsl(var(--placeholder)) !important;
+}
+
+.chitchat-dashboard-theme .text-brightness {
+    color: hsl(var(--brightness)) !important;
+}
+
+.chitchat-dashboard-theme .text-brightness-foreground {
+    color: hsl(var(--brightness-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .border-border {
+    border-color: hsl(var(--border)) !important;
+}
+
+.chitchat-dashboard-theme .border-primary {
+    border-color: hsl(var(--primary)) !important;
+}
+
+/* Border Radius Utilities */
+.chitchat-dashboard-theme .rounded-lg {
+    border-radius: var(--radius) !important;
+}
+
+.chitchat-dashboard-theme .rounded-md {
+    border-radius: calc(var(--radius) - 2px) !important;
+}
+
+.chitchat-dashboard-theme .rounded-sm {
+    border-radius: calc(var(--radius) - 4px) !important;
+}
+
+.chitchat-dashboard-theme .rounded-full {
+    border-radius: 9999px !important;
+}
+
+/* Force font-sans on everything */
+.chitchat-dashboard-theme .font-sans {
+    font-family: 'DM Sans', sans-serif !important;
+}
+
+/* Reset default borders to be very subtle */
+.chitchat-dashboard-theme .border {
+    border-color: hsla(var(--border), 0.15);
+}
+
+/* Tab Active States */
+.chitchat-dashboard-theme button[data-state=active] {
+    background-color: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Specific Popover Overrides */
+.chitchat-dashboard-theme .bg-popover {
+    border: 1px solid hsla(var(--border), 0.15) !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Border utilities with more visibility */
+.chitchat-dashboard-theme .border-border {
+    border-color: hsla(var(--border), 0.25) !important;
+}
+
+.chitchat-dashboard-theme .border-input {
+    border-color: hsla(var(--border), 0.15) !important;
+}
+
+/* Scrollbar Styles */
+.chitchat-dashboard-theme ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.chitchat-dashboard-theme ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chitchat-dashboard-theme ::-webkit-scrollbar-thumb {
+    background: hsla(var(--muted-foreground), 0.2);
+    border-radius: 9999px;
+}
+
+.chitchat-dashboard-theme ::-webkit-scrollbar-thumb:hover {
+    background: hsla(var(--muted-foreground), 0.4);
+}
+
+.chitchat-dashboard-theme .no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.chitchat-dashboard-theme .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
