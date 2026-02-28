@@ -88,6 +88,37 @@ export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>('aura');
+  const colors = themes[theme];
+
+  useEffect(() => {
+    // Helper to convert hex to RGB components
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '0, 0, 0';
+    };
+
+    // Inject CSS variables into document root for global availability
+    const root = document.documentElement;
+    root.style.setProperty('--accent-hover-bg', colors.accentHoverBg);
+    root.style.setProperty('--button-hover-bg', colors.buttonHoverBg);
+    root.style.setProperty('--theme-bg', colors.background);
+    root.style.setProperty('--theme-bg-rgb', hexToRgb(colors.background));
+    root.style.setProperty('--theme-text', colors.textPrimary);
+    root.style.setProperty('--theme-text-secondary', colors.textSecondary);
+    root.style.setProperty('--theme-accent', colors.accent);
+    root.style.setProperty('--theme-line', colors.line);
+    root.style.setProperty('--theme-button-border', colors.buttonBorder);
+
+    // Sync body styles
+    document.body.style.backgroundColor = colors.background;
+    document.body.style.color = colors.textPrimary;
+
+    // Update color-scheme for system UI
+    root.style.colorScheme = theme === 'light' ? 'light' : 'dark';
+
+    // Add data-theme attribute for CSS targeting
+    root.setAttribute('data-theme', theme);
+  }, [colors, theme]);
 
   const toggleTheme = () => {
     setTheme((prev) => {

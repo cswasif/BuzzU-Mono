@@ -148,13 +148,14 @@ export function ChatArea() {
     setMessages(prev => prev.filter(msg => msg.id !== message.id));
   };
 
-  const handleSendMessage = useCallback((content: string) => {
+  const handleSendMessage = useCallback((content: string, replyToMessage?: Message | null) => {
     setMessages(prev => [...prev, {
       id: makeId(),
       username: 'Me',
       avatarSeed: 'user-avatar-seed',
       timestamp: now(),
       content,
+      replyToMessage: replyToMessage || null,
     }]);
 
     // Simulated partner reply

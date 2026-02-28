@@ -499,265 +499,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
             <div className={`chitchat-dashboard-theme settings-modal-theme ${theme === 'dark' ? 'dark' : ''}`}>
                 <div
                     role="dialog"
-                id="radix-_r_49_"
-                aria-describedby="radix-_r_4b_"
-                aria-labelledby="radix-_r_4a_"
-                data-state="open"
-                className="fixed inset-0 z-50 m-auto w-full max-h-[90vh] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 sm:max-w-lg sm:rounded-lg md:w-full select-text md:min-w-[620px] md:max-h-[450px] flex flex-col max-md:px-3.5 border-none sm:h-fit max-sm:mt-auto max-sm:rounded-t-lg max-sm:rounded-b-none"
-                tabIndex={-1}
-                style={{ pointerEvents: 'auto' }}
-            >
-                <div className="flex flex-col space-y-1.5 text-center sm:text-left">
-                    <h2 id="radix-_r_4a_" className="text-lg font-semibold leading-none tracking-tight">Settings</h2>
-                </div>
-
-                {/* Mobile Navigation */}
-                <nav className="w-full flex-row gap-2 flex md:hidden">
-                    <div dir="ltr" data-orientation="horizontal" className="h-[400px] overflow-auto max-md:gap-2.5 max-md:content-start max-md:flex max-md:flex-wrap max-md:justify-center ">
-                        <div role="tablist" aria-orientation="horizontal" className="h-10 items-center rounded-md bg-muted p-1 text-muted-foreground overflow-x-auto flex justify-normal" tabIndex={0} data-orientation="horizontal" style={{ outline: 'none' }}>
-                            {['Profile', 'Account', 'Privacy', 'Preferences', 'Blocked'].map(tab => (
-                                <button
-                                    key={tab}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={activeTab === tab}
-                                    data-state={activeTab === tab ? "active" : "inactive"}
-                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-                                    tabIndex={-1}
-                                    data-orientation="horizontal"
-                                    onClick={() => setActiveTab(tab)}
-                                >
-                                    {tab}
-                                </button>
-                            ))}
-                        </div>
-                        {/* Mobile Content Rendering would go here, mirroring desktop content logic */}
-                        {activeTab === 'Profile' && (
-                            <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
-                                <div className="flex flex-col w-full animate-in fade-in slide-in-from-right-4 duration-200">
-                                    <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_mobile"> Avatar </label>
-                                    <div className="flex w-full gap-1 min-w-full justify-between items-center py-1 pb-2">
-                                        <span className="relative flex shrink-0 overflow-hidden rounded-full w-16 h-16">
-                                            <img className="aspect-square h-full w-full" alt={username} src={`https://api.dicebear.com/5.x/thumbs/png?seed=${username}&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67`} />
-                                        </span>
-                                        <div className="flex flex-row gap-1">
-                                            <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Change</button>
-                                            <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness">Remove</button>
-                                        </div>
-                                        <input className="hidden" id="_r_av_mobile" type="file" />
-                                    </div>
-                                    <span className="text-xs text-card-foreground">Avatars are reviewed before displaying. Do not upload inappropriate avatars. Limit: 3 changes daily. Max 8MB.</span>
-
-                                    <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
-
-                                    <span className="text-sm font-bold text-card-foreground">Banner</span>
-                                    <span></span>
-                                    <div className="flex flex-row gap-2 items-center">
-                                        <div className="flex items-center flex-col gap-0.5">
-                                            <button
-                                                onClick={() => {
-                                                    setBannerType('Simple');
-                                                    setShowColorPicker(true);
-                                                }}
-                                                className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-12 w-14 rounded-md bg-muted relative flex flex-col p-0 m-0"
-                                                style={{ backgroundColor: bannerColor }}
-                                            >
-                                                {bannerType === 'Simple' && (
-                                                    <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="absolute right-0 top-0 mr-1 mt-1" color="white" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg" style={{ color: 'white' }}><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
-                                                )}
-                                            </button>
-                                            <span className="text-xs">Simple</span>
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center flex-col gap-0.5">
-                                                <button
-                                                    onClick={() => setBannerType('Gradient')}
-                                                    className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-12 w-14 rounded-md bg-muted relative flex flex-col p-0 m-0"
-                                                    style={{ backgroundImage: 'linear-gradient(45deg, rgb(213, 63, 140), rgb(79, 70, 229))' }}
-                                                >
-                                                    {bannerType === 'Gradient' && (
-                                                        <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="absolute right-0 top-0 mr-1 mt-1" color="white" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg" style={{ color: 'white' }}><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
-                                                    )}
-                                                </button>
-                                                <span className="text-xs">Gradient</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
-
-                                    <div className="relative flex w-full basis-0 flex-col gap-1 min-w-full">
-                                        <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); handleSaveUsername(); }}>
-                                            <input hidden autoComplete="username" type="text" />
-                                            <div className="space-y-2">
-                                                <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold text-card-foreground" htmlFor="_r_b1_-form-item-mobile">USERNAME</label>
-                                                <div className="flex flex-col !mt-1" id="_r_b1_-form-item-mobile">
-                                                    {isEditingUsername ? (
-                                                        <div className="w-full max-w-sm items-center space-x-2 flex">
-                                                            <input
-                                                                className="flex h-10 w-full rounded-md border border-input bg-field px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                                placeholder="username"
-                                                                value={tempUsername}
-                                                                name="username"
-                                                                onChange={(e) => setTempUsername(e.target.value)}
-                                                            />
-                                                            <button type="submit" className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10">
-                                                                <CheckIcon className="h-4 w-4" />
-                                                            </button>
-                                                            <button type="button" onClick={() => setIsEditingUsername(false)} className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 w-10">
-                                                                <XIcon className="h-4 w-4" />
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="w-full flex flex-row items-center justify-between">
-                                                            <span className="text-brightness/65">{username}</span>
-                                                            <button onClick={() => setIsEditingUsername(true)} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button">Edit</button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <p id="_r_b1_-form-item-description-mobile" className="text-muted-foreground text-xs">You have <b>3</b> name changes left for today.</p>
-                                            </div>
-                                        </form>
-                                    </div>
-
-                                    <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
-
-                                    <label className="text-sm font-bold text-card-foreground"> INTERESTS (ON)</label>
-                                    <div className="relative flex w-full basis-0 flex-row items-center justify-between gap-1 min-w-full">
-                                        <label className="text-xs text-muted-foreground">You have 0 interests</label>
-                                        <button onClick={onOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        {activeTab === 'Account' && (
-                            <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
-                                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <label className="text-sm font-medium leading-none flex flex-col space-y-1">
-                                            <span>Account Removal</span>
-                                            <span className="font-normal leading-snug text-muted-foreground">Permanently delete your account.</span>
-                                        </label>
-                                        <button
-                                            onClick={() => setShowDeleteModal(true)}
-                                            className="inline-flex items-center justify-center text-sm font-medium border border-destructive text-destructive hover:bg-destructive/10 h-9 rounded-md px-3 gap-2"
-                                        >
-                                            <DeleteAccountIcon className="w-4 h-4" /> Delete
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        {activeTab === 'Privacy' && (
-                            <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
-                                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <label className="text-sm font-medium leading-none flex flex-col space-y-1">
-                                            <span>Badge Visibility <span className="text-xs text-muted-foreground">(Premium Only)</span></span>
-                                            <span className="font-normal leading-snug text-muted-foreground">Set who can see your profile badges.</span>
-                                        </label>
-                                        {renderDropdown('badge-mobile', badgeVisibility, setBadgeVisibility, visibilityOptions)}
-                                    </div>
-                                    <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <label className="text-sm font-medium leading-none flex flex-col space-y-1">
-                                            <span>Interests Visibility</span>
-                                            <span className="font-normal leading-snug text-muted-foreground">Set who can see your interests.</span>
-                                        </label>
-                                        {renderDropdown('interests-mobile', interestsVisibility, setInterestsVisibility, visibilityOptions)}
-                                    </div>
-                                    <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <label className="text-sm font-medium leading-none flex flex-col space-y-1">
-                                            <span>Friend Requests</span>
-                                            <span className="font-normal leading-snug text-muted-foreground">Allow strangers to send you friend requests.</span>
-                                        </label>
-                                        {renderSwitch(friendRequests, setFriendRequests)}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        {activeTab === 'Preferences' && (
-                            <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
-                                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <label className="text-sm font-medium leading-none flex flex-col space-y-1">
-                                            <span>Automatically convert emoticons to emojis</span>
-                                            <span className="font-normal leading-snug text-muted-foreground">For example, :) turns into 😃.</span>
-                                        </label>
-                                        {renderSwitch(convertEmoticons, setConvertEmoticons)}
-                                    </div>
-                                    <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <label className="text-sm font-medium leading-none flex flex-col space-y-1">
-                                            <span>Blur Images</span>
-                                            <span className="font-normal leading-snug text-muted-foreground">Blur images received from other users by default.</span>
-                                        </label>
-                                        {renderSwitch(blurImages, setBlurImages)}
-                                    </div>
-                                    <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <label className="text-sm font-medium leading-none flex flex-col space-y-1">
-                                            <span>Notification Sound</span>
-                                            <span className="font-normal leading-snug text-muted-foreground">Toggle the notification sound for new messages.</span>
-                                        </label>
-                                        {renderSwitch(notificationSound, setNotificationSound)}
-                                    </div>
-                                    <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <label className="text-sm font-medium leading-none flex flex-col space-y-1">
-                                            <span>Push Notifications</span>
-                                            <span className="font-normal leading-snug text-muted-foreground">Receive site notifications.</span>
-                                        </label>
-                                        {renderSwitch(pushNotifications, setPushNotifications)}
-                                    </div>
-                                    <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
-                                    <div className="flex items-center justify-between space-x-2">
-                                        <label className="text-sm font-medium leading-none flex flex-col space-y-1">
-                                            <span>Dark Mode</span>
-                                            <span className="font-normal leading-snug text-muted-foreground">Toggle the dark mode for the app.</span>
-                                        </label>
-                                        {renderSwitch(darkMode, setDarkMode)}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        {activeTab === 'Blocked' && (
-                            <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
-                                <div className="flex items-center justify-center h-full text-muted-foreground">
-                                    <p className="text-sm">You haven't blocked anyone yet.</p>
-                                </div>
-                            </div>
-                        )}
+                    id="radix-_r_49_"
+                    aria-describedby="radix-_r_4b_"
+                    aria-labelledby="radix-_r_4a_"
+                    data-state="open"
+                    className="fixed inset-0 z-50 m-auto w-full max-h-[90vh] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 sm:max-w-lg sm:rounded-lg md:w-full select-text md:min-w-[620px] md:max-h-[450px] flex flex-col max-md:px-3.5 border-none sm:h-fit max-sm:mt-auto max-sm:rounded-t-lg max-sm:rounded-b-none"
+                    tabIndex={-1}
+                    style={{ pointerEvents: 'auto' }}
+                >
+                    <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+                        <h2 id="radix-_r_4a_" className="text-lg font-semibold leading-none tracking-tight">Settings</h2>
                     </div>
-                </nav>
 
-                {/* Desktop Navigation & Content */}
-                <div className="flex-row gap-4 overflow-y-hidden py-1.5 hidden select-text md:flex h-full">
-                    <nav className="flex [&>button]:w-full [&>button]:gap-2 [&>button]:justify-start flex-col gap-1.5 w-48 shrink-0">
-                        <button onClick={() => setActiveTab('Profile')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Profile' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
-                            <UserIcon className="w-4 h-4" />Profile
-                        </button>
-                        <button onClick={() => setActiveTab('Account')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Account' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
-                            <CogIcon className="w-4 h-4" />Account
-                        </button>
-                        <button onClick={() => setActiveTab('Privacy')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Privacy' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
-                            <ShieldIcon className="w-4 h-4" />Privacy
-                        </button>
-                        <button onClick={() => setActiveTab('Preferences')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Preferences' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
-                            <Settings2Icon className="w-4 h-4" />Preferences
-                        </button>
-                        <button onClick={() => setActiveTab('Blocked')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Blocked' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
-                            <BanIcon className="w-4 h-4" />Blocked
-                        </button>
-                    </nav>
-
-                    <div dir="ltr" className="relative overflow-hidden pr-3 w-full [&>*]:pb-1 [&>*]:pr-1" style={{ position: 'relative', '--radix-scroll-area-corner-width': '0px', '--radix-scroll-area-corner-height': '0px' } as React.CSSProperties}>
-                        <div data-radix-scroll-area-viewport="" className="h-full w-full rounded-[inherit]" style={{ overflow: 'hidden scroll' }}>
-                            <div style={{ minWidth: '100%', display: 'table' }}>
-                                {activeTab === 'Profile' && (
+                    {/* Mobile Navigation */}
+                    <nav className="w-full flex-row gap-2 flex md:hidden">
+                        <div dir="ltr" data-orientation="horizontal" className="h-[400px] overflow-auto max-md:gap-2.5 max-md:content-start max-md:flex max-md:flex-wrap max-md:justify-center ">
+                            <div role="tablist" aria-orientation="horizontal" className="h-10 items-center rounded-md bg-muted p-1 text-muted-foreground overflow-x-auto flex justify-normal" tabIndex={0} data-orientation="horizontal" style={{ outline: 'none' }}>
+                                {['Profile', 'Account', 'Privacy', 'Preferences', 'Blocked'].map(tab => (
+                                    <button
+                                        key={tab}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={activeTab === tab}
+                                        data-state={activeTab === tab ? "active" : "inactive"}
+                                        className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                                        tabIndex={-1}
+                                        data-orientation="horizontal"
+                                        onClick={() => setActiveTab(tab)}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
+                            {/* Mobile Content Rendering would go here, mirroring desktop content logic */}
+                            {activeTab === 'Profile' && (
+                                <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
                                     <div className="flex flex-col w-full animate-in fade-in slide-in-from-right-4 duration-200">
-                                        <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_"> Avatar </label>
+                                        <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_mobile"> Avatar </label>
                                         <div className="flex w-full gap-1 min-w-full justify-between items-center py-1 pb-2">
                                             <span className="relative flex shrink-0 overflow-hidden rounded-full w-16 h-16">
                                                 <img className="aspect-square h-full w-full" alt={username} src={`https://api.dicebear.com/5.x/thumbs/png?seed=${username}&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67`} />
@@ -766,7 +544,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                 <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Change</button>
                                                 <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness">Remove</button>
                                             </div>
-                                            <input className="hidden" id="_r_av_" type="file" />
+                                            <input className="hidden" id="_r_av_mobile" type="file" />
                                         </div>
                                         <span className="text-xs text-card-foreground">Avatars are reviewed before displaying. Do not upload inappropriate avatars. Limit: 3 changes daily. Max 8MB.</span>
 
@@ -812,8 +590,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); handleSaveUsername(); }}>
                                                 <input hidden autoComplete="username" type="text" />
                                                 <div className="space-y-2">
-                                                    <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold text-card-foreground" htmlFor="_r_b1_-form-item">USERNAME</label>
-                                                    <div className="flex flex-col !mt-1" id="_r_b1_-form-item">
+                                                    <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold text-card-foreground" htmlFor="_r_b1_-form-item-mobile">USERNAME</label>
+                                                    <div className="flex flex-col !mt-1" id="_r_b1_-form-item-mobile">
                                                         {isEditingUsername ? (
                                                             <div className="w-full max-w-sm items-center space-x-2 flex">
                                                                 <input
@@ -837,7 +615,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <p id="_r_b1_-form-item-description" className="text-muted-foreground text-xs">You have <b>3</b> name changes left for today.</p>
+                                                    <p id="_r_b1_-form-item-description-mobile" className="text-muted-foreground text-xs">You have <b>3</b> name changes left for today.</p>
                                                 </div>
                                             </form>
                                         </div>
@@ -850,9 +628,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             <button onClick={onOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
                                         </div>
                                     </div>
-                                )}
-
-                                {activeTab === 'Account' && (
+                                </div>
+                            )}
+                            {activeTab === 'Account' && (
+                                <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
                                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
                                         <div className="flex items-center justify-between space-x-2">
                                             <label className="text-sm font-medium leading-none flex flex-col space-y-1">
@@ -867,16 +646,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             </button>
                                         </div>
                                     </div>
-                                )}
-
-                                {activeTab === 'Privacy' && (
+                                </div>
+                            )}
+                            {activeTab === 'Privacy' && (
+                                <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
                                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
                                         <div className="flex items-center justify-between space-x-2">
                                             <label className="text-sm font-medium leading-none flex flex-col space-y-1">
                                                 <span>Badge Visibility <span className="text-xs text-muted-foreground">(Premium Only)</span></span>
                                                 <span className="font-normal leading-snug text-muted-foreground">Set who can see your profile badges.</span>
                                             </label>
-                                            {renderDropdown('badge-desktop', badgeVisibility, setBadgeVisibility, visibilityOptions)}
+                                            {renderDropdown('badge-mobile', badgeVisibility, setBadgeVisibility, visibilityOptions)}
                                         </div>
                                         <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
                                         <div className="flex items-center justify-between space-x-2">
@@ -884,7 +664,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                 <span>Interests Visibility</span>
                                                 <span className="font-normal leading-snug text-muted-foreground">Set who can see your interests.</span>
                                             </label>
-                                            {renderDropdown('interests-desktop', interestsVisibility, setInterestsVisibility, visibilityOptions)}
+                                            {renderDropdown('interests-mobile', interestsVisibility, setInterestsVisibility, visibilityOptions)}
                                         </div>
                                         <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
                                         <div className="flex items-center justify-between space-x-2">
@@ -895,9 +675,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             {renderSwitch(friendRequests, setFriendRequests)}
                                         </div>
                                     </div>
-                                )}
-
-                                {activeTab === 'Preferences' && (
+                                </div>
+                            )}
+                            {activeTab === 'Preferences' && (
+                                <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
                                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
                                         <div className="flex items-center justify-between space-x-2">
                                             <label className="text-sm font-medium leading-none flex flex-col space-y-1">
@@ -939,42 +720,261 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             {renderSwitch(darkMode, setDarkMode)}
                                         </div>
                                     </div>
-                                )}
-
-                                {activeTab === 'Blocked' && (
+                                </div>
+                            )}
+                            {activeTab === 'Blocked' && (
+                                <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
                                     <div className="flex items-center justify-center h-full text-muted-foreground">
                                         <p className="text-sm">You haven't blocked anyone yet.</p>
                                     </div>
-                                )}
+                                </div>
+                            )}
+                        </div>
+                    </nav>
+
+                    {/* Desktop Navigation & Content */}
+                    <div className="flex-row gap-4 overflow-y-hidden py-1.5 hidden select-text md:flex h-full">
+                        <nav className="flex [&>button]:w-full [&>button]:gap-2 [&>button]:justify-start flex-col gap-1.5 w-48 shrink-0">
+                            <button onClick={() => setActiveTab('Profile')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Profile' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
+                                <UserIcon className="w-4 h-4" />Profile
+                            </button>
+                            <button onClick={() => setActiveTab('Account')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Account' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
+                                <CogIcon className="w-4 h-4" />Account
+                            </button>
+                            <button onClick={() => setActiveTab('Privacy')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Privacy' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
+                                <ShieldIcon className="w-4 h-4" />Privacy
+                            </button>
+                            <button onClick={() => setActiveTab('Preferences')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Preferences' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
+                                <Settings2Icon className="w-4 h-4" />Preferences
+                            </button>
+                            <button onClick={() => setActiveTab('Blocked')} className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 ${activeTab === 'Blocked' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'hover:bg-accent hover:text-accent-foreground'}`}>
+                                <BanIcon className="w-4 h-4" />Blocked
+                            </button>
+                        </nav>
+
+                        <div dir="ltr" className="relative overflow-hidden pr-3 w-full [&>*]:pb-1 [&>*]:pr-1" style={{ position: 'relative', '--radix-scroll-area-corner-width': '0px', '--radix-scroll-area-corner-height': '0px' } as React.CSSProperties}>
+                            <div data-radix-scroll-area-viewport="" className="h-full w-full rounded-[inherit]" style={{ overflow: 'hidden scroll' }}>
+                                <div style={{ minWidth: '100%', display: 'table' }}>
+                                    {activeTab === 'Profile' && (
+                                        <div className="flex flex-col w-full animate-in fade-in slide-in-from-right-4 duration-200">
+                                            <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_"> Avatar </label>
+                                            <div className="flex w-full gap-1 min-w-full justify-between items-center py-1 pb-2">
+                                                <span className="relative flex shrink-0 overflow-hidden rounded-full w-16 h-16">
+                                                    <img className="aspect-square h-full w-full" alt={username} src={`https://api.dicebear.com/5.x/thumbs/png?seed=${username}&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67`} />
+                                                </span>
+                                                <div className="flex flex-row gap-1">
+                                                    <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Change</button>
+                                                    <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness">Remove</button>
+                                                </div>
+                                                <input className="hidden" id="_r_av_" type="file" />
+                                            </div>
+                                            <span className="text-xs text-card-foreground">Avatars are reviewed before displaying. Do not upload inappropriate avatars. Limit: 3 changes daily. Max 8MB.</span>
+
+                                            <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+
+                                            <span className="text-sm font-bold text-card-foreground">Banner</span>
+                                            <span></span>
+                                            <div className="flex flex-row gap-2 items-center">
+                                                <div className="flex items-center flex-col gap-0.5">
+                                                    <button
+                                                        onClick={() => {
+                                                            setBannerType('Simple');
+                                                            setShowColorPicker(true);
+                                                        }}
+                                                        className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-12 w-14 rounded-md bg-muted relative flex flex-col p-0 m-0"
+                                                        style={{ backgroundColor: bannerColor }}
+                                                    >
+                                                        {bannerType === 'Simple' && (
+                                                            <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="absolute right-0 top-0 mr-1 mt-1" color="white" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg" style={{ color: 'white' }}><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
+                                                        )}
+                                                    </button>
+                                                    <span className="text-xs">Simple</span>
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center flex-col gap-0.5">
+                                                        <button
+                                                            onClick={() => setBannerType('Gradient')}
+                                                            className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-12 w-14 rounded-md bg-muted relative flex flex-col p-0 m-0"
+                                                            style={{ backgroundImage: 'linear-gradient(45deg, rgb(213, 63, 140), rgb(79, 70, 229))' }}
+                                                        >
+                                                            {bannerType === 'Gradient' && (
+                                                                <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="absolute right-0 top-0 mr-1 mt-1" color="white" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg" style={{ color: 'white' }}><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
+                                                            )}
+                                                        </button>
+                                                        <span className="text-xs">Gradient</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+
+                                            <div className="relative flex w-full basis-0 flex-col gap-1 min-w-full">
+                                                <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); handleSaveUsername(); }}>
+                                                    <input hidden autoComplete="username" type="text" />
+                                                    <div className="space-y-2">
+                                                        <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold text-card-foreground" htmlFor="_r_b1_-form-item">USERNAME</label>
+                                                        <div className="flex flex-col !mt-1" id="_r_b1_-form-item">
+                                                            {isEditingUsername ? (
+                                                                <div className="w-full max-w-sm items-center space-x-2 flex">
+                                                                    <input
+                                                                        className="flex h-10 w-full rounded-md border border-input bg-field px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                        placeholder="username"
+                                                                        value={tempUsername}
+                                                                        name="username"
+                                                                        onChange={(e) => setTempUsername(e.target.value)}
+                                                                    />
+                                                                    <button type="submit" className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10">
+                                                                        <CheckIcon className="h-4 w-4" />
+                                                                    </button>
+                                                                    <button type="button" onClick={() => setIsEditingUsername(false)} className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 w-10">
+                                                                        <XIcon className="h-4 w-4" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="w-full flex flex-row items-center justify-between">
+                                                                    <span className="text-brightness/65">{username}</span>
+                                                                    <button onClick={() => setIsEditingUsername(true)} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button">Edit</button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <p id="_r_b1_-form-item-description" className="text-muted-foreground text-xs">You have <b>3</b> name changes left for today.</p>
+                                                    </div>
+                                                </form>
+                                            </div>
+
+                                            <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+
+                                            <label className="text-sm font-bold text-card-foreground"> INTERESTS (ON)</label>
+                                            <div className="relative flex w-full basis-0 flex-row items-center justify-between gap-1 min-w-full">
+                                                <label className="text-xs text-muted-foreground">You have 0 interests</label>
+                                                <button onClick={onOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'Account' && (
+                                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Account Removal</span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">Permanently delete your account.</span>
+                                                </label>
+                                                <button
+                                                    onClick={() => setShowDeleteModal(true)}
+                                                    className="inline-flex items-center justify-center text-sm font-medium border border-destructive text-destructive hover:bg-destructive/10 h-9 rounded-md px-3 gap-2"
+                                                >
+                                                    <DeleteAccountIcon className="w-4 h-4" /> Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'Privacy' && (
+                                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Badge Visibility <span className="text-xs text-muted-foreground">(Premium Only)</span></span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">Set who can see your profile badges.</span>
+                                                </label>
+                                                {renderDropdown('badge-desktop', badgeVisibility, setBadgeVisibility, visibilityOptions)}
+                                            </div>
+                                            <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Interests Visibility</span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">Set who can see your interests.</span>
+                                                </label>
+                                                {renderDropdown('interests-desktop', interestsVisibility, setInterestsVisibility, visibilityOptions)}
+                                            </div>
+                                            <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Friend Requests</span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">Allow strangers to send you friend requests.</span>
+                                                </label>
+                                                {renderSwitch(friendRequests, setFriendRequests)}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'Preferences' && (
+                                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Automatically convert emoticons to emojis</span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">For example, :) turns into 😃.</span>
+                                                </label>
+                                                {renderSwitch(convertEmoticons, setConvertEmoticons)}
+                                            </div>
+                                            <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Blur Images</span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">Blur images received from other users by default.</span>
+                                                </label>
+                                                {renderSwitch(blurImages, setBlurImages)}
+                                            </div>
+                                            <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Notification Sound</span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">Toggle the notification sound for new messages.</span>
+                                                </label>
+                                                {renderSwitch(notificationSound, setNotificationSound)}
+                                            </div>
+                                            <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Push Notifications</span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">Receive site notifications.</span>
+                                                </label>
+                                                {renderSwitch(pushNotifications, setPushNotifications)}
+                                            </div>
+                                            <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Dark Mode</span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">Toggle the dark mode for the app.</span>
+                                                </label>
+                                                {renderSwitch(darkMode, setDarkMode)}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'Blocked' && (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            <p className="text-sm">You haven't blocked anyone yet.</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <button
-                    type="button"
-                    className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
-                    onClick={onClose}
-                >
-                    <XIcon className="h-4 w-4" />
-                    <span className="sr-only">Close</span>
-                </button>
+                    <button
+                        type="button"
+                        className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+                        onClick={onClose}
+                    >
+                        <XIcon className="h-4 w-4" />
+                        <span className="sr-only">Close</span>
+                    </button>
+                </div>
+                <ColorPickerModal
+                    isOpen={showColorPicker}
+                    onClose={() => setShowColorPicker(false)}
+                    onApply={(color) => setBannerColor(color)}
+                    initialColor={bannerColor}
+                />
+                <DeleteAccountModal
+                    isOpen={showDeleteModal}
+                    onClose={() => setShowDeleteModal(false)}
+                    onDelete={() => {
+                        setShowDeleteModal(false);
+                        onClose();
+                    }}
+                />
             </div>
-            <ColorPickerModal
-                isOpen={showColorPicker}
-                onClose={() => setShowColorPicker(false)}
-                onApply={(color) => setBannerColor(color)}
-                initialColor={bannerColor}
-            />
-            <DeleteAccountModal
-                isOpen={showDeleteModal}
-                onClose={() => setShowDeleteModal(false)}
-                onDelete={() => {
-                    setShowDeleteModal(false);
-                    onClose();
-                }}
-            />
-        </div>
         </>
     );
 };

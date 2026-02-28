@@ -1,18 +1,4 @@
-@import "tailwindcss";
-
-@theme {
-    --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-
-    --color-background: hsl(var(--background));
-    --color-foreground: hsl(var(--foreground));
-    --color-card: hsl(var(--card));
-    --color-primary: hsl(var(--primary));
-    --color-border: hsl(var(--border));
-    --color-brightness: hsl(var(--brightness));
-
-    --radius-xl: 0.75rem;
-    --radius-md: calc(var(--radius) - 2px);
-}
+@import "./tailwind-theme.css";
 
 /* DM Sans Font Faces */
 @font-face {
@@ -89,15 +75,34 @@
     src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-900-normal-BmOyECvA.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-900-normal-Bm36EmVp.woff') format("woff");
 }
 
+/* Map variables to logical colors */
 :root {
+    --color-brightness: hsl(var(--brightness));
+    --color-background: hsl(var(--background));
+    --color-foreground: hsl(var(--foreground));
+    --color-card: hsl(var(--card));
+    --color-primary: hsl(var(--primary));
+    --color-border: hsl(var(--border));
+    --radius-radius: var(--radius);
+}
+
+:root {
+    --brightness: 0 0% 0%;
+    --background: 234 10% 95%;
+    --foreground: 235 10% 20%;
+    --card: 235 20% 85%;
+    --primary: 255 42% 50%;
+    --border: 220 8% 70%;
+    --radius: 0.5rem;
+}
+
+.dark {
     --brightness: 255 100% 100%;
-    --background: 234 10% 10%;
-    --foreground: 235 10% 90%;
+    --background: 234 10% 20%;
+    --foreground: 235 10% 80%;
     --card: 235 10% 15%;
     --border: 220 8% 30%;
-    --primary: 245 166 35;
-    /* BuzzU Amber Primary */
-    --radius: 0.75rem;
+    --primary: 255 42% 50%;
 }
 
 /* Google Sign-In Button Styles */

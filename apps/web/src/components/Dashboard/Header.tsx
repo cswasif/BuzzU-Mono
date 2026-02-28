@@ -17,16 +17,16 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
         <span className="mt-1 flex px-2">
           <div className="relative">
             <span onClick={onMenuClick} className="cursor-pointer">
-              <svg width="23" height="23" viewBox="0 0 23 23" className="[&>*]:stroke-brightness" aria-hidden="true">
-                <path fill="transparent" strokeWidth="3" stroke="white" strokeLinecap="round" d="M 2 2.5 L 20 2.5"></path>
-                <path fill="transparent" strokeWidth="3" stroke="white" strokeLinecap="round" d="M 2 9.423 L 20 9.423" opacity="1"></path>
-                <path fill="transparent" strokeWidth="3" stroke="white" strokeLinecap="round" d="M 2 16.346 L 20 16.346"></path>
+              <svg width="23" height="23" viewBox="0 0 23 23" className="text-foreground" aria-hidden="true">
+                <path fill="transparent" strokeWidth="3" stroke="currentColor" strokeLinecap="round" d="M 2 2.5 L 20 2.5"></path>
+                <path fill="transparent" strokeWidth="3" stroke="currentColor" strokeLinecap="round" d="M 2 9.423 L 20 9.423" opacity="1"></path>
+                <path fill="transparent" strokeWidth="3" stroke="currentColor" strokeLinecap="round" d="M 2 16.346 L 20 16.346"></path>
               </svg>
             </span>
           </div>
         </span>
       </div>
-      <div className="h-full overflow-hidden hidden lg:flex lg:w-64 lg:min-w-64 lg:bg-popover lg:border-r border-border/10 items-center shrink-0">
+      <div className="h-full overflow-hidden hidden lg:flex lg:w-64 lg:min-w-64 lg:bg-popover items-center shrink-0">
         <a className="hidden h-full flex-row items-center gap-2 px-4 text-xl normal-case no-underline hover:no-underline lg:flex" href="/chat/new" title="Home" aria-label="Home">
           <svg width="32" height="32" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#FFD700" stroke="#FFD700">
             <g id="SVGRepo_bgCarrier" strokeWidth="0" />

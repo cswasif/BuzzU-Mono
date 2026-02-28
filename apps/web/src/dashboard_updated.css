@@ -1,14 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
+@import "./tailwind-theme.css";
+
 @layer inherited, component;
 /* Fully Scoped Chitchat Dashboard Styles */
-
-/* --- Fonts --- */
-@font-face {
-    font-family: 'DM Sans';
-    font-style: normal;
-    font-display: swap;
-    font-weight: 100 900;
-    src: url('https://fonts.gstatic.com/s/dmsans/v11/rP2Hp2ywOTsxS8p-hS956G-m.woff2') format('woff2');
-}
 
 .chitchat-dashboard-theme {
     /* Base Variables (Light) */

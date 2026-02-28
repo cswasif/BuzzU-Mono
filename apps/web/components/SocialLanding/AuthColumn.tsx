@@ -6,13 +6,13 @@ import { createPortal } from 'react-dom';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
 const VIDEOS: VideoSegment[] = [
-  { videoId: "IpFX2vq8HKw", start: 30, end: 110 }, // yung kai - blue (Default)
+  { videoId: "1FVF-9KQiPo", start: 194, end: 260 }, // Taylor Swift - Wildest Dreams (Default)
+  { videoId: "IpFX2vq8HKw", start: 30, end: 110 }, // yung kai - blue
   { videoId: "3tmd-ClpJxA", start: 72, end: 190, aspectRatio: "21:9" }, // Taylor Swift - Look What You Made Me Do
   { videoId: "c8zq4kAn_O0", start: 36, end: 107 }, // Sombr - Back to Friends
   { videoId: "H5v3kku4y6Q", start: 30, end: 110 }, // Harry Styles - As It Was
   { videoId: "Z4-g8UXa944", start: 45, end: 125 }, // Damiano David - Born With a Broken Heart
   { videoId: "vBHild0PiTE", start: 50, end: 130 }, // Lana Del Rey - Chemtrails
-  { videoId: "1FVF-9KQiPo", start: 70, end: 160 }, // Taylor Swift - Opalite
   { videoId: "V9PVRfjEBTI", start: 45, end: 120 }, // Billie Eilish - BIRDS OF A FEATHER
   { videoId: "wycjnCCgUes", start: 75, end: 145 }, // Tame Impala - Feels Like We Only Go Backwards
   { videoId: "b55LT-tmGxE", start: 237, end: 292 }  // The Weeknd - Call Out My Name

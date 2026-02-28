@@ -1,3 +1,4 @@
+@import "./tailwind-theme.css";
 /* ===== BuzzU Chat & Match Styles ===== */
 
 :root {
@@ -46,6 +47,7 @@
   font-weight: 800;
   background: linear-gradient(135deg, var(--buzzu-primary), #ffcf48);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin: 0 0 8px;
 }
@@ -407,7 +409,6 @@
   gap: 16px;
   padding: 8px 16px;
   background: var(--buzzu-surface);
-  border-bottom: 1px solid var(--buzzu-border);
   font-size: 0.78rem;
 }
 

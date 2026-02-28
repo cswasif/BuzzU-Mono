@@ -34,26 +34,6 @@ export default function SocialLanding() {
 
   // Ensure body background and native color-scheme match current theme
   useEffect(() => {
-    document.body.style.backgroundColor = colors.background;
-    document.body.style.color = colors.textPrimary;
-
-    // Helper to convert hex to RGB components
-    const hexToRgb = (hex: string) => {
-      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-      return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '0, 0, 0';
-    };
-
-    // Set CSS variables for dynamic hover effects and background slideshow
-    document.documentElement.style.setProperty('--accent-hover-bg', colors.accentHoverBg);
-    document.documentElement.style.setProperty('--button-hover-bg', colors.buttonHoverBg);
-    document.documentElement.style.setProperty('--theme-bg', colors.background);
-    document.documentElement.style.setProperty('--theme-bg-rgb', hexToRgb(colors.background));
-    document.documentElement.style.setProperty('--theme-text', isMobile ? '#ffffff' : colors.textPrimary);
-    document.documentElement.style.setProperty('--theme-text-secondary', isMobile ? 'rgba(255, 255, 255, 0.7)' : colors.textSecondary);
-    document.documentElement.style.setProperty('--theme-accent', colors.accent);
-    document.documentElement.style.setProperty('--theme-line', colors.line);
-    document.documentElement.style.setProperty('--theme-button-border', colors.buttonBorder);
-
     // Video background handles the visuals on desktop now.
     // Permanent suppression of legacy background properties on desktop to prevent flicker.
     document.documentElement.style.setProperty('--bg-image-left', 'none');
@@ -64,9 +44,6 @@ export default function SocialLanding() {
     } else {
       document.documentElement.style.setProperty('--bg-image', 'none');
     }
-
-    // Updates scrollbars and system UI
-    document.documentElement.style.colorScheme = theme === 'light' ? 'light' : 'dark';
   }, [colors, theme, isMobile, currentImageIndex]);
 
   // Disable scroll while loading

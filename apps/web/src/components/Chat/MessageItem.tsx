@@ -359,6 +359,19 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 </time>
               </h3>
               <div className="leading w-full flex-1">
+                {message.replyToMessage && (
+                  <div className="-ml-16 pl-16 mb-0.5 mt-0">
+                    <div className="flex items-center gap-1.5 text-[11px] bg-foreground/5 hover:bg-foreground/10 px-2 py-0.5 rounded border-l-[1.5px] border-primary/50 cursor-pointer w-fit max-w-[90%] md:max-w-[80%]">
+                      <Reply className="h-[10px] w-[10px] sm:h-3 sm:w-3 text-primary/70 shrink-0" />
+                      <span className="font-semibold text-primary/80 shrink-0 truncate max-w-[60px] sm:max-w-[80px]">
+                        {message.replyToMessage.username}
+                      </span>
+                      <span className="text-muted-foreground truncate italic opacity-80 min-w-0">
+                        {message.replyToMessage.content}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {isEditingInline ? (
                   <div className="w-full mt-1 text-left">
                     <textarea
@@ -376,7 +389,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   </div>
                 ) : (
                   <p
-                    className="-ml-16 select-text pl-16 leading-snug sm:leading-normal whitespace-pre-line max-md:select-none chat-message-text break-words"
+                    className="-ml-16 select-text pl-16 leading-snug sm:leading-normal whitespace-pre-line max-md:select-none chat-message-text break-words mt-0.5"
                     style={{ wordBreak: 'break-word' }}
                   >
                     {content}

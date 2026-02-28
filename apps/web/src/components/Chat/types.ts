@@ -6,6 +6,7 @@ export interface Message {
   content: string;
   type?: 'message' | 'system';
   systemType?: 'offline' | 'online';
+  replyToMessage?: Message | null;
 }
 
 export type ChatAction = 'reply' | 'edit' | 'report' | 'delete';

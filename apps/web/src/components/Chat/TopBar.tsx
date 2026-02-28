@@ -10,7 +10,7 @@ export function TopBar() {
           Claim Account
         </button>
       </span>
-      <div className="z-20 flex-row w-full flex items-center flex-grow flex-shrink-0 max-h-12 h-12 p-0 pr-2 shadow-md bg-background pointer-events-auto border-b border-border">
+      <div className="z-20 flex-row w-full flex items-center flex-grow flex-shrink-0 max-h-12 h-12 p-0 pr-2 bg-background pointer-events-auto">
         <div className="flex h-full flex-none items-center justify-center lg:hidden !pointer-events-auto">
           <span className="mt-1 flex px-2">
             <div className="relative">
@@ -24,7 +24,7 @@ export function TopBar() {
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
               <svg viewBox="0 0 24 24" className="w-5 h-5 text-white fill-current">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h10v2H7z"/>
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h10v2H7z" />
               </svg>
             </div>
             <span className="text-xl font-bold text-foreground tracking-tight">Chitchat.gg</span>

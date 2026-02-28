@@ -12,12 +12,12 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRequestsClick, onInboxClick, theme, toggleTheme }) => {
   return (
-    <div className="z-20 flex-row w-full flex items-center flex-none h-12 p-0 pr-2 shadow-md bg-background transition-colors duration-200 border-b border-border/10">
+    <div className="z-20 flex-row w-full flex items-center flex-grow flex-shrink-0 max-h-12 h-12 p-0 pr-2 shadow-md">
       <div className="flex h-full flex-none items-center justify-center lg:hidden !pointer-events-auto">
         <span className="mt-1 flex px-2">
           <div className="relative">
             <span onClick={onMenuClick} className="cursor-pointer">
-              <svg width="23" height="23" viewBox="0 0 23 23" className="[&>*]:stroke-brightness" aria-hidden="true">
+              <svg width="23" height="23" viewBox="0 0 23 23" className="text-foreground" aria-hidden="true">
                 <path fill="transparent" strokeWidth="3" stroke="currentColor" strokeLinecap="round" d="M 2 2.5 L 20 2.5"></path>
                 <path fill="transparent" strokeWidth="3" stroke="currentColor" strokeLinecap="round" d="M 2 9.423 L 20 9.423" opacity="1"></path>
                 <path fill="transparent" strokeWidth="3" stroke="currentColor" strokeLinecap="round" d="M 2 16.346 L 20 16.346"></path>
@@ -26,7 +26,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           </div>
         </span>
       </div>
-      <div className="h-full overflow-hidden hidden lg:flex lg:w-64 lg:min-w-64 lg:bg-popover lg:border-r border-border/10 items-center shrink-0">
+      <div className="h-full overflow-hidden hidden lg:flex lg:w-64 lg:min-w-64 lg:bg-popover items-center shrink-0">
         <a className="hidden h-full flex-row items-center gap-2 px-4 text-xl normal-case no-underline hover:no-underline lg:flex" href="/chat/new" title="Home" aria-label="Home">
           <svg width="32" height="32" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#FFD700" stroke="#FFD700">
             <g id="SVGRepo_bgCarrier" strokeWidth="0" />
@@ -46,6 +46,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           type="button"
           aria-haspopup="dialog"
           aria-expanded="false"
+          aria-controls="radix-_r_0_"
           data-state="closed"
           onClick={onFriendRequestsClick}
         >
@@ -53,12 +54,14 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
             <path d="M12.5 9a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7m.354 5.854 1.5-1.5a.5.5 0 0 0-.708-.708l-.646.647V10.5a.5.5 0 0 0-1 0v2.793l-.646-.647a.5.5 0 0 0-.708.708l1.5 1.5a.5.5 0 0 0 .708 0M11 5a3 3 0 1 1-6 0 3 3 0 0 1 6 0"></path>
             <path d="M2 13c0 1 1 1 1 1h5.256A4.5 4.5 0 0 1 8 12.5a4.5 4.5 0 0 1 1.544-3.393Q8.844 9.002 8 9c-5 0-6 3-6 4"></path>
           </svg>
+          <div className="inline-flex rounded-full border font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80 absolute top-0 right-0 p-0.5 h-4 w-4 items-center justify-center text-xs">1</div>
         </button>
         <button
           className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative"
           type="button"
           aria-haspopup="dialog"
           aria-expanded="false"
+          aria-controls="radix-_r_2_"
           data-state="closed"
           onClick={onInboxClick}
         >

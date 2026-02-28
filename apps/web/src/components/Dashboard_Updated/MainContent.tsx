@@ -6,6 +6,7 @@ import {
   VideoIcon, TextChatIcon
 } from './Icons';
 import { ChatArea } from '../Chat/ChatArea';
+import { VideoChatArea } from '../Chat/VideoChatArea';
 
 interface MainContentProps {
   onManageInterests: () => void;
@@ -23,6 +24,7 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
   const [gender, setGender] = useState<'M' | 'both' | 'F'>('both');
   const [currentSetIndex, setCurrentSetIndex] = useState(0);
   const [isChatting, setIsChatting] = useState(false);
+  const [isVideoChatting, setIsVideoChatting] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -36,6 +38,10 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
 
   if (isChatting) {
     return <ChatArea />;
+  }
+
+  if (isVideoChatting) {
+    return <VideoChatArea />;
   }
 
   return (
@@ -132,22 +138,21 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
 
                     {/* Male Option */}
                     <div className="max-sm:w-full relative group">
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={gender === 'M'}
-                        onClick={() => setGender('M')}
-                        className="sr-only"
-                      />
-                      <div className="rounded p-0.5">
+                      <button type="button" role="radio" aria-checked={gender === 'M'} onClick={() => setGender('M')} className="sr-only" />
+                      <div className="p-0.5">
                         <label
-                          className={`font-medium w-full min-w-16 sm:w-20 relative flex select-none flex-col text-[hsl(var(--gender-male))] items-center justify-between rounded-sm bg-popover p-1.5 hover:bg-muted cursor-pointer hover:text-accent-foreground text-sm border border-border ${gender === 'M' ? 'bg-muted border-primary' : ''}`}
+                          className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
+                            ${gender === 'M'
+                              ? 'bg-blue-500/15 border-blue-500 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.25)] scale-[1.05]'
+                              : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
                           onClick={() => setGender('M')}
                         >
-                          <div className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 items-center justify-center flex bg-orange-600 text-brightness w-5 h-5 rounded-full">
-                            <LightningIcon className="w-4 h-4" />
-                          </div>
-                          <MaleIcon className="mb-1 sm:mb-2 text-inherit" />
+                          {gender === 'M' && (
+                            <div className="absolute -top-2 -right-2 items-center justify-center flex bg-blue-500 text-white w-5 h-5 rounded-full shadow-lg shadow-blue-500/50 animate-in zoom-in duration-200">
+                              <LightningIcon className="w-3 h-3" />
+                            </div>
+                          )}
+                          <MaleIcon className="mb-2 w-7 h-7 text-inherit transition-transform group-hover:scale-110" />
                           Male
                         </label>
                       </div>
@@ -155,19 +160,21 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
 
                     {/* Both Option */}
                     <div className="max-sm:w-full relative group">
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={gender === 'both'}
-                        onClick={() => setGender('both')}
-                        className="sr-only"
-                      />
-                      <div className={`rounded p-0.5 ${gender === 'both' ? 'bg-gradient-to-r from-blue-400 to-pink-400 relative after:content-[""] after:absolute after:inset-0 after:bg-gradient-to-r after:from-blue-400/20 after:to-pink-400/20 after:blur-xl after:rounded-lg' : ''}`}>
+                      <button type="button" role="radio" aria-checked={gender === 'both'} onClick={() => setGender('both')} className="sr-only" />
+                      <div className="p-0.5">
                         <label
-                          className={`font-medium w-full min-w-16 sm:w-20 relative select-none flex flex-col items-center justify-between rounded-sm bg-popover p-1.5 hover:bg-muted cursor-pointer hover:text-accent-foreground text-sm border border-border ${gender === 'both' ? 'bg-muted border-primary' : ''}`}
+                          className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
+                            ${gender === 'both'
+                              ? 'bg-purple-500/15 border-purple-500 text-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.25)] scale-[1.05]'
+                              : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
                           onClick={() => setGender('both')}
                         >
-                          <BothIcon className="mb-1 sm:mb-2 text-inherit" />
+                          {gender === 'both' && (
+                            <div className="absolute -top-2 -right-2 items-center justify-center flex bg-purple-500 text-white w-5 h-5 rounded-full shadow-lg shadow-purple-500/50 animate-in zoom-in duration-200">
+                              <LightningIcon className="w-3 h-3" />
+                            </div>
+                          )}
+                          <BothIcon className="mb-2 w-7 h-7 text-inherit transition-transform group-hover:scale-110" />
                           Both
                         </label>
                       </div>
@@ -175,22 +182,21 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
 
                     {/* Female Option */}
                     <div className="max-sm:w-full relative group">
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={gender === 'F'}
-                        onClick={() => setGender('F')}
-                        className="sr-only"
-                      />
-                      <div className="rounded p-0.5">
+                      <button type="button" role="radio" aria-checked={gender === 'F'} onClick={() => setGender('F')} className="sr-only" />
+                      <div className="p-0.5">
                         <label
-                          className={`font-medium relative w-full min-w-16 sm:w-20 flex select-none flex-col text-[hsl(var(--gender-female))] items-center justify-between rounded-sm bg-popover p-1.5 hover:bg-muted cursor-pointer hover:text-accent-foreground text-sm border border-border ${gender === 'F' ? 'bg-muted border-primary' : ''}`}
+                          className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
+                            ${gender === 'F'
+                              ? 'bg-pink-500/15 border-pink-500 text-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.25)] scale-[1.05]'
+                              : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
                           onClick={() => setGender('F')}
                         >
-                          <div className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 items-center justify-center flex bg-orange-600 text-brightness w-5 h-5 rounded-full">
-                            <LightningIcon className="w-4 h-4" />
-                          </div>
-                          <FemaleIcon className="mb-1 sm:mb-2 text-inherit" />
+                          {gender === 'F' && (
+                            <div className="absolute -top-2 -right-2 items-center justify-center flex bg-pink-500 text-white w-5 h-5 rounded-full shadow-lg shadow-pink-500/50 animate-in zoom-in duration-200">
+                              <LightningIcon className="w-3 h-3" />
+                            </div>
+                          )}
+                          <FemaleIcon className="mb-2 w-7 h-7 text-inherit transition-transform group-hover:scale-110" />
                           Female
                         </label>
                       </div>
@@ -201,18 +207,19 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
               </div>
             </div>
 
-            {/* Start Buttons */}
             <div className="flex space-x-2.5 mt-6 self-center w-full max-w-sm">
-              <a href="/start/new" className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 bg-gradient-to-r from-orange-500 to-red-400 text-white p-1 rounded-xl font-semibold hover:from-orange-600 hover:to-red-500 transition-all duration-300 shadow-md h-12 w-12 lg:h-14 lg:w-14">
-                <VideoIcon className="lg:w-6 lg:h-6" />
-              </a>
+              <button type="button" onClick={() => setIsVideoChatting(true)} className="group relative overflow-hidden inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 bg-gradient-to-br from-orange-500 to-red-600 text-white rounded-xl transition-all duration-300 ease-in-out shadow-[0_4px_14px_0_rgba(249,115,22,0.39)] hover:shadow-[0_6px_20px_rgba(249,115,22,0.6)] hover:-translate-y-1 hover:brightness-110 active:translate-y-0 active:scale-95 min-h-[52px] min-w-[52px] lg:min-h-[60px] lg:min-w-[60px]">
+                <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <VideoIcon className="lg:w-6 lg:h-6 relative z-10 drop-shadow-md transition-transform group-hover:scale-110 duration-300" />
+              </button>
               <button
                 type="button"
                 onClick={() => setIsChatting(true)}
-                className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 h-10 px-4 flex-1 !text-white bg-gradient-to-r from-indigo-600 to-purple-700 text-brightness py-6 rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-600 transition-all duration-300 shadow-md hover:shadow-lg lg:py-7 lg:text-lg"
+                className="group relative overflow-hidden inline-flex items-center justify-center text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 px-6 flex-1 text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-bold transition-all duration-300 ease-in-out shadow-[0_4px_14px_0_rgba(99,102,241,0.39)] hover:shadow-[0_6px_20px_rgba(99,102,241,0.6)] hover:-translate-y-1 hover:brightness-110 active:translate-y-0 active:scale-95 min-h-[52px] lg:min-h-[60px] lg:text-lg"
               >
-                <TextChatIcon className="w-6 h-6 mr-2 lg:w-7 lg:h-7" />
-                Start Text Chat
+                <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <TextChatIcon className="w-6 h-6 mr-2 lg:w-7 lg:h-7 relative z-10 drop-shadow-md transition-transform group-hover:scale-110 duration-300" />
+                <span className="relative z-10 tracking-wider drop-shadow-md">START TEXT CHAT</span>
               </button>
             </div>
 

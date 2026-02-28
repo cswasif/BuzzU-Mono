@@ -12,7 +12,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRequestsClick, onInboxClick, theme, toggleTheme }) => {
   return (
-    <div className="z-20 flex-row w-full flex items-center flex-none h-12 p-0 pr-2 shadow-md bg-background transition-colors duration-200 border-b border-border/10">
+    <div className="z-20 flex-row w-full flex items-center flex-grow flex-shrink-0 max-h-12 h-12 p-0 pr-2 shadow-md">
       <div className="flex h-full flex-none items-center justify-center lg:hidden !pointer-events-auto">
         <span className="mt-1 flex px-2">
           <div className="relative">
@@ -26,19 +26,12 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           </div>
         </span>
       </div>
-      <div className="h-full overflow-hidden hidden lg:flex lg:w-64 lg:min-w-64 lg:bg-popover lg:border-r border-border/10 items-center shrink-0">
-        <a className="hidden h-full flex-row items-center gap-2 px-4 text-xl normal-case no-underline hover:no-underline lg:flex" href="/chat/new" title="Home" aria-label="Home">
-          <svg width="32" height="32" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#FFD700" stroke="#FFD700">
-            <g id="SVGRepo_bgCarrier" strokeWidth="0" />
-            <g id="SVGRepo_tracerCarrier" strokeLinecap="round" strokeLinejoin="round" stroke="#CCCCCC" strokeWidth="0.336" />
-            <g id="SVGRepo_iconCarrier">
-              <path d="M19.442 21.355c.55-.19.74-.256.99-.373.342-.152.605-.39.605-.818a.846.846 0 00-.605-.813c-.318-.092-.703.042-.99.122l-5.42 1.46a7.808 7.808 0 01-4.057 0l-5.407-1.46c-.287-.08-.672-.214-.99-.122a.847.847 0 00-.605.813c0 .427.263.666.605.818.25.117.44.184.99.373l5.138 1.79c1.491.52 3.104.52 4.601 0zm-9.263-3.224a7.622 7.622 0 003.636 0l8.01-1.967c.507-.122.709-.165.99-.257.354-.116.605-.415.605-.806a.847.847 0 00-.605-.813c-.281-.08-.697.024-.99.08l-8.664 1.545a6.813 6.813 0 01-2.334 0l-8.652-1.545c-.293-.056-.708-.16-.99-.08a.847.847 0 00-.604.813c0 .39.25.69.604.806.282.092.483.135.99.257zM14.75.621a24.43 24.43 0 00-5.511 0L6.495.933c-.294.03-.715.055-.99.14-.28.092-.605.355-.605.807 0 .39.257.702.605.806.281.08.696.074.99.074h11.01c.293 0 .709.006.99-.074a.835.835 0 00.605-.806c0-.452-.324-.715-.605-.807-.275-.085-.697-.11-.99-.14zm6.037 6.767c.3-.019.709-.037.99-.116a.84.84 0 000-1.614c-.281-.085-.69-.073-.99-.073H3.214c-.3 0-.709-.012-.99.073a.84.84 0 000 1.614c.281.079.69.097.99.116l7.808.556c.642.042 1.308.042 1.943 0zm1.62 4.242c.513-.08.708-.104.989-.202.354-.121.605-.409.605-.806a.84.84 0 00-.605-.806c-.28-.086-.69-.019-.99.012l-9.232.929c-.776.079-1.582.079-2.358 0l-9.22-.93c-.3-.03-.715-.097-.99-.011a.84.84 0 00-.605.806c0 .397.25.685.605.806.275.092.476.123.99.202l8.823 1.418c1.038.165 2.12.165 3.158 0Z" />
-            </g>
-          </svg>
-          <span className="font-bold tracking-tight text-brightness">BuzzU</span>
+      <div className="h-full overflow-hidden lg:mr-2 lg:w-62 lg:bg-popover">
+        <a className="hidden h-full flex-row items-center gap-1 px-2 text-xl normal-case no-underline hover:no-underline lg:flex" href="/chat/new" title="Home" aria-label="Home">
+          <img loading="lazy" alt="logo" width="150.66666666666666" height="34.666666666666664" src="/images/logo-darkmode.png" />
         </a>
       </div>
-      <span className="text-md truncate font-bold normal-case ml-4 cursor-default px-2 text-brightness" role="button" tabIndex={0}>New Chat</span>
+      <span className="text-md truncate font-bold normal-case sm:ml-1 cursor-default" role="button" tabIndex={0}>New Chat</span>
       <div className="flex flex-1 justify-end gap-1 md:gap-2">
         <div data-orientation="vertical" role="none" className="shrink-0 bg-border w-[1px] h-4 self-center"></div>
         <button
@@ -46,6 +39,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           type="button"
           aria-haspopup="dialog"
           aria-expanded="false"
+          aria-controls="radix-_r_0_"
           data-state="closed"
           onClick={onFriendRequestsClick}
         >
@@ -53,12 +47,14 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
             <path d="M12.5 9a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7m.354 5.854 1.5-1.5a.5.5 0 0 0-.708-.708l-.646.647V10.5a.5.5 0 0 0-1 0v2.793l-.646-.647a.5.5 0 0 0-.708.708l1.5 1.5a.5.5 0 0 0 .708 0M11 5a3 3 0 1 1-6 0 3 3 0 0 1 6 0"></path>
             <path d="M2 13c0 1 1 1 1 1h5.256A4.5 4.5 0 0 1 8 12.5a4.5 4.5 0 0 1 1.544-3.393Q8.844 9.002 8 9c-5 0-6 3-6 4"></path>
           </svg>
+          <div className="inline-flex rounded-full border font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80 absolute top-0 right-0 p-0.5 h-4 w-4 items-center justify-center text-xs">1</div>
         </button>
         <button
           className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative"
           type="button"
           aria-haspopup="dialog"
           aria-expanded="false"
+          aria-controls="radix-_r_2_"
           data-state="closed"
           onClick={onInboxClick}
         >

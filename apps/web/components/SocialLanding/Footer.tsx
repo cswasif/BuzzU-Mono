@@ -15,7 +15,6 @@ const footerLinks = [
   { href: "https://about.x.com/press/brand-assets", label: "Brand Resources" },
   { href: "https://ads.x.com/?ref=gl-tw-tw-twitter-advertise", label: "Advertising" },
   { href: "https://marketing.x.com", label: "Marketing" },
-  { href: "https://business.x.com/?ref=web-twc-ao-gbl-twitterforbusiness&utm_source=twc&utm_medium=web&utm_campaign=ao&utm_content=twitterforbusiness", label: "BuzzU for Business" },
   { href: "https://developer.x.com", label: "Developers" },
   { href: "https://x.com/i/jf/stories/home", label: "News" },
   { href: "/settings", label: "Settings" },

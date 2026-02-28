@@ -13,7 +13,7 @@ interface MessageInputProps {
   onStart: () => void;
   onStop: () => void;
   onSkip: () => void;
-  onSend: (content: string) => void;
+  onSend: (content: string, replyToMessage?: Message | null) => void;
   isPartnerTyping?: boolean;
   partnerName?: string;
 }
@@ -78,7 +78,7 @@ export function MessageInput({
     e.preventDefault();
     const val = textareaRef.current?.value.trim();
     if (val && connectionState === 'connected') {
-      onSend(val);
+      onSend(val, replyingTo);
       if (textareaRef.current) {
         textareaRef.current.value = '';
         textareaRef.current.style.height = '44px';
@@ -91,7 +91,7 @@ export function MessageInput({
       e.preventDefault();
       const val = textareaRef.current?.value.trim();
       if (val && connectionState === 'connected') {
-        onSend(val);
+        onSend(val, replyingTo);
         if (textareaRef.current) {
           textareaRef.current.value = '';
           textareaRef.current.style.height = '44px';
