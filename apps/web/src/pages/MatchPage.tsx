@@ -75,8 +75,7 @@ export const MatchPage: React.FC = () => {
                 <div className="match-header">
                     <div className="flex items-center justify-center gap-2 mb-2">
                         <BuzzULogoIcon
-                            className="w-10 h-10"
-                            style={{ color: '#f5a623', filter: 'drop-shadow(0 0 8px rgba(245, 166, 35, 0.3))' }}
+                            className="w-10 h-10 text-primary drop-shadow-md"
                         />
                         <h1 style={{ margin: 0 }}>BuzzU</h1>
                     </div>
@@ -194,7 +193,7 @@ export const MatchPage: React.FC = () => {
                             <div className="pulse-ring delay-1" />
                             <div className="pulse-ring delay-2" />
                             <span className="searching-icon">
-                                <BuzzULogoIcon className="w-12 h-12 text-[#f5a623]" />
+                                <BuzzULogoIcon className="w-12 h-12 text-primary drop-shadow-md" />
                             </span>
                         </div>
                         <h2>Finding your match...</h2>

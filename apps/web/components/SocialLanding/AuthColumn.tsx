@@ -192,7 +192,7 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
         />
         <div className="hero-background-image" />
         <div className="css-175oi2r r-1p0dtai r-13awgt0 r-1777fci r-1d2f490 r-u8s1d r-zchlnj r-ipm5af mobile-hero-logo">
-          <BuzzULogoIcon style={{ color: colors.accent, height: '100%', width: '100%' }} />
+          <BuzzULogoIcon style={{ color: colors.accent, height: '100%', width: '100%' }} className="drop-shadow-md" />
         </div>
       </div>
 

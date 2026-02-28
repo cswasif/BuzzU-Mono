@@ -232,8 +232,8 @@ export const ChatPage: React.FC = () => {
                 </div>
                 <span className="encryption-badge">🔒 E2E Encrypted</span>
                 {partnerVerified && (
-                    <div className="verified-badge-mini flex items-center gap-1 bg-[#f5a623]/10 px-2 py-0.5 rounded border border-[#f5a623]/30">
-                        <span className="text-[10px] font-bold text-[#f5a623]">✓ VERIFIED STUDENT</span>
+                    <div className="verified-badge-mini flex items-center gap-1 bg-primary/10 px-2 py-0.5 rounded border border-primary/30">
+                        <span className="text-[10px] font-bold text-primary">✓ VERIFIED STUDENT</span>
                     </div>
                 )}
             </div>
@@ -251,9 +251,9 @@ export const ChatPage: React.FC = () => {
                         <div key={msg.id} className={`message ${msg.isOwn ? 'own' : 'other'}`}>
                             <div className="message-sender flex items-center gap-1">
                                 {msg.isOwn ? (
-                                    <>You {isVerified && <span className="text-[#f5a623] text-xs">✓</span>}</>
+                                    <>You {isVerified && <span className="text-primary text-xs">✓</span>}</>
                                 ) : (
-                                    <>Stranger {partnerVerified && <span className="text-[#f5a623] text-xs">✓</span>}</>
+                                    <>Stranger {partnerVerified && <span className="text-primary text-xs">✓</span>}</>
                                 )}
                             </div>
                             <div className="message-text">{msg.text}</div>

@@ -195,7 +195,7 @@ export const VerificationPage: React.FC = () => {
                     >
                         <div className="flex flex-col justify-start gap-4 self-center p-4 text-start">
                             <motion.div layout="position" className="flex flex-row items-center justify-center self-center sm:self-start mb-2">
-                                <BuzzULogoIcon className="w-8 h-8 sm:w-10 sm:h-10 mr-2 text-[#f5a623]" />
+                                <BuzzULogoIcon className="w-8 h-8 sm:w-10 sm:h-10 mr-2 text-primary drop-shadow-sm" />
                                 <span className="font-bold text-foreground text-xl tracking-tight">BuzzU</span>
                             </motion.div>
 

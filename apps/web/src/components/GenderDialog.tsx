@@ -22,8 +22,7 @@ export const GenderDialog: React.FC<GenderDialogProps> = ({ onSelect }) => {
                 {/* Header */}
                 <div className="gender-dialog-header">
                     <BuzzULogoIcon
-                        className="gender-dialog-logo"
-                        style={{ color: '#f5a623', filter: 'drop-shadow(0 0 12px rgba(245, 166, 35, 0.4))' }}
+                        className="gender-dialog-logo text-primary drop-shadow-md"
                     />
                     <h2 className="gender-dialog-title">Welcome to BuzzU</h2>
                     <p className="gender-dialog-subtitle">
