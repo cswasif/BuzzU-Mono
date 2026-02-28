@@ -1,44 +1,62 @@
 import React, { useEffect, useState } from 'react';
-import { XLogoIcon } from './Icons';
+import { BuzzULogoIcon } from './Icons.tsx';
 import { useTheme } from '../ThemeContext';
 
 interface SplashScreenProps {
   onFinish: () => void;
+  ready?: boolean;
 }
 
-export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
+export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish, ready = false }) => {
   const { colors } = useTheme();
   const [step, setStep] = useState<'idle' | 'shrink' | 'zoom' | 'hidden'>('idle');
+  const [hasStartedExit, setHasStartedExit] = useState(false);
 
   useEffect(() => {
     // Phase 1: Idle (0ms - 600ms)
-    // Logo sits still.
+    // Logo sits still. Wait at least 600ms before doing anything.
+    const idleTimer = setTimeout(() => {
+      // Just a marker
+    }, 200);
+    return () => clearTimeout(idleTimer);
+  }, []);
 
-    // Phase 2: Shrink (600ms - 950ms)
-    // Logo shrinks slightly to build momentum (Anticipation)
-    const shrinkTimer = setTimeout(() => {
-      setStep('shrink');
-    }, 600);
+  useEffect(() => {
+    // Once video is ready OR if we've waited too long (safety), start the exit sequence
+    // But don't start it BEFORE the minimum idle time (handled by flow)
+    const safetyTimeout = setTimeout(() => {
+      if (!hasStartedExit) setHasStartedExit(true);
+    }, 3500); // 3.5s max wait for video
 
-    // Phase 3: Zoom (950ms+)
-    // Logo zooms in massively (flying through) while fading out
+    if (ready && !hasStartedExit) {
+      setHasStartedExit(true);
+    }
+
+    return () => clearTimeout(safetyTimeout);
+  }, [ready, hasStartedExit]);
+
+  useEffect(() => {
+    if (!hasStartedExit) return;
+
+    // Phase 2: Shrink (built momentum)
+    setStep('shrink');
+
+    // Phase 3: Zoom (350ms after shrink)
     const zoomTimer = setTimeout(() => {
       setStep('zoom');
-    }, 950);
+    }, 350);
 
-    // Phase 4: Hidden (950ms + 400ms transition = 1350ms)
-    // Unmount
+    // Phase 4: Hidden (400ms after zoom)
     const finishTimer = setTimeout(() => {
       setStep('hidden');
       onFinish();
-    }, 1350);
+    }, 750);
 
     return () => {
-      clearTimeout(shrinkTimer);
       clearTimeout(zoomTimer);
       clearTimeout(finishTimer);
     };
-  }, [onFinish]);
+  }, [hasStartedExit, onFinish]);
 
   if (step === 'hidden') return null;
 
@@ -46,7 +64,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
   const containerStyle: React.CSSProperties = {
     position: 'fixed',
     inset: 0,
-    backgroundColor: colors.background,
+    backgroundColor: '#000',
     zIndex: 99999,
     display: 'flex',
     alignItems: 'center',
@@ -58,30 +76,30 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
   };
 
   const logoContainerStyle: React.CSSProperties = {
-    width: '72px',
-    height: '72px',
+    width: '120px',
+    height: '120px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     // Animation Logic
     transform:
       step === 'shrink'
-        ? 'scale(0.80)'
+        ? 'scale(0.85)'
         : step === 'zoom'
-        ? 'scale(150)'
-        : 'scale(1)',
+          ? 'scale(100)'
+          : 'scale(1)',
     transition:
       step === 'shrink'
         ? 'transform 0.35s cubic-bezier(0.2, 0, 0, 1)' // Gentle ease-out shrink
         : step === 'zoom'
-        ? 'transform 0.4s cubic-bezier(0.85, 0, 0.15, 1)' // Aggressive exponential zoom
-        : 'none',
+          ? 'transform 0.4s cubic-bezier(0.85, 0, 0.15, 1)' // Aggressive exponential zoom
+          : 'none',
   };
 
   return (
     <div style={containerStyle}>
       <div style={logoContainerStyle}>
-        <XLogoIcon style={{ color: colors.textPrimary, width: '100%', height: '100%', fill: 'currentColor' }} />
+        <BuzzULogoIcon style={{ color: colors.accent, width: '100%', height: '100%', fill: 'currentColor' }} />
       </div>
     </div>
   );

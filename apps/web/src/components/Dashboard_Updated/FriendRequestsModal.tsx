@@ -9,7 +9,7 @@ const FriendRequestsModal: React.FC<FriendRequestsModalProps> = ({ onClose }) =>
   return (
     <div className="fixed inset-0 z-50 bg-transparent" onClick={onClose}>
       <div
-        className="absolute top-[56px] right-24 z-50 w-72 bg-popover text-popover-foreground outline-none rounded-md border border-border mt-3 p-0 shadow-lg xs:w-72 sm:w-80 drop-shadow-sm"
+        className="absolute top-[56px] right-4 sm:right-24 z-50 w-72 bg-popover text-popover-foreground outline-none rounded-md border border-border mt-3 p-0 shadow-lg xs:w-72 sm:w-80 drop-shadow-sm"
         onClick={(e) => e.stopPropagation()}
       >
         <span className="flex w-full flex-row items-center gap-2 rounded-t-lg bg-muted px-4 py-4 text-lg font-bold">

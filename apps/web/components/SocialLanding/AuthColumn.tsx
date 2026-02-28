@@ -129,10 +129,10 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
 
         <div className="css-175oi2r r-1pcd2l5 r-13qz1uu r-jjmaes r-1nz9sz9 fade-in-up">
           <div dir="ltr" className="css-146c3p1 r-bcqeeo r-1ttztb7 r-qvutc0 r-fm7h5w r-b88u0q r-19oahor r-nm9kes r-1ncnki0 r-8g1505">
-            <span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">BuzzU.</span>
+            <span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Buzzing now</span>
           </div>
           <div dir="ltr" className="css-146c3p1 r-bcqeeo r-1ttztb7 r-qvutc0 r-fm7h5w r-1yjpyg1 r-ueyrd6 r-b88u0q r-zd98yo">
-            <span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Be Yourself.</span>
+            <span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Join today.</span>
           </div>
 
           {/* Privacy Banner */}

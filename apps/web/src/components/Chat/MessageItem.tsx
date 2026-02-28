@@ -1,0 +1,392 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Reply, Trash2, MoreVertical, ArrowLeft, CheckCircle, Pencil, Flag, Copy } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Message } from './types';
+import { createPortal } from 'react-dom';
+
+interface MessageItemProps {
+  message: Message;
+  onReply?: (message: Message) => void;
+  onEdit?: (message: Message) => void;
+  onReport?: (message: Message) => void;
+  onDelete?: (message: Message) => void;
+  isHighlighted?: boolean;
+  isEditingInline?: boolean;
+  onSaveEdit?: (id: string, newContent: string) => void;
+  onCancelEdit?: () => void;
+  onProfileClick?: (username: string, avatarSeed: string) => void;
+}
+
+interface MenuPosition {
+  x: number;
+  y: number;
+}
+
+export const MessageItem: React.FC<MessageItemProps> = ({
+  message,
+  onReply,
+  onEdit,
+  onReport,
+  onDelete,
+  isHighlighted,
+  isEditingInline = false,
+  onSaveEdit,
+  onCancelEdit,
+  onProfileClick
+}) => {
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isMobileThreeDotsVisible, setIsMobileThreeDotsVisible] = useState(false);
+  const [editValue, setEditValue] = useState(message.content);
+  const editInputRef = useRef<HTMLTextAreaElement>(null);
+  const { username, avatarSeed, timestamp, content, type = 'message', systemType } = message;
+  const isOwn = username === 'Me';
+
+  useEffect(() => {
+    if (isEditingInline && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.setSelectionRange(editInputRef.current.value.length, editInputRef.current.value.length);
+    }
+  }, [isEditingInline]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSaveEdit?.(message.id, editValue);
+    } else if (e.key === 'Escape') {
+      onCancelEdit?.();
+    }
+  };
+
+  const handleCopyText = () => {
+    navigator.clipboard?.writeText(content).catch(() => { });
+    setIsMoreMenuOpen(false);
+  };
+
+  const handleMessageClick = (e: React.MouseEvent) => {
+    if (window.innerWidth < 768) {
+      e.stopPropagation();
+      setIsMobileThreeDotsVisible(prev => !prev);
+      if (isMoreMenuOpen) setIsMoreMenuOpen(false);
+    } else {
+      setIsMoreMenuOpen(false);
+    }
+  };
+
+  if (type === 'system') {
+    return (
+      <li className="select-text list-none">
+        <div className={`group relative flex w-full items-center pl-14 pr-4 chat-message-item md:pl-16 ${isHighlighted ? 'bg-yellow-400/5' : ''}`}>
+          <div className="absolute left-0 top-0 flex h-full w-10 left-2 items-center justify-center">
+            {systemType === 'offline' ? (
+              <ArrowLeft className="flex justify-center text-red-500 h-[22px] w-[22px]" />
+            ) : (
+              <CheckCircle className="flex justify-center text-green-500 h-[22px] w-[22px]" />
+            )}
+          </div>
+          <div className="h-4"></div>
+          <div className="flex flex-row items-center py-2">
+            <p className="text-sm">
+              <span className="text-foreground font-bold">{username}</span>
+              {' '}<span className="text-muted-foreground">{content}</span>
+              <time className="text-muted-foreground text-[10px] leading-snug tracking-tight align-baseline font-medium cursor-default select-none pl-2">
+                {timestamp}
+              </time>
+            </p>
+          </div>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <>
+      <li className="select-text list-none">
+        <div className="pt-4">
+          <div
+            className={`group relative flex w-full items-start pl-14 pr-4 chat-message-item md:pl-16 cursor-default ${isHighlighted ? 'bg-yellow-400/5' : ''} ${isEditingInline ? 'bg-popover/50' : ''}`}
+            onClick={handleMessageClick} // Toggle dots on mobile tap, close menu on desktop click
+            onContextMenu={(e) => {
+              if (isEditingInline) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setIsMoreMenuOpen(true);
+            }}
+          >
+            {/* Desktop Hover Actions Toolbar */}
+            {!isEditingInline && (
+              <div className="absolute z-10 right-0 -top-5 mr-3 hidden drop-shadow-sm hover:drop-shadow-md shadow-black transition-all duration-200 group-hover:md:flex flex-row border border-border rounded-sm bg-popover text-card-foreground p-0.5">
+                <button
+                  onClick={() => onReply?.(message)}
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground h-7 w-7 transition-colors"
+                  title="Reply"
+                >
+                  <Reply className="h-3.5 w-3.5" />
+                </button>
+                {isOwn && (
+                  <button
+                    onClick={() => onEdit?.(message)}
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground h-7 w-7 transition-colors"
+                    title="Edit"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {!isOwn && (
+                  <button
+                    onClick={() => onReport?.(message)}
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground h-7 w-7 transition-colors text-destructive"
+                    title="Report"
+                  >
+                    <Flag className="h-4 w-4" />
+                  </button>
+                )}
+
+                <div className="relative">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsMoreMenuOpen(!isMoreMenuOpen);
+                    }}
+                    className={`inline-flex items-center justify-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground h-7 w-7 transition-colors ${isMoreMenuOpen ? 'bg-accent' : ''}`}
+                    title="More"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+
+                  <AnimatePresence>
+                    {isMoreMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setIsMoreMenuOpen(false)} />
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                          className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg bg-popover border border-border shadow-2xl overflow-hidden py-1"
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onReply?.(message);
+                              setIsMoreMenuOpen(false);
+                            }}
+                            className="flex w-full items-center justify-between px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                          >
+                            Reply
+                            <Reply className="h-4 w-4 text-muted-foreground" />
+                          </button>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleCopyText(); }}
+                            className="flex w-full items-center justify-between px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                          >
+                            Copy Text
+                            <Copy className="h-4 w-4 text-muted-foreground" />
+                          </button>
+
+                          {isOwn && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onEdit?.(message);
+                                  setIsMoreMenuOpen(false);
+                                }}
+                                className="flex w-full items-center justify-between px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                              >
+                                Edit
+                                <Pencil className="h-4 w-4 text-muted-foreground" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDelete?.(message);
+                                  setIsMoreMenuOpen(false);
+                                }}
+                                className="flex w-full items-center justify-between px-3 py-2 text-sm text-destructive hover:bg-accent transition-colors border-t border-border/40"
+                              >
+                                Delete
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+
+                          {!isOwn && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onReport?.(message);
+                                setIsMoreMenuOpen(false);
+                              }}
+                              className="flex w-full items-center justify-between px-3 py-2 text-sm text-destructive hover:bg-accent transition-colors border-t border-border/40"
+                            >
+                              Report
+                              <Flag className="h-4 w-4" />
+                            </button>
+                          )}
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Action Menu Trigger (Three Dots) */}
+            {!isEditingInline && (
+              <div className="md:hidden absolute right-3 top-2 z-10">
+                <div className="relative">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsMoreMenuOpen(!isMoreMenuOpen);
+                    }}
+                    className={`flex items-center justify-center rounded-md bg-muted/50 h-8 w-8 text-foreground transition-all duration-200 ${isMobileThreeDotsVisible || isMoreMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+                    title="More"
+                  >
+                    <MoreVertical className="h-5 w-5" />
+                  </button>
+
+                  <AnimatePresence>
+                    {isMoreMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setIsMoreMenuOpen(false)} />
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                          className="absolute right-0 bottom-full mb-2 z-20 w-44 rounded-lg bg-popover border border-border shadow-2xl overflow-hidden py-1"
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onReply?.(message);
+                              setIsMoreMenuOpen(false);
+                            }}
+                            className="flex w-full items-center justify-between px-3 py-2 text-sm text-foreground hover:bg-accent active:bg-accent transition-colors"
+                          >
+                            Reply
+                            <Reply className="h-4 w-4 text-muted-foreground" />
+                          </button>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleCopyText(); }}
+                            className="flex w-full items-center justify-between px-3 py-2 text-sm text-foreground hover:bg-accent active:bg-accent transition-colors"
+                          >
+                            Copy Text
+                            <Copy className="h-4 w-4 text-muted-foreground" />
+                          </button>
+
+                          {isOwn && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onEdit?.(message);
+                                  setIsMoreMenuOpen(false);
+                                }}
+                                className="flex w-full items-center justify-between px-3 py-2 text-sm text-foreground hover:bg-accent active:bg-accent transition-colors"
+                              >
+                                Edit
+                                <Pencil className="h-4 w-4 text-muted-foreground" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDelete?.(message);
+                                  setIsMoreMenuOpen(false);
+                                }}
+                                className="flex w-full items-center justify-between px-3 py-2 text-sm text-destructive hover:bg-accent active:bg-accent transition-colors border-t border-border/40"
+                              >
+                                Delete
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+
+                          {!isOwn && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onReport?.(message);
+                                setIsMoreMenuOpen(false);
+                              }}
+                              className="flex w-full items-center justify-between px-3 py-2 text-sm text-destructive hover:bg-accent active:bg-accent transition-colors border-t border-border/40"
+                            >
+                              Report
+                              <Flag className="h-4 w-4" />
+                            </button>
+                          )}
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            )}
+
+            {/* Avatar */}
+            <div className="absolute left-0 top-0 flex h-full">
+              <div
+                className="absolute z-0 left-2 w-10 select-none overflow-hidden pt-0.5 hover:cursor-pointer"
+                style={{ overflowWrap: 'break-word' }}
+                onClick={() => onProfileClick?.(username, avatarSeed)}
+              >
+                <span className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full">
+                  <img
+                    className="aspect-square h-full w-full"
+                    alt={username}
+                    src={`https://proxy.extractcss.dev/https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&&seed=${avatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`}
+                  />
+                </span>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="w-full flex flex-col items-start min-h-[40px]">
+              <h3 className="min-h-5 relative block w-auto overflow-hidden whitespace-break-spaces leading-snug">
+                <span className="mr-1 inline-flex flex-row items-center justify-center gap-1">
+                  <span
+                    className="relative inline overflow-hidden align-baseline text-base leading-none sm:leading-snug font-bold cursor-pointer chat-username"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onProfileClick?.(username, avatarSeed)}
+                  >
+                    {username}
+                  </span>
+                </span>
+                <time className="text-zinc-500 text-xs leading-snug tracking-tight align-baseline font-medium cursor-default select-none ml-1">
+                  {timestamp}
+                </time>
+              </h3>
+              <div className="leading w-full flex-1">
+                {isEditingInline ? (
+                  <div className="w-full mt-1 text-left">
+                    <textarea
+                      ref={editInputRef}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="w-full textarea text-foreground rounded-lg px-3 py-2.5 text-sm outline-none resize-none"
+                      rows={1}
+                      style={{ height: 'auto', minHeight: '38px' }}
+                    />
+                    <div className="text-[12px] text-[#dcdef3]/60 mt-2 ml-0.5">
+                      escape to <span className="text-[#00a8fc] underline underline-offset-2 cursor-pointer" onClick={() => onCancelEdit?.()}>cancel</span> or <span className="text-[#00a8fc] cursor-pointer" onClick={() => editValue.trim() && onSaveEdit?.(message.id, editValue.trim())}>enter</span> to save
+                    </div>
+                  </div>
+                ) : (
+                  <p
+                    className="-ml-16 select-text pl-16 leading-snug sm:leading-normal whitespace-pre-line max-md:select-none chat-message-text break-words"
+                    style={{ wordBreak: 'break-word' }}
+                  >
+                    {content}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </li>
+    </>
+  );
+};

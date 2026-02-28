@@ -1,3 +1,4 @@
+@layer inherited, component;
 /* Fully Scoped Chitchat Dashboard Styles */
 
 /* --- Fonts --- */
@@ -18,28 +19,37 @@
     --placeholder-foreground: 264 3.9% 30%;
     --background: 234 10% 95%;
     --foreground: 235 10% 20%;
+    --card: 235 20% 85%;
+    --card-foreground: 235 8% 25%;
     --popover: 232 10% 89%;
-    --popover-foreground: 235 10% 20%;
+    --popover-foreground: 264 3.9% 30%;
     --panel: 230 10% 85%;
     --panel-foreground: 235 10% 20%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
     --primary: 255 42% 50%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    --primary-foreground: 249 100% 88%;
+    --secondary: 264 10% 87%;
+    --secondary-foreground: 264 5% 20%;
     --muted: 240 10% 82%;
     --muted-foreground: 235 5% 35%;
+    --field: 240 10% 92%;
+    --field-foreground: 235 10% 20%;
+    --action: 240 10% 93%;
+    --action-foreground: 235 10% 20%;
     --accent: 0 0% 96.1%;
     --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 264 3.9% 96.95%;
     --warning: 24 100% 61%;
+    --warning-foreground: 38 92% 10%;
     --success: 116 46% 49%;
-    --border: 220 10% 85%;
+    --success-foreground: 116 46% 49%;
+    --border: 220 8% 70%;
     --input: 264 19.5% 88.3%;
-    --field: 0 0% 100%;
     --ring: 0 0% 3.9%;
+    --message: 222.2 84% 4.9%;
+    --gradient: #7057ba;
+    --overlay: 234 10% 3.5%;
+    --vh: 7.38px;
 
     /* Semantic variables */
     --dashed-border: 0 0% 0%;
@@ -58,8 +68,47 @@
     background-color: hsl(var(--background)) !important;
     color: hsl(var(--foreground)) !important;
     font-family: 'DM Sans', sans-serif !important;
-    line-height: 1.5;
+    tab-size: 4;
+    font-feature-settings: normal;
+    font-variation-settings: normal;
+    -webkit-tap-highlight-color: transparent;
+    line-height: inherit;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+    user-select: none;
+}
+
+/* Message hover effect */
+.chitchat-dashboard-theme .chat-message-item {
+    transition: background-color 0.15s ease;
+}
+
+.chitchat-dashboard-theme .chat-message-item:hover {
+    background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+
+/* Logo Breathing Animation for Search */
+@keyframes logo-breathe {
+
+    0%,
+    100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.2));
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.5));
+        opacity: 1;
+    }
+}
+
+.animate-logo-breathe {
+    animation: logo-breathe 2s ease-in-out infinite;
 }
 
 /* Dark Theme Overrides */
@@ -89,6 +138,7 @@
     --input: 264 19.5% 8%;
     --field: 264 19.5% 8%;
     --ring: 264 39% 39%;
+    --message: 213 31% 91%;
     --warning: 24 100% 39%;
     --success: 116 46% 49%;
 
@@ -106,7 +156,73 @@
     --empty-state-opacity: 0.25;
 }
 
+/* ============================================================
+   MASTER FIX: Neutralize Tailwind dark: classes leaking into
+   our light-mode chitchat container.
+   
+   BuzzU sets `class="dark"` on <html>, which makes Tailwind's
+   `dark:*` variants apply to ALL elements. These rules override
+   those back to light-theme values inside our light container.
+   ============================================================ */
+
+/* When chitchat container is NOT in dark mode, block all dark: color bleeds */
+.dark .chitchat-dashboard-theme:not(.theme-dark) {
+    /* Force base colors */
+    background-color: hsl(234, 10%, 95%) !important;
+    color: hsl(235, 10%, 20%) !important;
+}
+
+/* Background utilities */
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:bg-placeholder {
+    background-color: hsl(var(--card)) !important;
+}
+
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:bg-background {
+    background-color: hsl(var(--background)) !important;
+}
+
+/* Text utilities */
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:text-inherit {
+    color: hsl(var(--foreground)) !important;
+}
+
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:text-zinc-300 {
+    color: hsl(var(--muted-foreground)) !important;
+}
+
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:text-zinc-400 {
+    color: hsl(var(--muted-foreground)) !important;
+}
+
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:text-zinc-500 {
+    color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Placeholder text */
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:placeholder\:text-placeholder-foreground\/50::placeholder {
+    color: hsla(var(--placeholder-foreground), 0.6) !important;
+}
+
+/* Hover utilities */
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:hover\:text-current:hover {
+    color: hsl(var(--foreground)) !important;
+}
+
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:hover\:text-zinc-300:hover {
+    color: hsl(var(--foreground)) !important;
+}
+
+.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:hover\:text-zinc-600:hover {
+    color: hsl(var(--foreground)) !important;
+}
+
+/* ============================================================
+   UNIVERSAL THEME RULES (apply regardless of light/dark mode)
+   These ensure semantic color classes always work correctly.
+   ============================================================ */
+
 /* Comprehensive Utility Classes for Scoped Container */
+
 .chitchat-dashboard-theme .bg-background {
     background-color: hsl(var(--background)) !important;
 }
@@ -302,6 +418,21 @@
     background: hsla(var(--muted-foreground), 0.4);
 }
 
+.chitchat-dashboard-theme .chat-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    display: block;
+}
+
+.chitchat-dashboard-theme .chat-scrollbar::-webkit-scrollbar-track {
+    background-color: hsla(var(--card), 0.5);
+}
+
+.chitchat-dashboard-theme .chat-scrollbar::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--field));
+    border-radius: var(--radius);
+}
+
 .chitchat-dashboard-theme .no-scrollbar::-webkit-scrollbar {
     display: none;
 }
@@ -309,4 +440,318 @@
 .chitchat-dashboard-theme .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+}
+
+/* ============================================================
+   LIGHT MODE FIXES
+   Tailwind's dark: classes don't apply in light mode, causing
+   white-on-white or invisible text in chat components.
+   These overrides ensure all text stays visible in light mode.
+   ============================================================ */
+
+/* Zinc text colors — make them visible in light mode */
+.chitchat-dashboard-theme .text-zinc-400,
+.chitchat-dashboard-theme .text-zinc-500,
+.chitchat-dashboard-theme .text-zinc-600 {
+    color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Message input textarea area */
+.chitchat-dashboard-theme .bg-card {
+    background-color: hsl(var(--card)) !important;
+    color: hsl(var(--card-foreground)) !important;
+}
+
+/* In light mode, bg-placeholder should use the panel color, not transparent */
+.chitchat-dashboard-theme .bg-placeholder {
+    background-color: hsl(var(--placeholder)) !important;
+    color: hsl(var(--placeholder-foreground)) !important;
+}
+
+/* Textarea itself must have visible text */
+.chitchat-dashboard-theme textarea,
+.chitchat-dashboard-theme input[type="text"],
+.chitchat-dashboard-theme input:not([type="file"]):not([type="checkbox"]):not([type="radio"]) {
+    color: hsl(var(--foreground)) !important;
+    caret-color: hsl(var(--foreground)) !important;
+}
+
+/* Message text (MessageItem content) */
+.chitchat-dashboard-theme .text-sm,
+.chitchat-dashboard-theme .text-xs {
+    color: inherit;
+}
+
+/* Avatar fallback text */
+.chitchat-dashboard-theme .bg-muted {
+    background-color: hsl(var(--muted)) !important;
+    color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Inline edit input in MessageItem */
+.chitchat-dashboard-theme input[type="text"] {
+    background-color: hsl(var(--card)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--foreground)) !important;
+}
+
+/* Reply banner and editing banner */
+.chitchat-dashboard-theme .bg-card {
+    color: hsl(var(--card-foreground)) !important;
+}
+
+/* Ensure all foreground text classes work */
+.chitchat-dashboard-theme .text-foreground {
+    color: hsl(var(--foreground)) !important;
+}
+
+.chitchat-dashboard-theme .text-muted-foreground {
+    color: hsl(var(--muted-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .text-card-foreground {
+    color: hsl(var(--card-foreground)) !important;
+}
+
+.chitchat-dashboard-theme .text-popover-foreground {
+    color: hsl(var(--popover-foreground)) !important;
+}
+
+/* The message list scroll area */
+.chitchat-dashboard-theme ol,
+.chitchat-dashboard-theme ul {
+    color: hsl(var(--foreground));
+}
+
+/* System messages */
+.chitchat-dashboard-theme .text-yellow-500 {
+    color: hsl(var(--warning)) !important;
+}
+
+.chitchat-dashboard-theme .text-green-500 {
+    color: hsl(var(--success)) !important;
+}
+
+/* Hover states on message actions */
+.chitchat-dashboard-theme .hover\:text-foreground:hover {
+    color: hsl(var(--foreground)) !important;
+}
+
+.chitchat-dashboard-theme .hover\:bg-accent:hover {
+    background-color: hsl(var(--accent)) !important;
+}
+
+/* Kbd element (ESC key label) */
+.chitchat-dashboard-theme kbd {
+    background-color: hsl(var(--panel)) !important;
+    color: hsl(var(--panel-foreground)) !important;
+    border-color: hsl(var(--border)) !important;
+}
+
+.chitchat-dashboard-theme .border-primary-focus {
+    border-color: hsl(var(--primary)) !important;
+}
+
+/* ============================================================
+   CHAT INPUT BOX STYLES (Match Reference)
+   ============================================================ */
+
+.chitchat-dashboard-theme .dmtextarea {
+    margin-top: -1rem;
+    position: relative;
+    width: 100%;
+}
+
+.chitchat-dashboard-theme .dmtextarea:before {
+    content: "";
+    background-color: transparent;
+    width: 2rem;
+    height: 0.75rem;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+/* Fix jumping: Absolute typing indicator */
+.chitchat-dashboard-theme .typing-indicator-fixed {
+    position: absolute;
+    bottom: 100%;
+    /* Sits above the input box */
+    left: 1rem;
+    margin-bottom: 0.5rem;
+    z-index: 10;
+    pointer-events: none;
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* ============================================================
+   CHAT MESSAGE & USERNAME COLORS
+   Matching the reference: text-brightness/75 (light) /
+   dark:text-slate-100 for usernames.
+   Message text uses dark:text-message (gray-300 in dark).
+   ============================================================ */
+
+/* Username — light mode: brightness at 75% opacity (dark text) */
+.chitchat-dashboard-theme .chat-username {
+    color: hsl(var(--brightness) / 0.75);
+}
+
+/* Username — dark mode: slate-100 (#f1f5f9) */
+.chitchat-dashboard-theme.theme-dark .chat-username {
+    color: #f1f5f9 !important;
+}
+
+/* Message text — light mode: foreground */
+.chitchat-dashboard-theme .chat-message-text {
+    color: hsl(var(--foreground));
+}
+
+/* Message text — dark mode: text-message (rgb(209,213,219) = gray-300) */
+.chitchat-dashboard-theme.theme-dark .chat-message-text {
+    color: rgb(209, 213, 219) !important;
+}
+
+/* Timestamp color */
+.chitchat-dashboard-theme .text-zinc-500 {
+    color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Neutralize dark: bleed of text-zinc-500 in light mode */
+.dark .chitchat-dashboard-theme:not(.theme-dark) .chat-username {
+    color: hsl(var(--brightness) / 0.75) !important;
+}
+
+.dark .chitchat-dashboard-theme:not(.theme-dark) .chat-message-text {
+    color: hsl(var(--foreground)) !important;
+}
+
+/* ============================================================
+   TYPING INDICATOR ANIMATION
+   Matches the reference: three bouncing dots
+   ============================================================ */
+
+.chitchat-dashboard-theme .typing-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background-color: hsl(var(--muted-foreground));
+    animation: chitchat-bounce 1.5s infinite;
+}
+
+.chitchat-dashboard-theme .typing-dot:nth-child(2) {
+    animation-delay: 0.25s;
+}
+
+.chitchat-dashboard-theme .typing-dot:nth-child(3) {
+    animation-delay: 0.5s;
+}
+
+@keyframes chitchat-bounce {
+
+    0%,
+    100% {
+        transform: scale(0.6);
+    }
+
+    50% {
+        transform: scale(1);
+    }
+}
+
+/* ============================================================
+   TEXTAREA INPUT BOX BACKGROUND — Match reference
+   Light: --card (white), Dark: --placeholder (dark gray)
+   ============================================================ */
+
+.chitchat-dashboard-theme .textarea {
+    background-color: hsl(var(--card)) !important;
+}
+
+.chitchat-dashboard-theme.theme-dark .textarea {
+    background-color: hsl(var(--placeholder)) !important;
+}
+
+.chitchat-dashboard-theme .fixed-input-height {
+    height: 44px !important;
+}
+
+/* ============================================================
+   EMOJI MART PICKER — Custom theme tokens
+   emoji-mart uses a web component (em-emoji-picker) with CSS vars
+   ============================================================ */
+
+em-emoji-picker {
+    --border-radius: 12px;
+    --category-icon-size: 20px;
+    --font-family: 'DM Sans', sans-serif;
+    --rgb-accent: 112, 87, 186;
+    --rgb-background: 24, 25, 28;
+    --rgb-color: 255, 255, 255;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+
+/* Neutralize Tailwind dark: bleed for input box in light mode */
+.dark .chitchat-dashboard-theme:not(.theme-dark) .textarea {
+    background-color: hsl(var(--card)) !important;
+}
+
+@layer inherited {
+
+    #component,
+    #component:before,
+    #component:after {
+        --tw-drop-shadow: ;
+        --tw-sepia: ;
+        --tw-saturate: ;
+        --tw-invert: ;
+        --tw-hue-rotate: ;
+        --tw-grayscale: ;
+        --tw-contrast: ;
+        --tw-brightness: ;
+        --tw-blur: ;
+        --tw-shadow: 0 0 #0000;
+        --tw-ring-shadow: 0 0 #0000;
+        --tw-ring-offset-shadow: 0 0 #0000;
+        --tw-ring-color: #3b82f680;
+        --tw-ring-offset-color: #fff;
+        --tw-ring-offset-width: 0px;
+        --tw-ring-inset: ;
+        --tw-gradient-to-position: ;
+        --tw-gradient-via-position: ;
+        --tw-gradient-from-position: ;
+        --tw-scale-y: 1;
+        --tw-scale-x: 1;
+        --tw-skew-y: 0;
+        --tw-skew-x: 0;
+        --tw-rotate: 0;
+        --tw-translate-y: 0;
+        --tw-translate-x: 0;
+    }
+}
+
+@layer component {
+    .text-fuchsia-700 {
+        --tw-text-opacity: 1;
+        color: rgba(162, 28, 175, var(--tw-text-opacity, 1)) !important;
+    }
+
+    .bg-gradient-to-r {
+        background-image: linear-gradient(to right, var(--tw-gradient-stops)) !important;
+    }
+
+    /* Custom component IDs for specific styling provided by extraction */
+    #male,
+    #female,
+    #both,
+    #5s,
+    #10s,
+    #30s,
+    #10m {
+        scroll-margin-top: 100px;
+    }
 }

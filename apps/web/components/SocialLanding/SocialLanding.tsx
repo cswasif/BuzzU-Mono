@@ -4,6 +4,7 @@ import { AuthColumn } from './AuthColumn';
 import { Footer } from './Footer';
 import { SplashScreen } from './SplashScreen';
 import { useTheme } from '../ThemeContext';
+import '../../styles.css';
 
 const DESKTOP_IMAGES = ['/desktop1.png', '/desktop3.png'];
 const MOBILE_IMAGES = ['/mobile1.png', '/mobile2.png', '/mobile3.png'];

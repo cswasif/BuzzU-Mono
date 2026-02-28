@@ -5,6 +5,7 @@ import {
   LightningIcon, MaleIcon, FemaleIcon, BothIcon,
   VideoIcon, TextChatIcon
 } from './Icons';
+import { ChatArea } from '../Chat/ChatArea';
 
 interface MainContentProps {
   onManageInterests: () => void;
@@ -21,6 +22,7 @@ const interestSets = [
 const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
   const [gender, setGender] = useState<'M' | 'both' | 'F'>('both');
   const [currentSetIndex, setCurrentSetIndex] = useState(0);
+  const [isChatting, setIsChatting] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -31,6 +33,10 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
   }, []);
 
   const currentInterests = interestSets[currentSetIndex];
+
+  if (isChatting) {
+    return <ChatArea />;
+  }
 
   return (
     <main className="w-full flex h-full flex-grow flex-col overflow-hidden">
@@ -200,10 +206,14 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
               <a href="/start/new" className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 bg-gradient-to-r from-orange-500 to-red-400 text-white p-1 rounded-xl font-semibold hover:from-orange-600 hover:to-red-500 transition-all duration-300 shadow-md h-12 w-12 lg:h-14 lg:w-14">
                 <VideoIcon className="lg:w-6 lg:h-6" />
               </a>
-              <a href="/start/new" className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 h-10 px-4 flex-1 !text-white bg-gradient-to-r from-indigo-600 to-purple-700 text-brightness py-6 rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-600 transition-all duration-300 shadow-md hover:shadow-lg lg:py-7 lg:text-lg">
+              <button
+                type="button"
+                onClick={() => setIsChatting(true)}
+                className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 h-10 px-4 flex-1 !text-white bg-gradient-to-r from-indigo-600 to-purple-700 text-brightness py-6 rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-600 transition-all duration-300 shadow-md hover:shadow-lg lg:py-7 lg:text-lg"
+              >
                 <TextChatIcon className="w-6 h-6 mr-2 lg:w-7 lg:h-7" />
                 Start Text Chat
-              </a>
+              </button>
             </div>
 
           </div>

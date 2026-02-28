@@ -1,4 +1,3 @@
-
 @layer inherited, component;
 
 @layer inherited {
@@ -18,6 +17,7 @@
   font-style: "normal";
   font-display: "swap";
 }
+
 @font-face {
   font-family: TwitterChirp;
   src:
@@ -27,6 +27,7 @@
   font-style: "normal";
   font-display: "swap";
 }
+
 @font-face {
   font-family: TwitterChirp;
   src:
@@ -36,6 +37,7 @@
   font-style: "normal";
   font-display: "swap";
 }
+
 @font-face {
   font-family: TwitterChirp;
   src:
@@ -45,6 +47,7 @@
   font-style: "normal";
   font-display: "swap";
 }
+
 @font-face {
   font-family: TwitterChirp;
   src:
@@ -54,6 +57,7 @@
   font-style: "normal";
   font-display: "swap";
 }
+
 @font-face {
   font-family: TwitterChirpExtendedHeavy;
   src:
@@ -64,29 +68,158 @@
   font-display: "swap";
 }
 
+/* --- ELITE THEME VARIABLES & REFINEMENT --- */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-blur: 20px;
+  --glass-brightness: 1.15;
+  --glass-saturate: 180%;
+  --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+/* Theme-specific Glass Overrides */
+[data-theme='light'] {
+  --glass-bg: rgba(0, 0, 0, 0.03);
+  --glass-brightness: 0.98;
+  --glass-saturate: 150%;
+  --glass-border: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='aura'] {
+  --glass-bg: rgba(10, 10, 26, 0.4);
+  --glass-blur: 25px;
+  --glass-brightness: 1.2;
+  --glass-saturate: 200%;
+  --glass-border: rgba(0, 255, 255, 0.2);
+}
+
+/* Mesh Gradient Animation for Aura theme */
+@keyframes meshGradient {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* --- CINEMATIC TEXTURE (FILM GRAIN) --- */
+@keyframes grain {
+
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  10% {
+    transform: translate3d(-5%, -10%, 0);
+  }
+
+  20% {
+    transform: translate3d(-15%, 5%, 0);
+  }
+
+  30% {
+    transform: translate3d(7%, -25%, 0);
+  }
+
+  40% {
+    transform: translate3d(-5%, 25%, 0);
+  }
+
+  50% {
+    transform: translate3d(-15%, 10%, 0);
+  }
+
+  60% {
+    transform: translate3d(15%, 0%, 0);
+  }
+
+  70% {
+    transform: translate3d(0, 15%, 0);
+  }
+
+  80% {
+    transform: translate3d(3%, 35%, 0);
+  }
+
+  90% {
+    transform: translate3d(-10%, 10%, 0);
+  }
+}
+
+.cinematic-grain {
+  position: absolute;
+  top: -100%;
+  left: -100%;
+  width: 300%;
+  height: 300%;
+  background-image: url("https://upload.wikimedia.org/wikipedia/commons/thumb/7/76/Rough_paper.jpg/800px-Rough_paper.jpg");
+  background-repeat: repeat;
+  opacity: 0.04;
+  pointer-events: none;
+  z-index: 5;
+  mix-blend-mode: overlay;
+  animation: grain 8s steps(10) infinite;
+  will-change: transform;
+  filter: contrast(120%) brightness(100%);
+}
+
+[data-theme='aura'] .cinematic-grain {
+  opacity: 0.05;
+}
+
+.landing-root-bg[data-theme='aura'] {
+  background: linear-gradient(-45deg, #0a0a1a, #1a0a2a, #0a2a2a, #0a0a1a) !important;
+  background-size: 400% 400% !important;
+  animation: meshGradient 15s ease infinite !important;
+}
+
+.landing-root-bg[data-theme='aura']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(at 0% 0%, rgba(0, 255, 255, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(255, 0, 255, 0.1) 0px, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
 @layer component {
   iframe {
     color-scheme: normal;
   }
+
   button {
     text-align: inherit;
     font-size: inherit;
     color: inherit;
     font-family: inherit;
   }
+
   html,
   body {
     height: 100%;
-    overflow-x: hidden; /* Prevent horizontal scrollbars from layout shifting */
+    overflow-x: hidden;
+    /* Prevent horizontal scrollbars from layout shifting */
   }
+
   body {
     margin: 0;
   }
+
   html {
     -webkit-text-size-adjust: 100%;
     -ms-text-size-adjust: 100%;
     -webkit-tap-highlight-color: #0000;
   }
+
   .css-146c3p1 {
     color: #000;
     text-align: start;
@@ -102,6 +235,7 @@
       sans-serif;
     display: inline;
   }
+
   .css-146c3p1,
   .css-175oi2r {
     box-sizing: border-box;
@@ -113,6 +247,7 @@
     list-style: none;
     position: relative;
   }
+
   .css-175oi2r {
     z-index: 0;
     flex-direction: column;
@@ -123,6 +258,7 @@
     min-height: 0;
     display: flex;
   }
+
   .css-1jxf684 {
     box-sizing: border-box;
     color: inherit;
@@ -139,34 +275,44 @@
     display: inline;
     position: relative;
   }
+
   .r-3pj75a {
     padding-left: 16px;
     padding-right: 16px;
   }
+
   .r-o59np7 {
     padding-right: 8px;
   }
+
   .r-16dba41 {
     font-weight: 400;
   }
+
   .r-1777fci {
     justify-content: center;
   }
+
   .r-18u37iz {
     flex-direction: row;
   }
+
   .r-1awozwy {
     align-items: center;
   }
+
   .r-1gkfh8e {
     font-size: 11px;
   }
+
   .r-1kihuf0 {
     align-self: center;
   }
+
   .r-1loqt21 {
     cursor: pointer;
   }
+
   .r-1qd0xha {
     font-family:
       -apple-system,
@@ -177,143 +323,190 @@
       Arial,
       sans-serif;
   }
+
   .r-1ttztb7 {
     text-align: inherit;
   }
+
   .r-56xrmm {
     line-height: 12px;
   }
+
   .r-a023e6 {
     font-size: 15px;
   }
+
   .r-bcqeeo {
     min-width: 0;
   }
+
   .r-poiln3 {
     font-family: inherit;
   }
+
   .r-qvutc0 {
     word-wrap: break-word;
   }
+
   .r-rjixqe {
     line-height: 20px;
   }
+
   .r-13awgt0 {
     flex: 1;
   }
+
   .r-1phboty {
     border-style: solid;
   }
+
   .r-1udh08x {
     overflow: hidden;
   }
+
   .r-4qtqp9 {
     display: inline-block;
   }
+
   .r-6koalj {
     display: flex;
   }
+
   .r-rs99b7 {
     border-width: 1px;
   }
+
   .r-sdzlij {
     border-radius: 9999px;
   }
+
   .r-t60dpp {
     padding: 0;
+    box-sizing: border-box;
   }
+
   .r-xoduu5 {
     display: inline-flex;
   }
+
   .r-1gs4q39 {
     margin-right: 4px;
   }
+
   .r-109y4c4 {
     height: 1px;
   }
+
   .r-117bsoe {
     margin-bottom: 20px;
   }
-  .r-12vffkv > * {
+
+  .r-12vffkv>* {
     pointer-events: auto;
   }
+
   .r-12vffkv {
     pointer-events: none !important;
   }
+
   .r-13qz1uu {
     width: 100%;
   }
+
   .r-16y2uox {
     flex-grow: 1;
   }
+
   .r-19wmn03 {
     width: 20px;
   }
+
   .r-1d2f490 {
     left: 0;
   }
+
   .r-1inkyih {
     font-size: 17px;
   }
+
   .r-1ipicw7 {
     width: 300px;
   }
+
   .r-1iusvr4 {
     flex-basis: 0;
   }
+
   .r-1nao33i {
     color: #e7e9ea;
   }
+
   .r-1ny4l3l {
     outline-style: none;
   }
+
   .r-1p0dtai {
     bottom: 0;
   }
+
   .r-1qi8awa {
     min-width: 36px;
   }
+
   .r-1udbk01 {
     text-overflow: ellipsis;
   }
+
   .r-1wbh5a2 {
     flex-shrink: 1;
   }
+
   .r-1xcajam {
     position: fixed;
   }
+
   .r-1yjpyg1 {
     font-size: 31px;
   }
+
   .r-2o02ov {
     margin-top: 40px;
   }
+
   .r-2yi16 {
     min-height: 36px;
   }
+
   .r-3s2u2q {
     white-space: nowrap;
   }
+
   .r-417010 {
     z-index: 0;
   }
+
   .r-6416eg {
     -webkit-transition-property: background-color, box-shadow;
     -moz-transition-property: background-color, box-shadow;
     transition-property: background-color, box-shadow;
   }
+
   .r-aqfbo4 {
     backface-visibility: hidden;
   }
+
   .r-b88u0q {
     font-weight: 700;
   }
+
   .r-bnwqim {
     position: relative;
   }
+
   .r-dmrzs {
     max-width: 100%;
   }
+
   .r-fm7h5w {
     font-family:
       TwitterChirpExtendedHeavy,
@@ -326,41 +519,53 @@
       Arial,
       sans-serif;
   }
+
   .r-ipm5af {
     top: 0;
   }
+
   .r-lrvibr {
     -webkit-user-select: none;
     -moz-user-select: none;
     user-select: none;
   }
+
   .r-m6rgpd {
     vertical-align: text-bottom;
   }
+
   .r-majxgm {
     font-weight: 500;
   }
+
   .r-o7ynqc {
     transition-duration: 0.2s;
   }
+
   .r-q4m81j {
     text-align: center;
   }
+
   .r-u8s1d {
     position: absolute;
   }
+
   .r-ueyrd6 {
     line-height: 36px;
   }
+
   .r-yyyyoo {
     fill: currentColor;
   }
+
   .r-z80fyv {
     height: 20px;
   }
+
   .r-zchlnj {
     right: 0;
   }
+
   /* Helper for Separator Lines */
   .r-gu4em3 {
     background-color: rgb(47, 51, 54);
@@ -371,6 +576,7 @@
     transition-property: background-color;
     transition-duration: 0.2s;
   }
+
   .btn-hover-white:hover {
     background-color: rgb(230, 230, 230) !important;
   }
@@ -379,25 +585,28 @@
     transition-property: background-color;
     transition-duration: 0.2s;
   }
+
   .btn-hover-black:hover {
     background-color: rgb(39, 44, 48) !important;
   }
-  
+
   /* Dynamic Theme Hover Effects using CSS Variables */
-  .btn-hover-outline {
-    transition-property: background-color;
-    transition-duration: 0.2s;
-  }
   .btn-hover-outline:hover {
     background-color: var(--accent-hover-bg, rgba(29, 155, 240, 0.1)) !important;
   }
 
   .btn-hover-accent {
-    transition-property: background-color;
-    transition-duration: 0.2s;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
   }
+
   .btn-hover-accent:hover {
-    opacity: 0.9;
+    opacity: 0.94;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .btn-hover-outline:active,
+  .btn-hover-accent:active {
+    transform: scale(0.98) !important;
   }
 
   /* Fallback for specific buttons if needed, but variables are preferred */
@@ -405,11 +614,13 @@
     transition-property: background-color;
     transition-duration: 0.2s;
   }
+
   .btn-hover-translucent-black:hover {
     background-color: rgba(15, 20, 25, 0.1) !important;
   }
 
   @supports ((-webkit-appearance: none)) {
+
     div:focus,
     h1:focus,
     p:focus,
@@ -420,11 +631,22 @@
       outline: none !important;
     }
   }
-  .S9gUrf-YoZ4jf,
-  .S9gUrf-YoZ4jf * {
-    border: none;
-    margin: 0;
-    padding: 0;
+
+  /* --- ANIMATIONS & POLISH --- */
+  @keyframes fadeInVertical {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .fade-in-up {
+    animation: fadeInVertical 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   }
 
   /* --- CUSTOM LAYOUT FIXES --- */
@@ -432,100 +654,116 @@
   /* Main Two-Column Layout Container */
   .r-tv6buo {
     display: flex;
-    flex-direction: column-reverse; /* Mobile First: Logo top, Content bottom */
+    flex-direction: column-reverse;
+    /* Mobile First: Logo top, Content bottom */
     width: 100%;
-    flex: 1; /* Allow growing to fill available height */
+    flex: 1;
+    /* Allow growing to fill available height */
   }
 
   /* Left Column (Logo) */
   .r-t60dpp {
     flex: 0 0 auto;
     width: 100%;
-    height: 60px; /* Small header on mobile */
-    padding: 0 36px; /* Matched content padding of 36px */
+    height: 60px;
+    /* Small header on mobile */
+    padding: 0 36px;
+    /* Matched content padding of 36px */
     display: flex;
-    flex-direction: column; /* Explicitly state column direction, inherited from base but good for clarity */
-    align-items: flex-start !important; /* Forces horizontal left alignment in column mode */
-    justify-content: center !important; /* Forces vertical centering in column mode */
+    flex-direction: column;
+    /* Explicitly state column direction, inherited from base but good for clarity */
+    align-items: flex-start !important;
+    /* Forces horizontal left alignment in column mode */
+    justify-content: center !important;
+    /* Forces vertical centering in column mode */
     position: relative;
   }
-  
+
   /* Logo Wrapper Sizing */
   .r-t60dpp .r-u8s1d {
-      position: relative !important; /* Reset absolute positioning on mobile */
-      width: 32px;
-      height: 32px;
+    position: relative !important;
+    /* Reset absolute positioning on mobile */
+    width: 32px;
+    height: 32px;
   }
 
   /* Right Column (Content) */
   .r-nsbfu8 {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      padding: 60px 36px 36px; /* Increased top padding to 60px for mobile */
-      width: 100%;
-      max-width: 600px;
-      margin: 0 auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 60px 36px 36px;
+    /* Increased top padding to 60px for mobile */
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 10;
   }
 
   /* Typography Overrides to Match X Scale */
   .r-19oahor .css-1jxf684 {
-      font-size: 40px; /* Mobile */
-      font-weight: 700;
-      line-height: 1.2;
-      letter-spacing: -1.2px;
-      margin-bottom: 20px;
-      display: block;
-      color: rgb(231, 233, 234);
+    font-size: 40px;
+    font-weight: 900 !important;
+    /* Extra heavy for premium editorial feel */
+    line-height: 1.05;
+    letter-spacing: -2.2px;
+    /* Elite Tighter tracking */
+    margin-bottom: 24px;
+    display: block;
+    color: inherit;
   }
-  
+
   .r-1yjpyg1 {
-      margin-top: 40px;
-      margin-bottom: 32px;
+    margin-top: 48px;
+    /* Slightly more breathable */
+    margin-bottom: 36px;
   }
 
   .r-1yjpyg1 .css-1jxf684 {
-      font-size: 23px;
-      font-weight: 700;
-      color: rgb(231, 233, 234);
+    font-size: 24px;
+    font-weight: 800;
+    /* Heavier weighting */
+    letter-spacing: -0.5px;
+    color: inherit;
   }
 
   /* Button Widths */
   .r-17w48nw {
-      width: 100%;
-      max-width: 300px;
+    width: 100%;
+    max-width: 300px;
   }
 
   iframe {
-      max-width: 300px;
-      width: 100% !important;
+    max-width: 300px;
+    width: 100% !important;
   }
 
   /* Footer */
   nav[aria-label="Footer"] {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 0;
-      row-gap: 4px;
-      padding: 12px 16px;
-      text-align: center;
-      font-size: 13px;
-      margin-top: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0;
+    row-gap: 4px;
+    padding: 12px 16px;
+    text-align: center;
+    font-size: 13px;
+    margin-top: auto;
   }
-  
+
   nav[aria-label="Footer"] .css-1jxf684 {
     font-size: 13px;
+    color: var(--theme-text-secondary) !important;
+    opacity: 0.8;
   }
 
-  nav[aria-label="Footer"] .r-18u37iz {
-      margin: 0;
+  nav[aria-label="Footer"] a:hover .css-1jxf684 {
+    color: var(--theme-text) !important;
+    opacity: 1;
+    text-decoration: none !important;
   }
 
-  nav[aria-label="Footer"] a:hover {
-      text-decoration: underline;
-  }
-  
   /* Inner content wrapper for safe centering */
   .r-1pcd2l5 {
     margin-top: auto;
@@ -537,68 +775,515 @@
     display: none;
   }
 
-  /* Desktop Breakpoint matching X.com */
+  .landing-root-bg {
+    position: relative;
+    transition: background-image 0.8s ease-in-out;
+    filter: none !important;
+    min-height: 100vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
+  /* Mobile: Pure Background Focus */
+  @media (max-width: 999px) {
+    :root {
+      --glass-blur: 0px !important;
+      /* Fully disabled for mobile video clarity */
+      --glass-bg: rgba(255, 255, 255, 0.03) !important;
+    }
+
+    [data-theme='aura'] {
+      --glass-blur: 0px !important;
+      --glass-bg: rgba(10, 10, 26, 0.05) !important;
+      /* Extreme transparency */
+    }
+
+    .landing-root-bg {
+      background-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.1) 40%, rgba(0, 0, 0, 0.6) 100%), var(--bg-image) !important;
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+    }
+
+    /* Remove all overlays */
+    .landing-root-bg::before {
+      display: none !important;
+    }
+
+    .landing-root-bg>* {
+      z-index: 1;
+    }
+
+    /* Fixed Mobile Header: Matches Original X Reference */
+    .r-t60dpp {
+      flex: 0 0 auto !important;
+      width: 100% !important;
+      height: 60px !important;
+      padding: 0 36px !important;
+      /* Matched content padding */
+      display: flex !important;
+      flex-direction: column !important;
+      /* Explicit column direction */
+      align-items: flex-start !important;
+      /* Horizontally left-aligned in column mode */
+      justify-content: center !important;
+      /* Vertically centered in column mode */
+      position: relative !important;
+      background: transparent !important;
+      overflow: visible !important;
+      /* Allow video to escape if trapped */
+    }
+
+    .r-t60dpp .r-u8s1d {
+      position: relative !important;
+      width: 32px !important;
+      height: 32px !important;
+      margin: 0 !important;
+      inset: auto !important;
+      left: auto !important;
+      right: auto !important;
+      top: auto !important;
+      bottom: auto !important;
+      display: block !important;
+      opacity: 0.3 !important;
+      filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.7)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6)) !important;
+      pointer-events: none !important;
+    }
+
+    /* Global White Text Override for all standard text elements on mobile */
+    .css-146c3p1,
+    .css-1jxf684,
+    .r-vw2c0b,
+    .r-1m68571,
+    .r-1b6yd1w {
+      color: var(--theme-text) !important;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
+      /* Gentle shadow to support theme colors on photos */
+    }
+
+    /* Specific weights for headers */
+    .r-19oahor .css-1jxf684,
+    .r-1yjpyg1 .css-1jxf684,
+    .r-2o02ov .css-1jxf684,
+    .r-hvzyjp .css-1jxf684,
+    .r-1777fci.r-1jgb5lz .r-vw2c0b {
+      font-weight: 900 !important;
+    }
+
+    /* Elite Glass Content Area for Mobile */
+    .r-nsbfu8 {
+      background: var(--glass-bg) !important;
+      backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness)) saturate(var(--glass-saturate)) !important;
+      -webkit-backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness)) saturate(var(--glass-saturate)) !important;
+      border: none !important;
+      border-radius: 20px 20px 0 0 !important;
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.3) !important;
+      padding: 40px 24px !important;
+      margin-top: -20px !important;
+      /* Pull up to overlap slightly with video */
+    }
+
+    /* Clean Footer spacing on mobile - Fade is now handled by root background */
+    nav[aria-label="Footer"] {
+      background: linear-gradient(rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03)),
+        color-mix(in srgb, var(--theme-bg), transparent 90%) !important;
+      backdrop-filter: blur(12px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
+      padding: 24px 16px 64px !important;
+      margin-top: 20px !important;
+      width: 100% !important;
+      border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+    }
+
+    /* Suppress mirrored video on mobile */
+    .mirrored-video-container {
+      display: none !important;
+    }
+
+    /* Boost Mobile Logo Prominence */
+    .mobile-hero-logo {
+      height: 160px !important;
+      width: 160px !important;
+      margin-top: 40px !important;
+      /* Move higher up in the top section */
+      filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.4)) !important;
+    }
+  }
+
+  /* Desktop Breakpoint */
   @media (min-width: 1000px) {
-      .r-tv6buo {
-          flex-direction: row-reverse; /* Content Right, Logo Left */
-      }
-      
-      .r-t60dpp {
-          flex: 55;
-          height: auto;
-          justify-content: center;
-          align-items: center !important; /* Center alignment for desktop */
-          padding: 0;
-          overflow: hidden;
-          position: relative !important; /* Ensure positioning context */
-          isolation: isolate; /* Create new stacking context */
-          z-index: 0;
-      }
+    .landing-root-bg {
+      background-image: none !important;
+      background-color: var(--theme-bg) !important;
+      width: 100vw !important;
+      min-height: 100vh !important;
+    }
 
-      /* Logo Centering on Desktop */
-      .r-t60dpp .r-u8s1d {
-          position: absolute !important; /* Fixed relative to column */
-          inset: 0;
-          margin: auto;
-          width: 50%;
-          height: 50%;
-          max-width: 380px;
-          max-height: 380px;
-          z-index: 10; /* Logo above background */
-      }
+    /* Make sure all intermediate containers are transparent to see the root background */
+    #react-root,
+    .r-1f2l425,
+    .r-13qz1uu,
+    .r-16y2uox,
+    .r-1wbh5a2,
+    .r-150rngu,
+    .r-13awgt0 {
+      background-color: transparent !important;
+    }
 
-      .hero-background-image {
-        display: block !important;
-        position: absolute !important;
-        top: 0;
-        left: 0;
-        width: 100% !important;
-        height: 100% !important;
-        background-color: #1a1a1a; /* Dark fallback color */
-        background-image: url("https://mini-app-avatars.s3.amazonaws.com/Menu/ec250529-5735-467f-9462-850c99557342/cc1d8354-946d-4952-b91c-8e0a29b407b4.png");
-        background-size: cover;
-        background-position: center;
-        z-index: 1; /* Background behind logo but above stacking context base */
-      }
+    .r-tv6buo {
+      flex-direction: row-reverse;
+    }
 
-      .r-nsbfu8 {
-          flex: 45;
-          align-items: flex-start;
-          padding-left: 32px;
-          padding-right: 32px;
-          max-width: none;
-          min-width: 45vw;
-          justify-content: center; /* Center content vertically on desktop */
-      }
-      
-      .r-19oahor .css-1jxf684 {
-          font-size: 64px;
-          margin-bottom: 48px;
-          letter-spacing: -2px;
-      }
-      
-      .r-1yjpyg1 .css-1jxf684 {
-          font-size: 31px;
-      }
+    .r-t60dpp {
+      flex: 55;
+      height: auto;
+      justify-content: center;
+      align-items: center !important;
+      padding: 0;
+      overflow: hidden;
+      position: relative !important;
+      isolation: isolate;
+      z-index: 0;
+      /* Split Desktop: Image on the left side */
+      background-image: var(--bg-image-left) !important;
+      background-size: cover !important;
+      background-position: center !important;
+      background-repeat: no-repeat !important;
+    }
+
+    /* Logo Centering on Desktop */
+    .r-t60dpp .r-u8s1d {
+      position: absolute !important;
+      inset: 0;
+      margin: auto;
+      width: 50%;
+      height: 50%;
+      max-width: 380px;
+      max-height: 380px;
+      z-index: 10;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      /* Watermark styling */
+      opacity: 0.3 !important;
+      filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.7)) drop-shadow(0 6px 20px rgba(0, 0, 0, 0.7)) !important;
+      pointer-events: none !important;
+    }
+
+    .hero-background-image {
+      display: none !important;
+      /* Hide the restricted background image */
+    }
+
+    .r-nsbfu8 {
+      flex: 45;
+      padding: 0 36px;
+      justify-content: center;
+      /* Legacy image hidden by glass-panel class */
+      background-image: none !important;
+      position: relative;
+      z-index: 2;
+      margin-left: -1px !important;
+      box-shadow: -15px 0 35px rgba(0, 0, 0, 0.4);
+      overflow: hidden;
+      /* Contain the mirrored video */
+    }
+
+    .mirrored-video-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -2;
+      transform: scaleX(-1);
+      /* Deep Mirror */
+      pointer-events: none;
+      opacity: 0.8;
+      /* Subtle transparency before blur */
+    }
+
+    /* Target the inner video exactly like the main one but without the fixed constraints */
+    .mirrored-video-container .video-background-iframe {
+      /* Reset translation to center in this specific container */
+      position: absolute !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      max-width: none !important;
+      max-height: none !important;
+    }
+
+    .glass-panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      /* Elite Glass System */
+      background: var(--glass-bg) !important;
+      backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness)) saturate(var(--glass-saturate)) !important;
+      -webkit-backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness)) saturate(var(--glass-saturate)) !important;
+      z-index: -1;
+      border-left: 1px solid var(--glass-border);
+      /* Liquid Glass 2.0 Effect - Beveled Inner Glow */
+      box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.05), inset 1px 0 0 rgba(255, 255, 255, 0.1);
+    }
+
+    /* Adjust text colors to stay pops against lighter glass */
+    .r-nsbfu8 .css-1jxf684,
+    .r-nsbfu8 .r-vw2c0b,
+    .r-nsbfu8 .r-1m68571 {
+      color: var(--theme-text) !important;
+      text-shadow: 0 0 40px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    /* Glass footer matching right column */
+    nav[aria-label="Footer"] {
+      background: linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.05)),
+        color-mix(in srgb, var(--theme-bg), transparent 85%) !important;
+      backdrop-filter: blur(16px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+      border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+      padding: 12px 16px !important;
+      z-index: 3;
+    }
+
+    /* Target headers on desktop to follow theme color accurately */
+    .r-nsbfu8 .r-19oahor .css-1jxf684 {
+      font-size: 72px !important;
+      /* Larger for desktop impact */
+      /* Slightly larger editorial size */
+      margin-bottom: 56px !important;
+      letter-spacing: -3.2px !important;
+      /* Ultra tight for impact */
+      line-height: 1.0 !important;
+      color: var(--theme-text) !important;
+      text-shadow: none !important;
+      font-weight: 900 !important;
+    }
+
+    .r-nsbfu8 .r-1yjpyg1 .css-1jxf684 {
+      font-size: 32px !important;
+      color: var(--theme-text) !important;
+      letter-spacing: -0.8px !important;
+      text-shadow: none !important;
+      font-weight: 800 !important;
+    }
+
+    .r-nsbfu8 .r-vw2c0b,
+    .r-nsbfu8 .r-1m68571,
+    .r-nsbfu8 .r-1hvzyjp .css-1jxf684,
+    .r-nsbfu8 .r-2o02ov .css-1jxf684 {
+      color: var(--theme-text) !important;
+      text-shadow: none !important;
+      font-weight: 700 !important;
+    }
+  }
+
+  /* Desktop shared header sizing */
+  .r-1777fci.r-1jgb5lz .r-vw2c0b {
+    font-size: 64px !important;
+    line-height: 1.0;
+  }
+
+  /* --- VIDEO BACKGROUND --- */
+  .video-background-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    z-index: 0;
+    /* Base layer */
+    pointer-events: auto;
+    /* Required for the mute button */
+    background: var(--theme-bg);
+    /* Match theme background to prevent flicker */
+  }
+
+  .side-filter-overlay {
+    position: absolute;
+    top: 0;
+    width: 50%;
+    height: 100%;
+    z-index: 2;
+    pointer-events: none;
+    backdrop-filter: grayscale(100%) brightness(1.0) contrast(1.2);
+    -webkit-backdrop-filter: grayscale(100%) brightness(1.0) contrast(1.2);
+    transition: all 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .side-filter-overlay.left {
+    left: 0;
+  }
+
+  .side-filter-overlay.right {
+    right: 0;
+  }
+
+  .side-filter-overlay.full {
+    display: none;
+    /* Defer to more efficient iframe filter */
+  }
+
+  /* Optimized full-screen B&W filter for mobile/small windows */
+  .video-background-wrapper.filter-full .video-background-iframe {
+    filter: grayscale(100%) brightness(1.0) contrast(1.2);
+    -webkit-filter: grayscale(100%) brightness(1.0) contrast(1.2);
+  }
+
+  /* Adjust for mobile - usually better to disable or fade for clarity */
+  /* Automatic CSS-only mobile B&W switch to prevent React re-render lag */
+  @media (max-width: 767px) {
+    .video-background-wrapper .video-background-iframe {
+      filter: grayscale(100%) brightness(1.0) contrast(1.2) !important;
+      -webkit-filter: grayscale(100%) brightness(1.0) contrast(1.2) !important;
+    }
+
+    .side-filter-overlay {
+      display: none !important;
+    }
+  }
+
+  /* Semi-transparent overlay to ensure text/UI remains legible if needed */
+  .video-background-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.2) 40%, rgba(0, 0, 0, 0.85) 100%);
+    z-index: 1;
+    /* Above iframe, below content */
+    pointer-events: none;
+  }
+
+  @media (min-width: 1000px) {
+    .video-background-wrapper {
+      position: absolute;
+      /* relative to .r-t60dpp */
+      width: 100%;
+      height: 100%;
+    }
+
+    .video-background-overlay {
+      display: none;
+      /* Let desktop be pure if we want, or keep it. Let's keep it minimal */
+    }
+  }
+
+  .video-background-iframe {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100vw;
+    height: 56.25vw;
+    min-height: 100vh;
+    min-width: 177.77vh;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Best practice for removing black bars - viewport-based approach */
+  .video-background-iframe.crop-black-bars {
+    max-width: none;
+    max-height: none;
+  }
+
+  /* Aspect ratio specific classes */
+  .video-background-iframe.crop-black-bars.aspect-16-9 {
+    transform: translate(-50%, -50%) scale(1.3);
+    clip-path: inset(1px 0 1px 0);
+  }
+
+  .video-background-iframe.crop-black-bars.aspect-4-3 {
+    transform: translate(-50%, -50%) scale(1.2);
+    clip-path: inset(5px 0 5px 0);
+  }
+
+  .video-background-iframe.crop-black-bars.aspect-21-9 {
+    transform: translate(-50%, -50%) scale(1.6);
+    clip-path: inset(12px 0 12px 0);
+  }
+
+  .video-background-iframe.crop-black-bars.aspect-1-1 {
+    transform: translate(-50%, -50%) scale(1.3);
+    clip-path: inset(0 10px 0 10px);
+  }
+
+  .video-background-iframe.crop-black-bars.aspect-9-16 {
+    transform: translate(-50%, -50%) scale(1.35);
+    clip-path: inset(0 5px 0 5px);
+  }
+
+  /* Mobile adjustments for aspect ratios */
+  @media (max-width: 999px) {
+    .video-background-iframe.crop-black-bars.aspect-16-9 {
+      transform: translate(-50%, -50%) scale(1.25);
+    }
+
+    .video-background-iframe.crop-black-bars.aspect-4-3 {
+      transform: translate(-50%, -50%) scale(1.15);
+    }
+
+    .video-background-iframe.crop-black-bars.aspect-21-9 {
+      transform: translate(-50%, -50%) scale(1.55);
+    }
+
+    .video-background-iframe.crop-black-bars.aspect-1-1 {
+      transform: translate(-50%, -50%) scale(1.2);
+    }
+
+    .video-background-iframe.crop-black-bars.aspect-9-16 {
+      transform: translate(-50%, -50%) scale(1.3);
+    }
+  }
+
+  /* Mute Button styling */
+  .mute-btn {
+    position: fixed !important;
+    bottom: 24px !important;
+    z-index: 9999 !important;
+    /* Above all overlays globally */
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    pointer-events: auto;
+  }
+
+  /* Mobile: Bottom Right */
+  @media (max-width: 999px) {
+    .mute-btn {
+      right: 24px !important;
+      left: auto !important;
+    }
+  }
+
+  /* Desktop: Bottom Left (Inside the video column) */
+  @media (min-width: 1000px) {
+    .mute-btn {
+      left: 24px !important;
+      right: auto !important;
+    }
+  }
+
+  .mute-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+    transform: scale(1.05);
   }
 }
