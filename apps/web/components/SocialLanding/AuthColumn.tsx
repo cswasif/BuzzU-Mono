@@ -142,10 +142,12 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
 
           <div className="css-175oi2r">
             {/* Create Account Button (Renamed to Start Buzzing) */}
-            <a href="/verify" role="link" className="css-175oi2r r-sdzlij r-1phboty r-rs99b7 r-lrvibr r-17w48nw r-a9p05 r-eu3ka r-1ifxtd0 r-1ipicw7 r-2yi16 r-1qi8awa r-3pj75a r-o7ynqc r-6416eg r-1ny4l3l r-1loqt21 btn-hover-accent flex items-center justify-center !bg-transparent" data-testid="signupButton" style={{ backgroundColor: colors.accent, borderColor: 'rgba(0, 0, 0, 0)', marginBottom: '8px' }}>
-              <span className="font-bold text-base" style={{ color: (theme === 'light' || theme === 'lavender') ? '#fff' : '#000' }}>
-                Start Buzzing
-              </span>
+            <a href="/verify" role="link" className={`css-175oi2r r-sdzlij r-1phboty r-rs99b7 r-lrvibr r-17w48nw r-a9p05 r-eu3ka r-1ifxtd0 r-1ipicw7 r-2yi16 r-1qi8awa r-3pj75a r-o7ynqc r-6416eg r-1ny4l3l r-1loqt21 btn-hover-accent`} data-testid="signupButton" style={{ backgroundColor: colors.accent, borderColor: 'rgba(0, 0, 0, 0)', marginBottom: '8px' }}>
+              <div dir="ltr" className="css-146c3p1 r-qvutc0 r-1qd0xha r-q4m81j r-a023e6 r-rjixqe r-b88u0q r-1awozwy r-6koalj r-18u37iz r-16y2uox r-bcqeeo r-1777fci" style={{ color: (theme === 'light' || theme === 'lavender') ? '#fff' : '#000', backgroundColor: 'transparent' }}>
+                <div className="css-175oi2r r-xoduu5">
+                  <span className="css-1jxf684 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-a023e6 r-rjixqe" style={{ fontWeight: 700 }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Start Buzzing</span></span>
+                </div>
+              </div>
             </a>
 
             <div dir="ltr" className="css-146c3p1 r-bcqeeo r-1ttztb7 r-qvutc0 r-1qd0xha r-1gkfh8e r-56xrmm r-16dba41 r-13awgt0 r-117bsoe r-17w48nw" style={{ color: colors.textSecondary, fontSize: '11px', lineHeight: '12px', marginBottom: '20px' }}>
@@ -157,7 +159,7 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
             <div className="css-175oi2r r-2o02ov" style={{ marginTop: '32px', gap: '12px', display: 'flex', flexDirection: 'column' }}>
               {/* Safety & Guidelines Group */}
               <a href="/safety" role="link" className="css-175oi2r r-sdzlij r-1phboty r-rs99b7 r-lrvibr r-17w48nw r-a9p05 r-eu3ka r-1ifxtd0 r-1ipicw7 r-2yi16 r-1qi8awa r-3pj75a r-o7ynqc r-6416eg r-1ny4l3l r-1loqt21 btn-hover-outline" data-testid="safetyButton" style={{ backgroundColor: 'rgba(0, 0, 0, 0)', borderColor: colors.buttonBorder }}>
-                <div dir="ltr" className="css-146c3p1 r-qvutc0 r-1qd0xha r-q4m81j r-a023e6 r-rjixqe r-b88u0q r-1awozwy r-6koalj r-18u37iz r-16y2uox r-bcqeeo r-1777fci" style={{ color: colors.accent }}>
+                <div dir="ltr" className="css-146c3p1 r-qvutc0 r-1qd0xha r-q4m81j r-a023e6 r-rjixqe r-b88u0q r-1awozwy r-6koalj r-18u37iz r-16y2uox r-bcqeeo r-1777fci" style={{ color: colors.accent, backgroundColor: 'transparent' }}>
                   <div className="css-175oi2r r-xoduu5">
                     <span className="css-1jxf684 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-a023e6 r-rjixqe" style={{ fontWeight: 700 }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Safety Center</span></span>
                   </div>
@@ -165,7 +167,7 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
               </a>
 
               <a href="/guidelines" role="link" className={`css-175oi2r r-sdzlij r-1phboty r-rs99b7 r-lrvibr r-17w48nw r-a9p05 r-eu3ka r-1ifxtd0 r-1ipicw7 r-2yi16 r-1qi8awa r-3pj75a r-o7ynqc r-6416eg r-1ny4l3l r-1loqt21 btn-hover-outline`} style={{ backgroundColor: 'rgba(0, 0, 0, 0)', alignSelf: 'flex-start', borderColor: colors.buttonBorder }}>
-                <div dir="ltr" className="css-146c3p1 r-qvutc0 r-1qd0xha r-q4m81j r-a023e6 r-rjixqe r-b88u0q r-1awozwy r-6koalj r-18u37iz r-16y2uox r-bcqeeo r-1777fci">
+                <div dir="ltr" className="css-146c3p1 r-qvutc0 r-1qd0xha r-q4m81j r-a023e6 r-rjixqe r-b88u0q r-1awozwy r-6koalj r-18u37iz r-16y2uox r-bcqeeo r-1777fci" style={{ backgroundColor: 'transparent' }}>
                   <div className="css-175oi2r r-xoduu5">
                     <span className="css-1jxf684 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-a023e6 r-rjixqe"><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-majxgm r-1noe1sz"><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Community Guidelines</span></span></span>
                   </div>
