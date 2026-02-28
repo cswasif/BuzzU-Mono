@@ -222,11 +222,11 @@ export const VerificationPage: React.FC = () => {
                                             <div className="relative w-full flex justify-center h-[44px] rounded-[4px] overflow-hidden group">
 
                                                 {/* Visual Fake Button matching design perfectly */}
-                                                <button type="button" className="gsi-material-button block !w-full h-full absolute inset-0 z-0 select-none">
+                                                <button type="button" className="gsi-material-button block !w-full h-full absolute inset-0 z-0 select-none transition-all duration-200 group-hover:bg-accent group-hover:scale-[1.01] active:scale-[0.99] border border-transparent group-hover:border-foreground/10">
                                                     <div className="gsi-material-button-state"></div>
                                                     <div className="gsi-material-button-content-wrapper">
                                                         <div className="gsi-material-button-icon"><GoogleIcon /></div>
-                                                        <span className="gsi-material-button-contents">Continue with Google</span>
+                                                        <span className="gsi-material-button-contents text-foreground">Continue with Google</span>
                                                         <span className="hidden">Continue with Google</span>
                                                     </div>
                                                 </button>
@@ -246,7 +246,7 @@ export const VerificationPage: React.FC = () => {
                                             <button
                                                 type="button"
                                                 onClick={handleGuestMode}
-                                                className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm max-h-10 h-10 flex items-center justify-center border border-transparent rounded-md shadow-md px-3 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary w-full max-w-[400px]"
+                                                className="bg-primary hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 text-primary-foreground text-sm max-h-10 h-10 flex items-center justify-center border border-transparent rounded-md shadow-md hover:shadow-lg px-3 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary w-full max-w-[400px]"
                                             >
                                                 <VenetianMask size={20} />
                                                 <span className="flex-1 font-semibold">Enter Anonymous Mode</span>
