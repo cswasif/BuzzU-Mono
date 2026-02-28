@@ -226,7 +226,7 @@ export const VerificationPage: React.FC = () => {
                                                     <div className="gsi-material-button-state"></div>
                                                     <div className="gsi-material-button-content-wrapper">
                                                         <div className="gsi-material-button-icon"><GoogleIcon /></div>
-                                                        <span className="gsi-material-button-contents text-foreground">Continue with Google</span>
+                                                        <span className="gsi-material-button-contents !text-black dark:!text-white font-medium">Continue with Google</span>
                                                         <span className="hidden">Continue with Google</span>
                                                     </div>
                                                 </button>
