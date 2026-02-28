@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
 const VIDEOS: VideoSegment[] = [
-  { videoId: "1FVF-9KQiPo", start: 194, end: 260 }, // Taylor Swift - Wildest Dreams (Default)
+  { videoId: "1FVF-9KQiPo", start: 200, end: 260 }, // Taylor Swift - Wildest Dreams (Default)
   { videoId: "IpFX2vq8HKw", start: 30, end: 110 }, // yung kai - blue
   { videoId: "3tmd-ClpJxA", start: 72, end: 190, aspectRatio: "21:9" }, // Taylor Swift - Look What You Made Me Do
   { videoId: "c8zq4kAn_O0", start: 36, end: 107 }, // Sombr - Back to Friends
