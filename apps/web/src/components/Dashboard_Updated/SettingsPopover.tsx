@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useSessionStore } from '../../stores/sessionStore';
+import { MoonIcon, SunIcon, PowerIcon, GlobeIcon, ShieldIcon, FileTextIcon, DiscordIcon } from './Icons';
 
 interface SettingsPopoverProps {
   theme: 'light' | 'dark';
@@ -6,17 +8,31 @@ interface SettingsPopoverProps {
 }
 
 const SettingsPopover: React.FC<SettingsPopoverProps> = ({ theme, onToggleTheme }) => {
+  const { displayName, avatarSeed } = useSessionStore();
   const isDarkMode = theme === 'dark';
+
+  const handleLogout = () => {
+    useSessionStore.getState().resetSession();
+    // Redirect to home or force reload to clear all states
+    window.location.href = '/';
+  };
 
   return (
     <div
-      className="fixed z-50 bg-popover p-1 rounded-md bottom-14 left-2 w-60 border border-border shadow-lg"
-      id="headlessui-popover-panel-_r_c_"
+      className="absolute z-10 bg-action p-1 rounded-md bottom-11 right-0 w-60 border border-border shadow-lg"
+      id="headlessui-popover-panel-_r_148_"
       tabIndex={-1}
       data-headlessui-state="open"
       data-open=""
+      style={{ '--button-width': '40px' } as React.CSSProperties}
       onClick={(e) => e.stopPropagation()}
     >
+      <div className="px-3 py-2 border-b border-border/50 mb-1">
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Signed in as</p>
+        <p className="text-sm font-bold truncate text-brightness">{displayName}</p>
+      </div>
+
+      {/* Theme Toggle Section */}
       <div className="text-sm font-semibold flex flex-row justify-between items-center p-2 px-1">
         <div className="flex flex-row gap-2.5 items-center justify-center">
           <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 512 512" height="16" width="16" xmlns="http://www.w3.org/2000/svg">
@@ -28,25 +44,22 @@ const SettingsPopover: React.FC<SettingsPopoverProps> = ({ theme, onToggleTheme 
           type="button"
           role="switch"
           aria-checked={isDarkMode}
+          data-state={isDarkMode ? "checked" : "unchecked"}
           value="on"
           className="peer inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ backgroundColor: isDarkMode ? 'hsl(var(--primary))' : 'hsl(var(--placeholder))' }}
+          style={{ backgroundColor: isDarkMode ? 'hsl(var(--primary))' : 'hsl(var(--input))' }}
           onClick={onToggleTheme}
         >
           <span
-            className="pointer-events-none relative block h-5 w-5 rounded-full shadow-lg ring-0 transition-transform"
-            style={{
-              transform: isDarkMode ? 'translateX(20px)' : 'translateX(0px)',
-              backgroundColor: isDarkMode ? 'hsl(var(--primary-foreground))' : 'hsl(var(--foreground))'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x w-4 h-4 absolute inset-0 m-auto" aria-hidden="true" style={{ display: isDarkMode ? 'none' : 'block', color: 'hsl(var(--placeholder))' }}><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-check w-4 h-4 absolute inset-0 m-auto" aria-hidden="true" style={{ display: isDarkMode ? 'block' : 'none', color: 'hsl(var(--primary))' }}><path d="M20 6 9 17l-5-5"></path></svg>
-          </span>
+            data-state={isDarkMode ? "checked" : "unchecked"}
+            className="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
+            style={{ transform: isDarkMode ? 'translateX(20px)' : 'translateX(0px)' }}
+          />
         </button>
       </div>
 
-      <a href="https://discord.gg/TBC3DB6bhq" target="_blank" rel="noreferrer" className="inline-flex disabled:select-none items-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 py-2 w-full justify-between px-1">
+      {/* External Links */}
+      <a href="https://discord.gg/8FCbZHYDwj" target="_blank" rel="noreferrer" className="inline-flex disabled:select-none items-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 py-2 w-full justify-between px-1">
         <span className="flex flex-row gap-2">
           <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 24 24" height="18" width="18" xmlns="http://www.w3.org/2000/svg">
             <path d="M19.3034 5.33716C17.9344 4.71103 16.4805 4.2547 14.9629 4C14.7719 4.32899 14.5596 4.77471 14.411 5.12492C12.7969 4.89144 11.1944 4.89144 9.60255 5.12492C9.45397 4.77471 9.2311 4.32899 9.05068 4C7.52251 4.2547 6.06861 4.71103 4.70915 5.33716C1.96053 9.39111 1.21766 13.3495 1.5891 17.2549C3.41443 18.5815 5.17612 19.388 6.90701 19.9187C7.33151 19.3456 7.71356 18.73 8.04255 18.0827C7.41641 17.8492 6.82211 17.5627 6.24904 17.2231C6.39762 17.117 6.5462 17.0003 6.68416 16.8835C10.1438 18.4648 13.8911 18.4648 17.3082 16.8835C17.4568 17.0003 17.5948 17.117 17.7434 17.2231C17.1703 17.5627 16.576 17.8492 15.9499 18.0827C16.2789 18.73 16.6609 19.3456 17.0854 19.9187C18.8152 19.388 20.5875 18.5815 22.4033 17.2549C22.8596 12.7341 21.6806 8.80747 19.3034 5.33716ZM8.5201 14.8459C7.48007 14.8459 6.63107 13.9014 6.63107 12.7447C6.63107 11.5879 7.45884 10.6434 8.5201 10.6434C9.57071 10.6434 10.4303 11.5879 10.4091 12.7447C10.4091 13.9014 9.57071 14.8459 8.5201 14.8459ZM15.4936 14.8459C14.4535 14.8459 13.6034 13.9014 13.6034 12.7447C13.6034 11.5879 14.4323 10.6434 15.4936 10.6434C16.5442 10.6434 17.4038 11.5879 17.3825 12.7447C17.3825 13.9014 16.5548 14.8459 15.4936 14.8459Z"></path>
@@ -87,7 +100,10 @@ const SettingsPopover: React.FC<SettingsPopoverProps> = ({ theme, onToggleTheme 
 
       <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2"></div>
 
-      <button className="inline-flex disabled:select-none items-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 py-2 w-full justify-start gap-2.5 px-1 text-destructive">
+      <button
+        onClick={handleLogout}
+        className="inline-flex disabled:select-none items-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 py-2 w-full justify-start gap-2.5 px-1 text-destructive"
+      >
         <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 24 24" height="20" width="20" xmlns="http://www.w3.org/2000/svg">
           <path d="M16 13v-2H7V8l-5 4 5 4v-3z"></path>
           <path d="M20 3h-9c-1.103 0-2 .897-2 2v4h2V5h9v14h-9v-4H9v4c0 1.103.897 2 2 2h9c1.103 0 2-.897 2-2V5c0-1.103-.897-2-2-2z"></path>
