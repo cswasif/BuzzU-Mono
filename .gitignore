@@ -7,3 +7,7 @@ dist
 *.log
 .turbo
 .next
+target/
+**/target/
+**/dist/
+**/.wrangler/

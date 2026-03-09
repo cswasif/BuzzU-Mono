@@ -40,7 +40,7 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
           {/* Central Logo */}
           <div className="flex flex-col space-y-4 items-center justify-center relative z-10 pt-20 md:pt-40">
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-600/20 opacity-50 blur-[100px] rounded-full scale-[2.5]"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-emerald-600/20 opacity-50 blur-[100px] rounded-full scale-[2.5]"></div>
               <svg width="110" height="110" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#FFD700" stroke="#FFD700" className="relative z-10 drop-shadow-[0_0_20px_rgba(255,215,0,0.25)]">
                 <g id="SVGRepo_bgCarrier" strokeWidth="0" />
                 <g id="SVGRepo_tracerCarrier" strokeLinecap="round" strokeLinejoin="round" stroke="#CCCCCC" strokeWidth="0.336" />
@@ -200,7 +200,7 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
               <a href="/start/new" className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 bg-gradient-to-r from-orange-500 to-red-400 text-white p-1 rounded-xl font-semibold hover:from-orange-600 hover:to-red-500 transition-all duration-300 shadow-md h-12 w-12 lg:h-14 lg:w-14">
                 <VideoIcon className="lg:w-6 lg:h-6" />
               </a>
-              <a href="/start/new" className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 h-10 px-4 flex-1 !text-white bg-gradient-to-r from-indigo-600 to-purple-700 text-brightness py-6 rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-600 transition-all duration-300 shadow-md hover:shadow-lg lg:py-7 lg:text-lg">
+              <a href="/start/new" className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 h-10 px-4 flex-1 !text-white bg-gradient-to-r from-indigo-600 to-emerald-700 text-brightness py-6 rounded-xl font-semibold hover:from-indigo-600 hover:to-emerald-600 transition-all duration-300 shadow-md hover:shadow-lg lg:py-7 lg:text-lg">
                 <TextChatIcon className="w-6 h-6 mr-2 lg:w-7 lg:h-7" />
                 Start Text Chat
               </a>

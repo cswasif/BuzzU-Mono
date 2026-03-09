@@ -1,0 +1,262 @@
+import { useState } from "react";
+
+function CoinIcon() {
+  return (
+    <svg
+      stroke="currentColor"
+      fill="currentColor"
+      strokeWidth="0"
+      viewBox="0 0 512 512"
+      className="size-3"
+      height="1em"
+      width="1em"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M0 405.3V448c0 35.3 86 64 192 64s192-28.7 192-64v-42.7C342.7 434.4 267.2 448 192 448S41.3 434.4 0 405.3zM320 128c106 0 192-28.7 192-64S426 0 320 0 128 28.7 128 64s86 64 192 64zM0 300.4V352c0 35.3 86 64 192 64s192-28.7 192-64v-51.6c-41.3 34-116.9 51.6-192 51.6S41.3 334.4 0 300.4zm416 11c57.3-11.1 96-31.7 96-55.4v-42.7c-23.2 16.4-57.3 27.6-96 34.5v63.6zM192 160C86 160 0 195.8 0 240s86 80 192 80 192-35.8 192-80-86-80-192-80zm219.3 56.3c60-10.8 100.7-32 100.7-56.3v-42.7c-35.5 25.1-96.5 38.6-160.7 41.8 29.5 14.3 51.2 33.5 60 57.2z" />
+    </svg>
+  );
+}
+
+function MaleAvatar() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="1em"
+      height="1em"
+      viewBox="0 0 48 48"
+      aria-label="Male"
+      role="img"
+      fontSize="50"
+      className="mb-2 sm:mb-3 text-inherit"
+    >
+      <path fill="#45413c" d="M9 45.5a15 1.5 0 1 0 30 0a15 1.5 0 1 0-30 0" opacity="0.15" />
+      <path fill="#ffcebf" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M10.75 12.3a11.76 11.76 0 0 1 7.78-3.78A1.39 1.39 0 0 1 20 10a1.37 1.37 0 0 1-.49 1l-4.7 3.93Zm26.5 0a11.76 11.76 0 0 0-7.78-3.78A1.39 1.39 0 0 0 28 10a1.37 1.37 0 0 0 .49 1l4.7 3.93Z" />
+      <path fill="#00b8f0" d="M38.31 12.84a1 1 0 0 0-1.39-.32l-4.71 2.39s2.29 3.23 1.67 10.16c-.38 4.21-1 7.36-2.31 9.23a3 3 0 0 1-3.48 1.14a12 12 0 0 0-8.18 0a3 3 0 0 1-3.48-1.14c-1.29-1.87-1.93-5-2.31-9.23c-.62-6.93 1.67-10.16 1.67-10.16l-4.71-2.39a1 1 0 0 0-1.39.32c-1.19 2-3.79 6.35-3.3 15.51C7 40.57 13.37 45 13.37 45h21.26s6.34-4.43 7-16.65c.47-9.16-2.13-13.55-3.32-15.51" />
+      <path fill="#009fd9" d="M33.93 24.33v.74c-.38 4.21-1 7.36-2.31 9.23a3 3 0 0 1-3.48 1.14a12 12 0 0 0-8.18 0a3 3 0 0 1-3.48-1.14c-1.29-1.87-1.93-5-2.31-9.23v-.74a24.2 24.2 0 0 0 0 3.87c.38 4.21 1 7.35 2.31 9.22a3 3 0 0 0 3.48 1.14a12 12 0 0 1 8.18 0a3 3 0 0 0 3.48-1.14c1.29-1.87 1.93-5 2.31-9.22a24.2 24.2 0 0 0 0-3.87" />
+      <path fill="none" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M38.31 12.84a1 1 0 0 0-1.39-.32l-4.71 2.39s2.29 3.23 1.67 10.16c-.38 4.21-1 7.36-2.31 9.23a3 3 0 0 1-3.48 1.14a12 12 0 0 0-8.18 0a3 3 0 0 1-3.48-1.14c-1.29-1.87-1.93-5-2.31-9.23c-.62-6.93 1.67-10.16 1.67-10.16l-4.71-2.39a1 1 0 0 0-1.39.32c-1.19 2-3.79 6.35-3.3 15.51C7 40.57 13.37 45 13.37 45h21.26s6.34-4.43 7-16.65c.47-9.16-2.13-13.55-3.32-15.51" />
+      <path fill="#a86c4d" d="M24 10.41a9.83 9.83 0 0 0-2.44.31c-1.86.42-4.28 1.12-6.47.7a4.2 4.2 0 0 0 .84 3.21a9.81 9.81 0 0 0-1.75 5.6v5.14h19.64v-5.14A9.82 9.82 0 0 0 24 10.41" />
+      <path fill="#de926a" d="M24 10.41a9.83 9.83 0 0 0-2.44.31c-1.86.42-4.28 1.12-6.47.7a4.47 4.47 0 0 0 .68 3a19.4 19.4 0 0 0 5.79-.79a9.81 9.81 0 0 1 12.26 9.51v-2.91A9.82 9.82 0 0 0 24 10.41" />
+      <path fill="none" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M24 10.41a9.83 9.83 0 0 0-2.44.31c-1.86.42-4.28 1.12-6.47.7a4.2 4.2 0 0 0 .84 3.21a9.81 9.81 0 0 0-1.75 5.6v5.14h19.64v-5.14A9.82 9.82 0 0 0 24 10.41" />
+      <path fill="#ffcebf" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M34.87 24.62a1.83 1.83 0 0 0-1.39-1.54l-.59-.16a2.06 2.06 0 0 1-1.5-2v-2.04A1.88 1.88 0 0 0 30 17.07a15.34 15.34 0 0 1-6 1.09a15.34 15.34 0 0 1-6-1.09a1.88 1.88 0 0 0-1.4 1.81v2.06a2.06 2.06 0 0 1-1.5 2l-.59.16a1.83 1.83 0 0 0-1.39 1.54a1.81 1.81 0 0 0 1.81 2h.11a9 9 0 0 0 17.9 0h.11a1.81 1.81 0 0 0 1.82-2.02" />
+      <path fill="#45413c" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M18.57 24.41a.77.77 0 1 0 .77-.77a.76.76 0 0 0-.77.77m10.86 0a.77.77 0 1 1-.77-.77a.76.76 0 0 1 .77.77" />
+      <path fill="#ff6242" d="M21.16 29.1a.42.42 0 0 0-.33.16a.42.42 0 0 0-.1.35a3.32 3.32 0 0 0 6.54 0a.42.42 0 0 0-.1-.35a.44.44 0 0 0-.33-.16Z" />
+      <path fill="#ffa694" d="M24 30.47a4 4 0 0 0-2.52.77a3.36 3.36 0 0 0 5 0a4 4 0 0 0-2.48-.77" />
+      <path fill="none" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M21.16 29.1a.42.42 0 0 0-.33.16a.42.42 0 0 0-.1.35a3.32 3.32 0 0 0 6.54 0a.42.42 0 0 0-.1-.35a.44.44 0 0 0-.33-.16Z" />
+      <path fill="#ffb59e" d="M17.06 27.69a1 .6 0 1 0 2 0a1 .6 0 1 0-2 0m11.88 0a1 .6 0 1 0 2 0a1 .6 0 1 0-2 0" />
+      <path fill="#ffcebf" d="M24 34.3a8.86 8.86 0 0 1-2.54-.37v2.14a2.54 2.54 0 1 0 5.08 0v-2.14a8.86 8.86 0 0 1-2.54.37" />
+      <path fill="#ffb59e" d="M24 34.3a8.86 8.86 0 0 1-2.54-.37a2.54 2.54 0 1 0 5.08 0a8.86 8.86 0 0 1-2.54.37" />
+      <path fill="none" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M24 34.3a8.86 8.86 0 0 1-2.54-.37v2.14a2.54 2.54 0 1 0 5.08 0v-2.14a8.86 8.86 0 0 1-2.54.37" />
+    </svg>
+  );
+}
+
+function BothAvatar() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="1em"
+      height="1em"
+      viewBox="0 -56 512.001 512"
+      aria-label="Couple"
+      role="img"
+      fontSize="50"
+      className="mb-2 sm:mb-3 text-inherit size-14"
+    >
+      <path fill="#fdbd37" d="M275.465 69.852v198.921h189.824V69.852c0-40.997-35.207-73.145-76.035-69.422L375.96 1.64a62.048 62.048 0 0 1-11.172 0L351.5.43c-40.828-3.723-76.035 28.422-76.035 69.422zm0 0" />
+      <path fill="#fa9a39" d="M344.871.156a51.834 51.834 0 0 1 0 0zM389.254.43 375.96 1.64a62.048 62.048 0 0 1-11.172 0L351.5.43a69.505 69.505 0 0 0-5.07-.258c37.234.933 67.843 31.453 67.843 69.68v198.921h51.012V69.852c0-41-35.207-73.145-76.031-69.422zm0 0" />
+      <path fill="#fed6a6" d="M486.21 254.73a255.78 255.78 0 0 0-69.339-23.457c-9.277-1.71-16.027-9.761-16.027-19.191v-37.285h-60.938v37.285c0 9.43-6.75 17.48-16.027 19.191a255.78 255.78 0 0 0-69.34 23.457c-14.184 9.458-25.789 31.141-25.789 48.188v96.398h270.871c6.836 0 12.379-5.543 12.379-12.382v-84.016c0-17.047-11.605-38.73-25.79-48.188zm0 0" />
+      <path fill="#efc79c" d="M486.21 254.73a255.78 255.78 0 0 0-69.339-23.457c-9.277-1.71-16.027-9.761-16.027-19.191v-37.285h-50.797v57.883c0 9.433 6.75 17.484 16.023 19.195a255.672 255.672 0 0 1 69.344 23.457c14.184 9.457 25.79 31.14 25.79 48.188v75.796h38.417c6.836 0 12.379-5.543 12.379-12.382v-84.016c0-17.047-11.605-38.73-25.79-48.188zm0 0" />
+      <path fill="#fed6a6" d="M303.555 88.715h-11.078c-9.403 0-17.012 7.62-17.012 17.023v8.051c0 9.402 7.61 17.027 17.012 17.027h11.078zM437.195 88.715h11.078c9.403 0 17.012 7.62 17.012 17.023v8.051c0 9.402-7.61 17.027-17.012 17.027h-11.078zm0 0" />
+      <path fill="#ffe3c2" d="M368.117 48.438c-25.469 24-57.05 29.972-66.637 31.277a3.329 3.329 0 0 0-2.882 3.308l.218 57.23c0 47.571 49.942 69.974 71.559 70.435 21.621-.461 71.559-22.864 71.559-70.434l.218-57.23a3.322 3.322 0 0 0-2.879-3.31c-9.59-1.304-41.168-7.276-66.64-31.276a3.3 3.3 0 0 0-4.516 0zm0 0" />
+      <path fill="#f7d6b5" d="M439.273 79.715c-7.355-1-27.648-4.758-48.199-17.281l-.14 77.82c0 33.043-24.094 53.941-46.059 63.777 9.656 4.324 18.898 6.516 25.5 6.656 21.621-.46 71.559-22.863 71.559-70.433l.218-57.23a3.322 3.322 0 0 0-2.879-3.31zm0 0" />
+      <path fill="#d08f61" d="M376.742 147.8h-5.27c-5.648 0-10.245-4.597-10.245-10.245v-16a7.725 7.725 0 0 1 7.726-7.723 7.723 7.723 0 0 1 7.727 7.723v10.793h.062a7.726 7.726 0 0 1 7.727 7.726 7.726 7.726 0 0 1-7.727 7.727zm0 0" />
+      <path fill="#c35f58" d="M370.379 182.523c-12.848 0-24.52-5.832-30.457-15.218a7.727 7.727 0 0 1 2.398-10.66 7.726 7.726 0 0 1 10.66 2.394c3.086 4.879 9.915 8.031 17.399 8.031 7.48 0 14.312-3.152 17.398-8.027a7.728 7.728 0 0 1 13.059 8.262c-5.941 9.386-17.61 15.218-30.457 15.218zm0 0" />
+      <path fill="#844535" d="M407.008 121.688a7.724 7.724 0 0 1-7.727-7.727v-7.29a7.724 7.724 0 0 1 7.727-7.726 7.729 7.729 0 0 1 7.726 7.727v7.289c0 4.27-3.46 7.727-7.726 7.727zM333.742 121.688a7.723 7.723 0 0 1-7.722-7.727v-7.29a7.723 7.723 0 0 1 7.722-7.726c4.27 0 7.727 3.461 7.727 7.727v7.289a7.724 7.724 0 0 1-7.727 7.727zm0 0" />
+      <path fill="#ff94a6" d="M486.21 254.73a256.083 256.083 0 0 0-46.92-18.261c-8.813 14.148-36.888 46.316-70.165 46.316-32.805 0-60.559-31.875-69.781-45.715a256.333 256.333 0 0 0-44.805 17.66c-14.184 9.458-25.789 31.141-25.789 48.188v96.398h270.871c6.836 0 12.379-5.543 12.379-12.382v-84.016c0-17.047-11.605-38.73-25.79-48.188zm0 0" />
+      <path fill="#f4849c" d="M499.621 399.316c6.836 0 12.379-5.543 12.379-12.379v-84.019c0-17.047-11.605-38.73-25.79-48.184a255.524 255.524 0 0 0-46.92-18.261c-4.458 7.152-13.845 18.914-26.337 28.797a256.107 256.107 0 0 1 22.457 10.062c14.188 9.457 25.79 31.14 25.79 48.188v75.796zm0 0" />
+      <path fill="#e57693" d="M474.848 399.316v-53.87a7.725 7.725 0 1 0-15.45 0v53.87zm0 0" />
+      <path fill="#51a1c8" d="M257.023 254.977c-72.68-36.895-158.601-36.895-231.28 0A47.04 47.04 0 0 0 0 296.918v90.02c0 6.835 5.543 12.378 12.379 12.378h270.39V296.918a47.05 47.05 0 0 0-25.746-41.941zm0 0" />
+      <path fill="#4497b7" d="M257.023 254.977c-42.785-21.72-90.156-30.637-136.718-26.786v.325c0 10.144 7.27 18.757 17.234 20.648a255.29 255.29 0 0 1 67.988 23.18 47.04 47.04 0 0 1 25.743 41.941v85.031h51.5V296.918a47.05 47.05 0 0 0-25.747-41.941zm0 0" />
+      <path fill="#51a1c8" d="M34.473 250.777a255.794 255.794 0 0 1 24.996-4.277v-5.691a255.353 255.353 0 0 0-24.996 9.968zm0 0" />
+      <path fill="#fed6a6" d="M110.965 175.18H171.8v77.988h-60.836zm0 0" />
+      <path fill="#efc79c" d="M120.305 228.516c0 10.144 7.265 18.757 17.23 20.648a253.303 253.303 0 0 1 17.66 4.004h16.606v-77.992h-51.496zm0 0" />
+      <path fill="#fa9a39" d="M211.625 29.125H71.141c-11.442 0-20.72 9.277-20.72 20.723v57.32h181.923v-57.32c.004-11.446-9.274-20.723-20.719-20.723zm0 0" />
+      <path fill="#fed6a6" d="M74.68 89.242H63.617c-9.383 0-16.984 7.61-16.984 16.996v8.04c0 9.382 7.601 16.995 16.984 16.995H74.68zM208.09 89.242h11.058c9.387 0 16.985 7.61 16.985 16.996v8.04c0 9.382-7.598 16.995-16.985 16.995H208.09zm0 0" />
+      <path fill="#ffe3c2" d="m69.664 61.402.246 79.293c.473 20.203 11.934 34.14 24.09 46.114 11.188 11.015 26.41 24.027 47.766 24.21 21.351-.328 36.484-13.43 47.593-24.519 12.078-12.055 23.442-26.094 23.774-46.3l-.149-48.075c-.05-16.984-13.836-30.723-30.82-30.723zm0 0" />
+      <path fill="#f7d6b5" d="M212.984 92.125c-.05-16.984-13.836-30.723-30.82-30.723H161.88l.242 78.797c-.332 20.207-11.695 34.246-23.77 46.301-6.093 6.082-13.398 12.762-22.269 17.613 7.41 4.043 15.902 6.82 25.684 6.907 21.351-.329 36.484-13.43 47.597-24.52 12.075-12.055 23.438-26.094 23.77-46.3zm0 0" />
+      <path fill="#fdbd37" d="M100.168 0c-16.402 0-29.77 12.96-30.441 29.195-10.649.871-19.305 9.782-19.305 20.649v45.703c3.113-3.844 7.863-6.305 13.195-6.305h6.137-.004c11.238 0 20.84-9.015 23.05-20.039a7.714 7.714 0 0 1 7.716-7.715h83.293c25.238 0 45.699-20.46 45.699-45.699V2.11A2.11 2.11 0 0 0 227.398 0zm0 0" />
+      <g fill="#3990b2">
+        <path d="m177.395 221.852-36.012 31.316 37.172 22.582a6.397 6.397 0 0 0 8.53-1.746l26.032-36.41-22.11-16.29a10.894 10.894 0 0 0-13.612.548zm0 0" />
+        <path d="m105.39 221.852 36.008 31.316-37.168 22.582a6.402 6.402 0 0 1-8.535-1.746l-26.03-36.41 22.112-16.29a10.894 10.894 0 0 1 13.614.548zM52.363 399.316v-53.87c0-4.266-3.46-7.727-7.726-7.727s-7.727 3.46-7.727 7.726v53.871zM245.855 399.316v-53.87a7.725 7.725 0 1 0-15.449 0v53.87zm0 0" />
+      </g>
+      <path fill="#d08f61" d="M147.738 148.238h-5.261c-5.645 0-10.239-4.59-10.239-10.238v-15.973a7.726 7.726 0 1 1 15.453 0l.047 10.762a7.723 7.723 0 0 1 7.727 7.723 7.724 7.724 0 0 1-7.727 7.726zm0 0" />
+      <path fill="#c35f58" d="M141.387 182.906c-12.828 0-24.485-5.824-30.418-15.199a7.727 7.727 0 0 1 13.058-8.266c3.078 4.868 9.891 8.012 17.36 8.012 7.465 0 14.277-3.144 17.36-8.012 2.28-3.605 7.054-4.675 10.66-2.394s4.679 7.055 2.394 10.66c-5.93 9.375-17.586 15.2-30.414 15.2zm0 0" />
+      <path fill="#844535" d="M177.953 122.172a7.725 7.725 0 0 1-7.726-7.723v-7.281c0-4.266 3.46-7.723 7.726-7.723s7.727 3.457 7.727 7.723v7.281a7.725 7.725 0 0 1-7.727 7.723zM104.813 122.172a7.722 7.722 0 0 1-7.723-7.723v-7.281a7.722 7.722 0 0 1 7.722-7.723 7.723 7.723 0 0 1 7.727 7.723v7.281a7.723 7.723 0 0 1-7.727 7.723zm0 0" />
+    </svg>
+  );
+}
+
+function FemaleAvatar() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="1em"
+      height="1em"
+      viewBox="0 0 48 48"
+      aria-label="Female"
+      role="img"
+      fontSize="50"
+      className="mb-2 sm:mb-3 text-inherit"
+    >
+      <path fill="#ffcebf" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M10.75 12.3a11.76 11.76 0 0 1 7.78-3.78A1.39 1.39 0 0 1 20 10a1.37 1.37 0 0 1-.49 1l-4.7 3.93Zm26.5 0a11.76 11.76 0 0 0-7.78-3.78A1.39 1.39 0 0 0 28 10a1.37 1.37 0 0 0 .49 1l4.7 3.93Z" />
+      <path fill="#a86c4d" d="M24 9.82a10.88 10.88 0 0 1 10.88 10.87v14.19a1.24 1.24 0 0 1-.77 1.12a27.09 27.09 0 0 1-20.22 0a1.24 1.24 0 0 1-.77-1.14V20.69A10.88 10.88 0 0 1 24 9.82" />
+      <path fill="#de926a" d="M24 9.82a10.88 10.88 0 0 0-10.88 10.87v3a10.88 10.88 0 0 1 21.76 0v-3A10.88 10.88 0 0 0 24 9.82" />
+      <path fill="none" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M24 9.82a10.88 10.88 0 0 1 10.88 10.87v14.19a1.24 1.24 0 0 1-.77 1.12h0a27.09 27.09 0 0 1-20.22 0h0a1.24 1.24 0 0 1-.77-1.14V20.69A10.88 10.88 0 0 1 24 9.82" />
+      <path fill="#ffcebf" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M33.06 23a8.77 8.77 0 0 1-5.67-5l-.62-1.49a15.92 15.92 0 0 1-9.95 6.18l-1.89.31a1.81 1.81 0 0 0 0 3.62h.12a9 9 0 0 0 17.9 0h.11a1.81 1.81 0 1 0 0-3.62" />
+      <path fill="#45413c" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M18.57 24.41a.77.77 0 1 0 .77-.77a.76.76 0 0 0-.77.77m10.86 0a.77.77 0 1 1-.77-.77a.76.76 0 0 1 .77.77" />
+      <path fill="#ff6242" d="M21.16 29.1a.44.44 0 0 0-.33.16a.42.42 0 0 0-.1.35a3.32 3.32 0 0 0 6.54 0a.42.42 0 0 0-.1-.35a.42.42 0 0 0-.33-.16Z" />
+      <path fill="#ffa694" d="M24 30.47a4 4 0 0 0-2.52.77a3.36 3.36 0 0 0 5 0a4 4 0 0 0-2.48-.77" />
+      <path fill="none" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M21.16 29.1a.44.44 0 0 0-.33.16a.42.42 0 0 0-.1.35a3.32 3.32 0 0 0 6.54 0a.42.42 0 0 0-.1-.35a.44.44 0 0 0-.33-.16Z" />
+      <path fill="#ffb59e" d="M17.06 27.69a1 .6 0 1 0 2 0a1 .6 0 1 0-2 0m11.88 0a1 .6 0 1 0 2 0a1 .6 0 1 0-2 0" />
+      <path fill="#45413c" d="M9 45.5a15 1.5 0 1 0 30 0a15 1.5 0 1 0-30 0" opacity="0.15" />
+      <path fill="#ff87af" d="m36.92 12.52l-3.71 2.39s2.29 3.23 1.67 10.16a19.38 19.38 0 0 1-3.31 9.23a3 3 0 0 1-3.48 1.14a12 12 0 0 0-8.18 0a3 3 0 0 1-3.48-1.14a19.38 19.38 0 0 1-3.31-9.23c-.62-6.93 1.67-10.16 1.67-10.16l-3.71-2.39a1 1 0 0 0-1.39.32a26.63 26.63 0 0 0-4.3 16.51C6 41.57 13.37 45 13.37 45h21.26s7.34-3.43 8-15.65a26.63 26.63 0 0 0-4.3-16.51a1 1 0 0 0-1.41-.32" />
+      <path fill="#ff6196" d="M13.08 24.53a24.08 24.08 0 0 0 0 4a19.33 19.33 0 0 0 3.31 9.22a3 3 0 0 0 3.48 1.14a12 12 0 0 1 8.18 0a3 3 0 0 0 3.48-1.14a19.33 19.33 0 0 0 3.31-9.22a24.08 24.08 0 0 0 0-4v.54a19.42 19.42 0 0 1-3.31 9.23a3 3 0 0 1-3.48 1.14a12 12 0 0 0-8.18 0a3 3 0 0 1-3.48-1.14a19.38 19.38 0 0 1-3.31-9.23c.03-.18.01-.36 0-.54" />
+      <path fill="none" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="m36.92 12.52l-3.71 2.39s2.29 3.23 1.67 10.16a19.38 19.38 0 0 1-3.31 9.23a3 3 0 0 1-3.48 1.14a12 12 0 0 0-8.18 0a3 3 0 0 1-3.48-1.14a19.38 19.38 0 0 1-3.31-9.23c-.62-6.93 1.67-10.16 1.67-10.16l-3.71-2.39a1 1 0 0 0-1.39.32a26.63 26.63 0 0 0-4.3 16.51C6 41.57 13.37 45 13.37 45h21.26s7.34-3.43 8-15.65a26.63 26.63 0 0 0-4.3-16.51a1 1 0 0 0-1.41-.32" />
+      <path fill="#ffcebf" d="M24 34.3a8.86 8.86 0 0 1-2.54-.37v2.14a2.54 2.54 0 1 0 5.08 0v-2.14a8.86 8.86 0 0 1-2.54.37" />
+      <path fill="#ffb59e" d="M24 34.3a8.86 8.86 0 0 1-2.54-.37a2.54 2.54 0 1 0 5.08 0a8.86 8.86 0 0 1-2.54.37" />
+      <path fill="none" stroke="#45413c" strokeLinecap="round" strokeLinejoin="round" d="M24 34.3a8.86 8.86 0 0 1-2.54-.37v2.14a2.54 2.54 0 1 0 5.08 0v-2.14a8.86 8.86 0 0 1-2.54.37" />
+    </svg>
+  );
+}
+
+interface GenderPreferencesModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export function GenderPreferencesModal({ open, onClose }: GenderPreferencesModalProps) {
+  const [selected, setSelected] = useState<"m" | "all" | "f">("all");
+
+  if (!open) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div
+        role="dialog"
+        className="fixed left-1/2 top-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 border-none bg-[hsl(var(--cc-card))] px-12 py-8 shadow-2xl rounded-xl outline-hidden select-text max-sm:max-h-[85dvh] max-sm:overflow-y-auto sm:max-w-[425px]"
+        style={{ pointerEvents: "auto" }}
+      >
+        {/* Header */}
+        <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+          <h2 className="text-lg font-semibold tracking-tight text-[hsl(var(--cc-foreground))]">
+            Gender Preferences
+          </h2>
+          <p className="text-xs text-[hsl(var(--cc-muted-foreground))]">
+            <b>15 Coins</b> are used whenever you match with the gender filter on.
+          </p>
+        </div>
+
+        {/* Options */}
+        <div className="grid gap-2 pb-2">
+          <div className="flex justify-center">
+            <div className="flex justify-center w-full gap-1.5 sm:gap-4">
+              {/* Male */}
+              <div className="max-sm:w-full">
+                <div
+                  className={`rounded p-0.5 ${selected === "m" ? "bg-gradient-to-r from-blue-400 to-blue-400" : ""}`}
+                >
+                  <label
+                    className={`text-sm font-medium w-full min-w-20 sm:w-24 relative flex select-none flex-col text-blue-300 items-center justify-between rounded-sm border-2 p-2 cursor-pointer transition-colors ${
+                      selected === "m"
+                        ? "border-[hsl(var(--cc-primary))] bg-[hsl(var(--cc-muted))]"
+                        : "border-[hsl(var(--cc-muted))] bg-[hsl(var(--cc-accent,265_8%_25%))] hover:bg-[hsl(var(--cc-muted))]"
+                    }`}
+                    onClick={() => setSelected("m")}
+                  >
+                    {/* Coin badge */}
+                    <div className="absolute z-20 top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 items-center justify-center flex bg-neutral-600 text-amber-300 px-2 py-0.5 rounded-3xl">
+                      <span className="flex flex-row items-center gap-1 text-xs">
+                        15
+                        <CoinIcon />
+                      </span>
+                    </div>
+                    <MaleAvatar />
+                    Male
+                  </label>
+                </div>
+              </div>
+
+              {/* Both */}
+              <div className="max-sm:w-full">
+                <div
+                  className={`rounded p-0.5 ${selected === "all" ? "bg-gradient-to-r from-blue-400 to-pink-400" : ""}`}
+                >
+                  <label
+                    className={`text-sm font-medium w-full min-w-20 sm:w-24 relative select-none flex flex-col items-center justify-between rounded-sm border-2 p-2 cursor-pointer transition-colors ${
+                      selected === "all"
+                        ? "border-[hsl(var(--cc-primary))] bg-[hsl(var(--cc-muted))]"
+                        : "border-[hsl(var(--cc-muted))] bg-[hsl(var(--cc-accent,265_8%_25%))] hover:bg-[hsl(var(--cc-muted))]"
+                    }`}
+                    onClick={() => setSelected("all")}
+                  >
+                    <BothAvatar />
+                    Both
+                  </label>
+                </div>
+              </div>
+
+              {/* Female */}
+              <div className="max-sm:w-full">
+                <div
+                  className={`rounded p-0.5 ${selected === "f" ? "bg-gradient-to-r from-pink-400 to-pink-400" : ""}`}
+                >
+                  <label
+                    className={`text-sm font-medium relative w-full min-w-20 sm:w-24 flex select-none flex-col text-pink-300 items-center justify-between rounded-sm border-2 p-2 cursor-pointer transition-colors ${
+                      selected === "f"
+                        ? "border-[hsl(var(--cc-primary))] bg-[hsl(var(--cc-muted))]"
+                        : "border-[hsl(var(--cc-muted))] bg-[hsl(var(--cc-accent,265_8%_25%))] hover:bg-[hsl(var(--cc-muted))]"
+                    }`}
+                    onClick={() => setSelected("f")}
+                  >
+                    {/* Coin badge */}
+                    <div className="absolute z-20 top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 items-center justify-center flex bg-neutral-600 text-amber-300 px-2 py-0.5 rounded-3xl">
+                      <span className="flex flex-row items-center gap-1 text-xs">
+                        15
+                        <CoinIcon />
+                      </span>
+                    </div>
+                    <FemaleAvatar />
+                    Female
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div className="flex justify-end flex-col gap-2">
+          <button
+            onClick={onClose}
+            className="inline-flex cursor-pointer items-center justify-center text-sm font-medium bg-[hsl(var(--cc-primary))] text-white hover:opacity-90 h-10 px-4 py-2 w-full rounded-xl transition-opacity"
+          >
+            Save
+          </button>
+          <button
+            onClick={onClose}
+            className="inline-flex cursor-pointer items-center justify-center text-sm font-medium hover:bg-[hsl(var(--cc-accent))] text-[hsl(var(--cc-foreground))] h-10 px-4 py-2 w-full rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}

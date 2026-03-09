@@ -1,85 +1,58 @@
-import React, { useState } from 'react';
-import '../dashboard_updated.css';
-import Sidebar from '../components/Dashboard_Updated/Sidebar';
+import React, { useState, useEffect } from 'react';
+import { useOutletContext, useParams } from 'react-router-dom';
 import MainContent from '../components/Dashboard_Updated/MainContent';
-import Header from '../components/Dashboard_Updated/Header';
-import RightSidebar from '../components/Dashboard_Updated/RightSidebar';
-import { InterestsModal, SettingsModal } from '../components/Dashboard_Updated/Modals';
-import Banner from '../components/Dashboard_Updated/Banner';
-import FriendRequestsModal from '../components/Dashboard_Updated/FriendRequestsModal';
-import InboxModal from '../components/Dashboard_Updated/InboxModal';
+
+/**
+ * ChatNewPage — Matchmaker dashboard content.
+ * Renders inside DashboardLayout's <Outlet />.
+ *
+ * Routes:
+ *   /chat/new          → Dashboard (search UI)
+ *   /chat/new/:roomId  → Active matched chat (reconnects to room)
+ */
+
+interface DashboardOutletContext {
+    setHideChrome: (hide: boolean) => void;
+    setShowInterestsModal: (show: boolean) => void;
+}
 
 export const ChatNewPage: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'chat' | 'friends'>('chat');
-    const [showInterestsModal, setShowInterestsModal] = useState(false);
-    const [showSettingsModal, setShowSettingsModal] = useState(false);
-    const [showFriendRequestsModal, setShowFriendRequestsModal] = useState(false);
-    const [showInboxModal, setShowInboxModal] = useState(false);
-    const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
-    const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(false);
-    const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+    const { setHideChrome, setShowInterestsModal } = useOutletContext<DashboardOutletContext>();
+    const { roomId } = useParams<{ roomId?: string }>();
 
-    const toggleTheme = () => {
-        setTheme(prev => prev === 'light' ? 'dark' : 'light');
-    };
+    // If roomId is in the URL, go straight to chat (reconnect mode)
+    const [activeArea, setActiveArea] = useState<'main' | 'chat' | 'video'>(roomId ? 'chat' : 'main');
 
-    const handleOpenSettings = () => {
-        setShowSettingsModal(true);
-    };
+    // When roomId appears in URL, switch to chat view.
+    // We intentionally do NOT reset to 'main' when roomId disappears,
+    // because ChatArea manages its own connection states (skipped, searching, idle).
+    // The 'main' view is restored by: initial useState, or the sidebar 'new-chat-clicked' event.
+    useEffect(() => {
+        if (roomId) {
+            setActiveArea('chat');
+        }
+    }, [roomId]);
+
+    // Hide the shared layout chrome when in video mode
+    useEffect(() => {
+        setHideChrome(activeArea === 'video');
+        return () => setHideChrome(false);
+    }, [activeArea, setHideChrome]);
+
+    // "New Chat" from sidebar resets to main dashboard
+    useEffect(() => {
+        const onNewChat = () => setActiveArea('main');
+        window.addEventListener('new-chat-clicked', onNewChat);
+        return () => window.removeEventListener('new-chat-clicked', onNewChat);
+    }, []);
 
     return (
-        <div className={`chitchat-dashboard-theme ${theme === 'dark' ? 'theme-dark' : ''} min-h-screen bg-background text-foreground`}>
-            <div className="text-foreground bg-background h-screen flex flex-col overflow-hidden text-sm md:text-base">
-                <Banner />
-
-                <Header
-                    onMenuClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
-                    onHistoryClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
-                    onFriendRequestsClick={() => setShowFriendRequestsModal(true)}
-                    onInboxClick={() => setShowInboxModal(true)}
-                    theme={theme}
-                    toggleTheme={toggleTheme}
-                />
-
-                <div className="flex h-full overflow-hidden relative">
-                    <Sidebar
-                        activeTab={activeTab}
-                        setActiveTab={setActiveTab}
-                        onEditProfile={handleOpenSettings}
-                        isOpen={isLeftSidebarOpen}
-                        onClose={() => setIsLeftSidebarOpen(false)}
-                        theme={theme}
-                        toggleTheme={toggleTheme}
-                    />
-                    <MainContent onManageInterests={() => setShowInterestsModal(true)} />
-                    <RightSidebar isOpen={isRightSidebarOpen} onClose={() => setIsRightSidebarOpen(false)} />
-                </div>
-            </div>
-
-            {/* Modals & Popovers */}
-            {showInterestsModal && (
-                <InterestsModal onClose={() => setShowInterestsModal(false)} />
-            )}
-
-            {showSettingsModal && (
-                <SettingsModal
-                    onClose={() => setShowSettingsModal(false)}
-                    onOpenInterests={() => {
-                        setShowSettingsModal(false);
-                        setShowInterestsModal(true);
-                    }}
-                    theme={theme}
-                />
-            )}
-
-            {showFriendRequestsModal && (
-                <FriendRequestsModal onClose={() => setShowFriendRequestsModal(false)} />
-            )}
-
-            {showInboxModal && (
-                <InboxModal onClose={() => setShowInboxModal(false)} />
-            )}
-        </div>
+        <MainContent
+            activeArea={activeArea}
+            setActiveArea={setActiveArea}
+            onManageInterests={() => setShowInterestsModal(true)}
+            roomId={roomId}
+        />
     );
 };
 

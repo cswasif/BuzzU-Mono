@@ -17,3 +17,4 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 getrandom = { version = "0.2", features = ["js"] }
 base64 = "0.21"
+sha2 = "0.10"

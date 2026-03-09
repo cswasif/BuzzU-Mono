@@ -53,6 +53,8 @@ export interface WasmModule {
   PeerManager: typeof import('../pkg/buzzu_wasm').PeerManager;
   SignalingEngine: typeof import('../pkg/buzzu_wasm').SignalingEngine;
   TransportEngine: typeof import('../pkg/buzzu_wasm').TransportEngine;
+  ImageCompressor: typeof import('../pkg/buzzu_wasm').ImageCompressor;
+  SdpCompressor: typeof import('../pkg/buzzu_wasm').SdpCompressor;
 }
 
 // Bridge configuration

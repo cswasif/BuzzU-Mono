@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import '../chat-styles.css';
 import { useNavigate } from 'react-router-dom';
 import { useSessionStore } from '../stores/sessionStore';
-import { useMatching, MatchResult } from '../hooks/useMatching';
+import { useMatching } from '../hooks/useMatching';
 import { BuzzULogoIcon } from '../../components/SocialLanding/Icons';
 import { GenderDialog } from '../components/GenderDialog';
 
@@ -16,8 +16,7 @@ const SUGGESTED_INTERESTS = [
 
 export const MatchPage: React.FC = () => {
     const navigate = useNavigate();
-    const {
-        peerId,
+    const { peerId,
         interests,
         gender,
         genderFilter,
@@ -28,6 +27,7 @@ export const MatchPage: React.FC = () => {
         setChatMode,
         joinRoom,
         initSession,
+        avatarSeed
     } = useSessionStore();
 
     // Show gender dialog if gender is unset
@@ -42,16 +42,13 @@ export const MatchPage: React.FC = () => {
         setShowGenderDialog(false);
     };
 
-    const handleMatch = useCallback((result: MatchResult) => {
-        joinRoom(result.roomId, result.partnerId);
-        navigate(`/chat/${result.roomId}`);
-    }, [joinRoom, navigate]);
+    const { isMatching, waitPosition, matchData, startMatching, stopMatching } = useMatching();
 
-    const { isSearching, waitPosition, findMatch, cancelSearch } = useMatching({
-        matchmakerUrl: MATCHMAKER_URL,
-        peerId,
-        onMatch: handleMatch,
-    });
+    useEffect(() => {
+        if (matchData) {
+            navigate(`/chat/${matchData.room_id}`);
+        }
+    }, [matchData, navigate]);
 
     const addInterest = (tag: string) => {
         if (tag && !interests.includes(tag) && interests.length < 10) {
@@ -65,7 +62,7 @@ export const MatchPage: React.FC = () => {
     };
 
     const handleStartChat = () => {
-        findMatch(interests, gender, genderFilter);
+        startMatching();
     };
 
     return (
@@ -82,7 +79,7 @@ export const MatchPage: React.FC = () => {
                     <p className="match-subtitle">Talk to strangers from BracU — anonymously</p>
                 </div>
 
-                {!isSearching ? (
+                {!isMatching ? (
                     <div className="match-setup">
                         {/* Chat Mode Toggle */}
                         <div className="mode-toggle">
@@ -201,7 +198,7 @@ export const MatchPage: React.FC = () => {
                         <p className="searching-hint">
                             Looking for someone with similar interests
                         </p>
-                        <button className="cancel-btn" onClick={cancelSearch}>
+                        <button className="cancel-btn" onClick={() => stopMatching()}>
                             Cancel
                         </button>
                     </div>

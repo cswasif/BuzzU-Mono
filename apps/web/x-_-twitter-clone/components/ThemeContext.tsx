@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type Theme = 'light' | 'dark' | 'yellow' | 'lavender';
+type Theme = 'light' | 'dark' | 'yellow' | 'lavender' | 'aura';
 
 interface ThemeColors {
   background: string;
@@ -65,11 +65,22 @@ const themes: Record<Theme, ThemeColors> = {
     accent: '#8d96f6', // Lavender/Purple
     accentHoverBg: 'rgba(141, 150, 246, 0.1)',
   },
+  // Elite Theme with Mesh Gradient Background
+  aura: {
+    background: '#0a0a1a', // Deep Midnight Blue
+    textPrimary: '#ffffff',
+    textSecondary: 'rgba(255, 255, 255, 0.6)',
+    line: 'rgba(255, 255, 255, 0.1)',
+    buttonBorder: 'rgba(255, 255, 255, 0.2)',
+    buttonHoverBg: 'rgba(255, 255, 255, 0.05)',
+    accent: '#00ffff', // Electric Cyan
+    accentHoverBg: 'rgba(0, 255, 255, 0.1)',
+  },
 };
 
 const ThemeContext = createContext<ThemeContextType>({
   theme: 'yellow',
-  toggleTheme: () => {},
+  toggleTheme: () => { },
   colors: themes.yellow,
 });
 
@@ -80,8 +91,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const toggleTheme = () => {
     setTheme((prev) => {
-      // Cycle: yellow -> lavender -> light -> dark -> yellow
-      if (prev === 'yellow') return 'lavender';
+      // Cycle: yellow -> aura -> lavender -> light -> dark -> yellow
+      if (prev === 'yellow') return 'aura';
+      if (prev === 'aura') return 'lavender';
       if (prev === 'lavender') return 'light';
       if (prev === 'light') return 'dark';
       return 'yellow';

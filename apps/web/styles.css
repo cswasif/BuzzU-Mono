@@ -683,8 +683,8 @@
   .r-t60dpp .r-u8s1d {
     position: relative !important;
     /* Reset absolute positioning on mobile */
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
   }
 
   /* Right Column (Content) */
@@ -734,7 +734,7 @@
     max-width: 300px;
   }
 
-  iframe {
+  [data-testid="google_sign_in_container"] iframe {
     max-width: 300px;
     width: 100% !important;
   }
@@ -944,6 +944,7 @@
       overflow: hidden;
       position: relative !important;
       isolation: isolate;
+      contain: paint;
       z-index: 0;
       /* Split Desktop: Image on the left side */
       background-image: var(--bg-image-left) !important;
@@ -987,6 +988,7 @@
       margin-left: -1px !important;
       box-shadow: -15px 0 35px rgba(0, 0, 0, 0.4);
       overflow: hidden;
+      contain: paint;
       /* Contain the mirrored video */
     }
 
@@ -1136,12 +1138,11 @@
     -webkit-filter: grayscale(100%) brightness(1.0) contrast(1.2);
   }
 
-  /* Adjust for mobile - usually better to disable or fade for clarity */
-  /* Automatic CSS-only mobile B&W switch to prevent React re-render lag */
-  @media (max-width: 767px) {
+  /* Adjust for mobile - reduce vibrance/brightness */
+  @media (max-width: 999px) {
     .video-background-wrapper .video-background-iframe {
-      filter: grayscale(100%) brightness(1.0) contrast(1.2) !important;
-      -webkit-filter: grayscale(100%) brightness(1.0) contrast(1.2) !important;
+      filter: saturate(0.7) contrast(1) brightness(0.82) !important;
+      -webkit-filter: saturate(0.7) contrast(1) brightness(0.82) !important;
     }
 
     .side-filter-overlay {
@@ -1173,6 +1174,36 @@
     .video-background-overlay {
       display: none;
       /* Let desktop be pure if we want, or keep it. Let's keep it minimal */
+    }
+  }
+
+  @media (min-width: 1000px) {
+    .video-background-iframe {
+      will-change: transform;
+    }
+  }
+
+  @media (min-width: 1000px) and (max-width: 1400px) {
+    :root {
+      --glass-blur: 8px;
+      --glass-saturate: 140%;
+      --glass-brightness: 1.08;
+    }
+
+    .mirrored-video-container {
+      display: none !important;
+    }
+
+    nav[aria-label="Footer"] {
+      backdrop-filter: blur(8px) saturate(140%) !important;
+      -webkit-backdrop-filter: blur(8px) saturate(140%) !important;
+    }
+  }
+
+  @media (min-width: 1000px) and (max-width: 1400px) {
+    .cinematic-grain {
+      animation: none;
+      opacity: 0.02;
     }
   }
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSessionStore } from '../../stores/sessionStore';
 
 interface ProfilePopoverProps {
     onClose: () => void;
@@ -6,6 +7,14 @@ interface ProfilePopoverProps {
 }
 
 const ProfilePopover: React.FC<ProfilePopoverProps> = ({ onClose, onEditProfile }) => {
+    const { displayName, peerId, avatarSeed, avatarUrl, interests, joinedAt } = useSessionStore();
+    const dicebearUrl = `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${avatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`;
+    const avatarSrc = avatarUrl || dicebearUrl;
+    const formattedJoinDate = (() => {
+        const parsed = new Date(joinedAt);
+        if (Number.isNaN(parsed.getTime())) return 'Unknown';
+        return parsed.toLocaleDateString('en-GB');
+    })();
     return (
         <div
             className="fixed z-50 bg-popover rounded-lg bottom-14 left-2 w-64 border border-border shadow-lg overflow-hidden"
@@ -17,14 +26,14 @@ const ProfilePopover: React.FC<ProfilePopoverProps> = ({ onClose, onEditProfile 
                     </div>
                     <div className="absolute top-0 my-16 left-0 right-0 mx-auto inline-block w-min">
                         <span className="flex shrink-0 overflow-hidden relative h-16 w-16 rounded-3xl ring-2 ring-popover">
-                            <img className="aspect-square h-full w-full" alt="brand-new olive" src="https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&&seed=698a1c9eebb5a312f8caacd9&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80" />
+                            <img className="aspect-square h-full w-full" alt={displayName} src={avatarSrc} />
                         </span>
                     </div>
                     <div>
                         <div className="bg-action rounded-md my-2.5 mx-5 flex items-center justify-center flex-col overflow-y-auto">
-                            <span className="flex items-center gap-1 font-semibold w-full justify-center mt-8 text-brightness">brand-new olive</span>
+                            <span className="flex items-center gap-1 font-semibold w-full justify-center mt-8 text-brightness">{displayName}</span>
                             <div className="flex flex-col items-center justify-center px-2 pb-4 w-full">
-                                <code className="text-muted-foreground rounded-md text-xs">ID:698a1c9eebb5a312f8caacd9</code>
+                                <code className="text-muted-foreground rounded-md text-xs">ID: {peerId.split('_').pop()}</code>
                                 <div data-orientation="horizontal" role="none" className="shrink-0 h-[1px] w-full mt-2 bg-border/40"></div>
                                 <div className="mt-2 w-full flex items-center justify-center rounded-md">
                                     <button
@@ -37,13 +46,19 @@ const ProfilePopover: React.FC<ProfilePopoverProps> = ({ onClose, onEditProfile 
                             </div>
                         </div>
                         <div className="bg-action rounded-md py-2.5 my-2.5 mx-5 flex items-center justify-center flex-col px-2">
-                            <div className="mb-1 text-xs text-brightness/90 font-bold uppercase">Chitchat JOIN DATE</div>
-                            <div className="text-xs">09/02/2026</div>
+                            <div className="mb-1 text-xs text-brightness/90 font-bold uppercase">BuzzU JOIN DATE</div>
+                            <div className="text-xs">{formattedJoinDate}</div>
                             <div className="text-xs text-brightness/90 mt-3 mb-1 font-bold uppercase">Interests</div>
                             <div className="mt-1 w-full max-w-xs rounded-md bg-panel px-4 py-2 text-center cursor-default max-h-64 overflow-y-auto scrollbar-thin scrollbar-t !px-6">
                                 <div id="parent" className="relative">
                                     <div className="">
+                                    {interests.length === 0 ? (
                                         <div className="inline-flex items-center justify-center px-2.5 py-1 text-sm font-medium rounded-full my-2 mr-1 bg-placeholder" color="secondary">No interests</div>
+                                    ) : (
+                                        interests.map((interest) => (
+                                            <div key={interest} className="inline-flex items-center justify-center px-2.5 py-1 text-sm font-medium rounded-full my-2 mr-1 bg-placeholder" color="secondary">{interest}</div>
+                                        ))
+                                    )}
                                     </div>
                                 </div>
                             </div>

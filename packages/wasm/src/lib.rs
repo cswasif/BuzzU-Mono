@@ -11,6 +11,7 @@ pub mod relay;
 pub mod compression;
 pub mod nat;
 pub mod worker;
+pub mod stun_prober;
 
 #[wasm_bindgen]
 extern "C" {
@@ -60,5 +61,8 @@ pub use connection_quality::{ConnectionQualityEngine, RttMeasurement, TimingInfo
 pub use file::chunker::FileChunker;
 pub use file::{FileTransferEngine, FileMetadata, FileChunk, TransferProgress, FileTransferState, FileTransferType};
 pub use message::{MessageRouter, RoutedMessage, MessageMetadata, MessageType, MessagePriority, DeliveryMode, MessageState};
+pub use crypto::signal::{SignalProtocol, PreKeyBundle, SignalKeyPair, SignalSession};
+// Export ChaCha20 E2E encryption for signaling
+pub use crypto::chacha::ChaChaEngine;
 // Export WorkerEngine for Web Worker integration
 pub use worker::WorkerEngine;

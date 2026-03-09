@@ -12,7 +12,7 @@ const PremiumCard: React.FC = () => {
       </button>
       <div className="relative hidden flex-col justify-end pt-6 sm:flex select-text dark:text-foreground text-background">
         <img alt="crown-icon" loading="lazy" className="absolute -top-1.5 bottom-10 left-0 right-0 z-10 mx-auto" draggable="false" height="65" width="65" src="https://app.chitchat.gg/icons/crown.svg" />
-        <div className="rounded-lg relative w-56 justify-end self-center bg-gradient-to-tl from-indigo-700 to-purple-700 p-2 px-2 text-center">
+        <div className="rounded-lg relative w-56 justify-end self-center bg-gradient-to-tl from-indigo-700 to-emerald-700 p-2 px-2 text-center">
           <div className="text-md mt-6 font-bold"></div>
           <p className="pb-2 pt-2 text-xs">Unlock chat filters, Send and recieve images and videos and more!</p>
           <button className="group relative inline-flex w-full items-center justify-center overflow-hidden rounded-md p-0.5 font-bold">

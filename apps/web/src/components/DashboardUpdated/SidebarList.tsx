@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSessionStore } from '../../stores/sessionStore';
 import { ChatIcon, FriendsIcon, NewChatIcon, EmptyMailboxIcon, SearchIcon, CloudyIcon, GhostIllustration } from './Icons';
 
 interface SidebarListProps {
@@ -37,13 +38,18 @@ const SidebarList: React.FC<SidebarListProps> = ({ activeTab, setActiveTab }) =>
                                     aria-controls="radix-_r_5_-content-friends"
                                     data-state={activeTab === 'friends' ? 'active' : 'inactive'}
                                     id="radix-_r_5_-trigger-friends"
-                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm gap-1"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm gap-1 relative"
                                     tabIndex={-1}
                                     data-orientation="horizontal"
                                     data-radix-collection-item=""
                                     onClick={() => setActiveTab('friends')}
                                 >
                                     <FriendsIcon /> Friends
+                                    {Object.keys(useSessionStore.getState().friendRequestsReceived).length > 0 && (
+                                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground font-bold">
+                                            {Object.keys(useSessionStore.getState().friendRequestsReceived).length}
+                                        </span>
+                                    )}
                                 </button>
                             </li>
                         </div>

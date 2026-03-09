@@ -29,7 +29,7 @@ const GoogleIcon = () => (
 export const VerificationPage: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { setVerified, initSession } = useSessionStore();
+    const { setVerified, initSession, avatarSeed } = useSessionStore();
     const googleBtnRef = useRef<HTMLDivElement>(null);
     const [gsiReady, setGsiReady] = useState(false);
     const [verifyError, setVerifyError] = useState<string | null>(null);
@@ -42,7 +42,8 @@ export const VerificationPage: React.FC = () => {
             if (savedTheme) {
                 return savedTheme === 'dark';
             }
-            return window.matchMedia('(prefers-color-scheme: dark)').matches;
+            // Always default to dark mode regardless of system preference
+            return true;
         }
         return true;
     });
@@ -222,11 +223,11 @@ export const VerificationPage: React.FC = () => {
                                             <div className="relative w-full flex justify-center h-[44px] rounded-[4px] overflow-hidden group">
 
                                                 {/* Visual Fake Button matching design perfectly */}
-                                                <button type="button" className="gsi-material-button block !w-full h-full absolute inset-0 z-0 select-none transition-all duration-200 group-hover:bg-accent group-hover:scale-[1.01] active:scale-[0.99] border border-transparent group-hover:border-foreground/10">
+                                                <button type="button" className="gsi-material-button block !w-full h-full absolute inset-0 z-0 select-none transition-all duration-200 group-hover:bg-accent group-hover:scale-[1.01] active:scale-[0.99]">
                                                     <div className="gsi-material-button-state"></div>
                                                     <div className="gsi-material-button-content-wrapper">
                                                         <div className="gsi-material-button-icon"><GoogleIcon /></div>
-                                                        <span className="gsi-material-button-contents !text-black dark:!text-white font-medium">Continue with Google</span>
+                                                        <span className="gsi-material-button-contents font-medium" style={{ color: isDarkMode ? '#ffffff' : '#000000' }}>Continue with Google</span>
                                                         <span className="hidden">Continue with Google</span>
                                                     </div>
                                                 </button>

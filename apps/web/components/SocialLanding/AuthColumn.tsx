@@ -6,23 +6,21 @@ import { createPortal } from 'react-dom';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
 const VIDEOS: VideoSegment[] = [
+  { videoId: "1FVF-9KQiPo", start: 246, end: 306 }, // Taylor Swift - Opalite (starting at 4:06)
+  { videoId: "0Wqr_pa4UlU", start: 199, end: 319 }, // Previous video as second
   { videoId: "1FVF-9KQiPo", start: 200, end: 260 }, // Taylor Swift - Wildest Dreams (Default)
   { videoId: "IpFX2vq8HKw", start: 30, end: 110 }, // yung kai - blue
-  { videoId: "3tmd-ClpJxA", start: 72, end: 190, aspectRatio: "21:9" }, // Taylor Swift - Look What You Made Me Do
-  { videoId: "c8zq4kAn_O0", start: 36, end: 107 }, // Sombr - Back to Friends
-  { videoId: "H5v3kku4y6Q", start: 30, end: 110 }, // Harry Styles - As It Was
-  { videoId: "Z4-g8UXa944", start: 45, end: 125 }, // Damiano David - Born With a Broken Heart
   { videoId: "vBHild0PiTE", start: 50, end: 130 }, // Lana Del Rey - Chemtrails
   { videoId: "V9PVRfjEBTI", start: 45, end: 120 }, // Billie Eilish - BIRDS OF A FEATHER
   { videoId: "wycjnCCgUes", start: 75, end: 145 }, // Tame Impala - Feels Like We Only Go Backwards
   { videoId: "b55LT-tmGxE", start: 237, end: 292 }  // The Weeknd - Call Out My Name
 ];
 
-// Create an offset version for the mirrored background to make it look like a "different" video
+// Create a version for the mirrored background that plays from the beginning (0s)
 const MIRRORED_VIDEOS: VideoSegment[] = VIDEOS.map(v => ({
   ...v,
-  start: v.start + 30,
-  end: v.end + 30
+  start: 0, // Play from beginning as requested
+  end: v.end - v.start + 0 // Maintain duration relative to 0
 }));
 
 export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
@@ -56,7 +54,7 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
 
   // Responsive check
   React.useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    const checkMobile = () => setIsMobile(window.innerWidth < 1000);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -143,7 +141,7 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
           <div className="css-175oi2r">
             {/* Create Account Button (Renamed to Start Buzzing) */}
             <a href="/verify" role="link" className={`css-175oi2r r-sdzlij r-1phboty r-rs99b7 r-lrvibr r-17w48nw r-a9p05 r-eu3ka r-1ifxtd0 r-1ipicw7 r-2yi16 r-1qi8awa r-3pj75a r-o7ynqc r-6416eg r-1ny4l3l r-1loqt21 btn-hover-accent`} data-testid="signupButton" style={{ backgroundColor: colors.accent, borderColor: 'rgba(0, 0, 0, 0)', marginBottom: '8px' }}>
-              <div dir="ltr" className="css-146c3p1 r-qvutc0 r-1qd0xha r-q4m81j r-a023e6 r-rjixqe r-b88u0q r-1awozwy r-6koalj r-18u37iz r-16y2uox r-bcqeeo r-1777fci" style={{ color: (theme === 'light' || theme === 'lavender') ? '#fff' : '#000', backgroundColor: 'transparent' }}>
+              <div dir="ltr" className="css-146c3p1 r-qvutc0 r-1qd0xha r-q4m81j r-a023e6 r-rjixqe r-b88u0q r-1awozwy r-6koalj r-18u37iz r-16y2uox r-bcqeeo r-1777fci" style={{ color: (theme === 'light' || theme === 'emerald') ? '#fff' : '#000', backgroundColor: 'transparent' }}>
                 <div className="css-175oi2r r-xoduu5">
                   <span className="css-1jxf684 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-a023e6 r-rjixqe" style={{ fontWeight: 700 }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Start Buzzing</span></span>
                 </div>

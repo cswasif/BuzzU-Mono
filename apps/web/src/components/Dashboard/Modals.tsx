@@ -5,6 +5,8 @@ import {
     XIcon, CheckIcon, ChevronDownIcon, CircleQuestionIcon,
     DeleteAccountIcon, SolidCheckCircleIcon, LockIcon, UserXIcon
 } from './Icons';
+import { AvatarCropModal } from '../AvatarCropModal';
+import { useSessionStore } from '../../stores/sessionStore';
 
 interface ModalProps {
     onClose: () => void;
@@ -424,9 +426,10 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
 // --- Settings Modal ---
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInterests }) => {
     const [activeTab, setActiveTab] = useState('Profile');
-    const [username, setUsername] = useState('brand-new olive');
+    const { displayName, setDisplayName } = useSessionStore();
+    const [username, setUsername] = useState(displayName);
     const [isEditingUsername, setIsEditingUsername] = useState(false);
-    const [tempUsername, setTempUsername] = useState(username);
+    const [tempUsername, setTempUsername] = useState(displayName);
     const [bannerType, setBannerType] = useState<'Simple' | 'Gradient'>('Simple');
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [bannerColor, setBannerColor] = useState('#5B21B6');
@@ -443,7 +446,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
     const [badgeVisibility, setBadgeVisibility] = useState('Everyone');
     const [interestsVisibility, setInterestsVisibility] = useState('Friends');
 
+    const [showAvatarCropModal, setShowAvatarCropModal] = useState(false);
+    const [selectedImageSrc, setSelectedImageSrc] = useState<string>('');
+    const [croppedAvatarUrl, setCroppedAvatarUrl] = useState<string>('');
+    useEffect(() => {
+        setUsername(displayName);
+        setTempUsername(displayName);
+    }, [displayName]);
+
+    const handleAvatarInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = () => {
+                setSelectedImageSrc(reader.result?.toString() || '');
+                setShowAvatarCropModal(true);
+            };
+            reader.readAsDataURL(file);
+        }
+        // Reset the input value so the same file can be selected again if needed
+        e.target.value = '';
+    };
+
+    const handleCropComplete = (croppedBlob: Blob) => {
+        // Here you would typically upload the blob to your server
+        // For now, we create a local Object URL to display the cropped image
+        const url = URL.createObjectURL(croppedBlob);
+        setCroppedAvatarUrl(url);
+        setShowAvatarCropModal(false);
+    };
+
     const handleSaveUsername = () => {
+        setDisplayName(tempUsername);
         setUsername(tempUsername);
         setIsEditingUsername(false);
     };
@@ -536,7 +570,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                     <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_mobile"> Avatar </label>
                                     <div className="flex w-full gap-1 min-w-full justify-between items-center py-1 pb-2">
                                         <span className="relative flex shrink-0 overflow-hidden rounded-full w-16 h-16">
-                                            <img className="aspect-square h-full w-full" alt={username} src={`https://api.dicebear.com/5.x/thumbs/png?seed=${username}&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67`} />
+                                            <img className="aspect-square h-full w-full" alt={username} src={`https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${username}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`} />
                                         </span>
                                         <div className="flex flex-row gap-1">
                                             <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Change</button>
@@ -758,13 +792,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                         <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_"> Avatar </label>
                                         <div className="flex w-full gap-1 min-w-full justify-between items-center py-1 pb-2">
                                             <span className="relative flex shrink-0 overflow-hidden rounded-full w-16 h-16">
-                                                <img className="aspect-square h-full w-full" alt={username} src={`https://api.dicebear.com/5.x/thumbs/png?seed=${username}&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67`} />
+                                                {croppedAvatarUrl ? (
+                                                    <img className="aspect-square h-full w-full object-cover" alt={username} src={croppedAvatarUrl} />
+                                                ) : (
+                                                    <img className="aspect-square h-full w-full object-cover" alt={username} src={`https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${username}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`} />
+                                                )}
                                             </span>
                                             <div className="flex flex-row gap-1">
-                                                <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Change</button>
-                                                <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness">Remove</button>
+                                                <button 
+                                                    className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
+                                                    onClick={() => document.getElementById('_r_av_')?.click()}
+                                                >
+                                                    Change
+                                                </button>
+                                                <button 
+                                                    className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness"
+                                                    onClick={() => setCroppedAvatarUrl('')}
+                                                >
+                                                    Remove
+                                                </button>
                                             </div>
-                                            <input className="hidden" id="_r_av_" type="file" />
+                                            <input 
+                                                className="hidden" 
+                                                id="_r_av_" 
+                                                type="file" 
+                                                accept="image/*"
+                                                onChange={handleAvatarInputChange}
+                                            />
                                         </div>
                                         <span className="text-xs text-card-foreground">Avatars are reviewed before displaying. Do not upload inappropriate avatars. Limit: 3 changes daily. Max 8MB.</span>
 
@@ -972,6 +1026,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                     onClose();
                 }}
             />
+            {showAvatarCropModal && (
+                <AvatarCropModal
+                    isOpen={showAvatarCropModal}
+                    imageSrc={selectedImageSrc}
+                    onCropComplete={handleCropComplete}
+                    onClose={() => setShowAvatarCropModal(false)}
+                />
+            )}
         </>
     );
 };

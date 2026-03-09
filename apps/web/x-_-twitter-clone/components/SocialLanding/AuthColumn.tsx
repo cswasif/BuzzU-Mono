@@ -6,9 +6,10 @@ import { createPortal } from 'react-dom';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
 const VIDEOS: VideoSegment[] = [
+  { videoId: "g--Z6tk-GZA", start: 131, end: 189 }, // New video: 2:11 to 3:09
+  { videoId: "0Wqr_pa4UlU", start: 199, end: 319 }, // Previous video as second
   { videoId: "IpFX2vq8HKw", start: 30, end: 110 }, // yung kai - blue (Default)
   { videoId: "3tmd-ClpJxA", start: 72, end: 190, aspectRatio: "21:9" }, // Taylor Swift - Look What You Made Me Do
-  { videoId: "c8zq4kAn_O0", start: 36, end: 107 }, // Sombr - Back to Friends
   { videoId: "H5v3kku4y6Q", start: 30, end: 110 }, // Harry Styles - As It Was
   { videoId: "Z4-g8UXa944", start: 45, end: 125 }, // Damiano David - Born With a Broken Heart
   { videoId: "vBHild0PiTE", start: 50, end: 130 }, // Lana Del Rey - Chemtrails
@@ -18,11 +19,11 @@ const VIDEOS: VideoSegment[] = [
   { videoId: "b55LT-tmGxE", start: 237, end: 292 }  // The Weeknd - Call Out My Name
 ];
 
-// Create an offset version for the mirrored background to make it look like a "different" video
+// Create a version for the mirrored background that plays from the beginning (0s)
 const MIRRORED_VIDEOS: VideoSegment[] = VIDEOS.map(v => ({
   ...v,
-  start: v.start + 30,
-  end: v.end + 30
+  start: 0, // Play from beginning as requested
+  end: v.end - v.start + 0 // Maintain duration relative to 0
 }));
 
 export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {

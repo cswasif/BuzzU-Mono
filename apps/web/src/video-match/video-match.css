@@ -1,0 +1,302 @@
+/* BuzzU custom styles */
+
+:root {
+    --cc-background: 240 7% 8%;
+    --cc-foreground: 240 6% 85%;
+    --cc-card: 245 6% 12%;
+    --cc-panel: 252 6% 10%;
+    --cc-secondary: 244 10% 20%;
+    --cc-secondary-foreground: 244 10% 75%;
+    --cc-accent: 265 8% 25%;
+    --cc-accent-foreground: 264 3.9% 96.95%;
+    --cc-ring: 264 39% 39%;
+    --cc-primary: 255 42% 50%;
+    --cc-primary-foreground: 249 100% 95%;
+    --cc-border: 255 5% 20%;
+    --cc-input: 264 19.5% 11.7%;
+    --cc-muted: 260 6% 15%;
+    --cc-muted-foreground: 240 5% 65%;
+    --cc-popover: 250 6% 15%;
+    --cc-popover-foreground: 264 3.9% 96.95%;
+    --cc-card-foreground: 240 5% 75%;
+}
+
+@keyframes cc-wave {
+    0% {
+        transform: rotate(0);
+    }
+
+    10% {
+        transform: rotate(14deg);
+    }
+
+    20% {
+        transform: rotate(-8deg);
+    }
+
+    30% {
+        transform: rotate(14deg);
+    }
+
+    40% {
+        transform: rotate(-4deg);
+    }
+
+    50% {
+        transform: rotate(10deg);
+    }
+
+    60% {
+        transform: rotate(0);
+    }
+
+    to {
+        transform: rotate(0);
+    }
+}
+
+@keyframes cc-zoom-in {
+    0% {
+        opacity: 0;
+        filter: blur(0);
+        transform: scale(0);
+    }
+
+    50% {
+        filter: blur(4px);
+    }
+
+    to {
+        opacity: 1;
+        filter: blur(0);
+        transform: scale(1);
+    }
+}
+
+@keyframes cc-rotate {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes cc-scale {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.15);
+    }
+}
+
+@keyframes cc-translate {
+
+    0%,
+    100% {
+        translate: 0 0;
+    }
+
+    50% {
+        translate: 5px 5px;
+    }
+}
+
+@keyframes cc-opacity {
+
+    0%,
+    100% {
+        opacity: 0.8;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.cc-animate-zoom-in {
+    animation: 0.5s ease-in-out forwards cc-zoom-in;
+}
+
+.cc-animate-wave {
+    animation: 2s linear infinite cc-wave;
+}
+
+.cc-blob-1 {
+    animation: cc-rotate 20s linear infinite, cc-scale 6s ease-in-out infinite, cc-translate 8s ease-in-out infinite, cc-opacity 4s ease-in-out infinite;
+    transform-origin: 13px 25px;
+}
+
+.cc-blob-2 {
+    animation: cc-rotate 15s linear infinite, cc-scale 5s ease-in-out infinite, cc-translate 6s ease-in-out infinite, cc-opacity 3s ease-in-out infinite;
+    transform-origin: 13px 25px;
+}
+
+.cc-blob-3 {
+    animation: cc-rotate 25s linear infinite, cc-scale 7s ease-in-out infinite, cc-translate 10s ease-in-out infinite, cc-opacity 5s ease-in-out infinite;
+    transform-origin: 84px 93px;
+}
+
+.cc-blob-4 {
+    animation: cc-rotate 30s linear infinite, cc-scale 8s ease-in-out infinite, cc-translate 12s ease-in-out infinite, cc-opacity 6s ease-in-out infinite;
+    transform-origin: 84px 93px;
+}
+
+/* Searching circle animations */
+@keyframes cc-circle-1 {
+    0% {
+        transform: translate(0, -20px);
+    }
+
+    25% {
+        transform: translate(20px, 0);
+    }
+
+    50% {
+        transform: translate(0, 20px);
+    }
+
+    75% {
+        transform: translate(-20px, 0);
+    }
+
+    100% {
+        transform: translate(0, -20px);
+    }
+}
+
+@keyframes cc-circle-2 {
+    0% {
+        transform: translate(20px, 0);
+    }
+
+    25% {
+        transform: translate(0, 20px);
+    }
+
+    50% {
+        transform: translate(-20px, 0);
+    }
+
+    75% {
+        transform: translate(0, -20px);
+    }
+
+    100% {
+        transform: translate(20px, 0);
+    }
+}
+
+@keyframes cc-circle-3 {
+    0% {
+        transform: translate(0, 20px);
+    }
+
+    25% {
+        transform: translate(-20px, 0);
+    }
+
+    50% {
+        transform: translate(0, -20px);
+    }
+
+    75% {
+        transform: translate(20px, 0);
+    }
+
+    100% {
+        transform: translate(0, 20px);
+    }
+}
+
+@keyframes cc-circle-4 {
+    0% {
+        transform: translate(-20px, 0);
+    }
+
+    25% {
+        transform: translate(0, -20px);
+    }
+
+    50% {
+        transform: translate(20px, 0);
+    }
+
+    75% {
+        transform: translate(0, 20px);
+    }
+
+    100% {
+        transform: translate(-20px, 0);
+    }
+}
+
+.cc-animate-circle-1 {
+    animation: cc-circle-1 3s ease-in-out infinite;
+}
+
+.cc-animate-circle-2 {
+    animation: cc-circle-2 3s ease-in-out infinite;
+}
+
+.cc-animate-circle-3 {
+    animation: cc-circle-3 3s ease-in-out infinite;
+}
+
+.cc-animate-circle-4 {
+    animation: cc-circle-4 3s ease-in-out infinite;
+}
+
+/* Loading dots animation */
+@keyframes cc-dot {
+
+    0%,
+    20% {
+        opacity: 0;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+.cc-dot-1 {
+    animation: cc-dot 1.4s infinite;
+    animation-delay: 0s;
+}
+
+.cc-dot-2 {
+    animation: cc-dot 1.4s infinite;
+    animation-delay: 0.2s;
+}
+
+.cc-dot-3 {
+    animation: cc-dot 1.4s infinite;
+    animation-delay: 0.4s;
+}
+
+/* Zoom out animation (logo shrinks when searching) */
+@keyframes cc-zoom-out {
+    0% {
+        transform: scale(1) translateY(-50%);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(0.7) translateY(-50%);
+        opacity: 1;
+    }
+}
+
+.cc-animate-zoom-out {
+    animation: cc-zoom-out 0.5s ease-in-out forwards;
+}

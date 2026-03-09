@@ -1,5 +1,6 @@
-import React from 'react';
-import { MenuIcon, BellIcon, UserIncomingIcon, HistoryIcon } from './Icons';
+import { useLocation } from 'react-router-dom';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useState, useCallback, useEffect } from 'react';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -8,25 +9,133 @@ interface HeaderProps {
   onInboxClick: () => void;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
+  isLeftSidebarOpen: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRequestsClick, onInboxClick, theme, toggleTheme }) => {
+const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRequestsClick, onInboxClick, theme, toggleTheme, isLeftSidebarOpen }) => {
+  const { friendRequestsReceived, avatarSeed, isInChat, partnerName, activeDmFriend } = useSessionStore();
+  const requestCount = Object.keys(friendRequestsReceived).length;
+  const location = useLocation();
+
+  // ── Fullscreen toggle ──────────────────────────────────────────
+  const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.warn('[Header] Fullscreen toggle failed:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
+  // ── PiP (Picture-in-Picture) bubble ────────────────────────────
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  const isPipSupported = 'documentPictureInPicture' in window;
+
+  const togglePip = useCallback(async () => {
+    try {
+      if (pipWindow && !pipWindow.closed) {
+        pipWindow.close();
+        setPipWindow(null);
+        return;
+      }
+
+      const dpip = (window as any).documentPictureInPicture;
+      if (!dpip) return;
+
+      const pip: Window = await dpip.requestWindow({
+        width: 320,
+        height: 180,
+      });
+
+      // Copy styles into PiP window
+      const allStyles = document.querySelectorAll('style, link[rel="stylesheet"]');
+      allStyles.forEach(node => {
+        pip.document.head.appendChild(node.cloneNode(true));
+      });
+
+      // Create a mini status indicator in the PiP window
+      const container = pip.document.createElement('div');
+      container.innerHTML = `
+        <div style="
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          height: 100%; background: #09090b; color: white; font-family: 'DM Sans', sans-serif;
+          gap: 12px; padding: 16px; box-sizing: border-box;
+        ">
+          <div style="
+            width: 48px; height: 48px; border-radius: 50%;
+            background: linear-gradient(135deg, #7c3aed, #2563eb);
+            display: flex; align-items: center; justify-content: center;
+            animation: pulse 2s ease-in-out infinite;
+          ">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
+          <div style="font-size: 14px; font-weight: 600; color: #a78bfa;">BuzzU Chat Active</div>
+          <div style="font-size: 11px; color: #71717a;">Tap to return to chat</div>
+        </div>
+        <style>
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124,58,237,0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 0 0 12px rgba(124,58,237,0); }
+          }
+        </style>
+      `;
+      pip.document.body.appendChild(container);
+      pip.document.body.style.margin = '0';
+      pip.document.body.style.overflow = 'hidden';
+
+      // Click anywhere in PiP to return to main window
+      pip.document.addEventListener('click', () => {
+        window.focus();
+        pip.close();
+      });
+
+      pip.addEventListener('pagehide', () => setPipWindow(null));
+      setPipWindow(pip);
+      console.log('[Header] PiP bubble opened');
+    } catch (err) {
+      console.warn('[Header] PiP failed:', err);
+    }
+  }, [pipWindow]);
+
+  // Dynamic header title — mirrors BuzzU behaviour
+  const isDmPage = location.pathname.startsWith('/chat/dm/');
+  const isRoomPage = /^\/chat\/new\/[^/]+/.test(location.pathname);
+  const headerTitle = isDmPage && activeDmFriend
+    ? `@${activeDmFriend.username}`
+    : isRoomPage && isInChat && partnerName
+      ? `@${partnerName}`
+      : 'New Chat';
+
   return (
     <div className="z-20 flex-row w-full flex items-center flex-grow flex-shrink-0 max-h-12 h-12 p-0 pr-2 shadow-md">
-      <div className="flex h-full flex-none items-center justify-center lg:hidden !pointer-events-auto">
-        <span className="mt-1 flex px-2">
+      {/* Hamburger menu - always visible on mobile; on desktop, it sits in a w-12 block over the sidebar (or alone) */}
+      <div className={`flex h-full flex-none items-center justify-center !pointer-events-auto transition-all duration-300 w-12 ${isLeftSidebarOpen ? 'lg:bg-popover' : ''}`}>
+        <span className="mt-1 flex px-2 lg:px-0 lg:ml-2">
           <div className="relative">
-            <span onClick={onMenuClick} className="cursor-pointer">
-              <svg width="23" height="23" viewBox="0 0 23 23" className="text-foreground" aria-hidden="true">
-                <path fill="transparent" strokeWidth="3" stroke="currentColor" strokeLinecap="round" d="M 2 2.5 L 20 2.5"></path>
-                <path fill="transparent" strokeWidth="3" stroke="currentColor" strokeLinecap="round" d="M 2 9.423 L 20 9.423" opacity="1"></path>
-                <path fill="transparent" strokeWidth="3" stroke="currentColor" strokeLinecap="round" d="M 2 16.346 L 20 16.346"></path>
+            <span onClick={onMenuClick} className="cursor-pointer block p-2 -ml-2 hover:bg-white/10 rounded-md transition-colors">
+              <svg width="24" height="24" viewBox="0 0 24 24" className="text-foreground" aria-hidden="true" stroke="currentColor">
+                <path strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h18M3 18h18" />
               </svg>
             </span>
           </div>
         </span>
       </div>
-      <div className="h-full overflow-hidden hidden lg:flex lg:w-64 lg:min-w-64 lg:bg-popover items-center shrink-0">
+
+      {/* Brand Logo - hidden on mobile. On desktop, expands to fill up to w-64 (along with the w-12 above, total w-64 bg-popover) */}
+      <div className={`h-full overflow-hidden hidden lg:flex items-center shrink-0 transition-all duration-300 ${isLeftSidebarOpen ? 'w-[13rem] bg-popover border-border/10 border-r' : 'w-auto'}`}>
         <a className="hidden h-full flex-row items-center gap-2 px-4 text-xl normal-case no-underline hover:no-underline lg:flex" href="/chat/new" title="Home" aria-label="Home">
           <svg width="32" height="32" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#FFD700" stroke="#FFD700">
             <g id="SVGRepo_bgCarrier" strokeWidth="0" />
@@ -38,8 +147,39 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           <span className="font-bold tracking-tight text-brightness">BuzzU</span>
         </a>
       </div>
-      <span className="text-md truncate font-bold normal-case ml-4 cursor-default px-2 text-brightness" role="button" tabIndex={0}>New Chat</span>
+      <span className="text-md truncate font-bold normal-case ml-4 cursor-default px-2 text-brightness" role="button" tabIndex={0}>{headerTitle}</span>
       <div className="flex flex-1 justify-end gap-1 md:gap-2">
+        {/* Fullscreen toggle */}
+        <button
+          onClick={toggleFullscreen}
+          title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+          className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full"
+        >
+          {isFullscreen ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+              <path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+              <path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+            </svg>
+          )}
+        </button>
+        {/* PiP Bubble (mini-window to keep chat alive in background) */}
+        {isPipSupported && (
+          <button
+            onClick={togglePip}
+            title={pipWindow ? 'Close PiP Bubble' : 'Float as Bubble'}
+            className={`inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full ${pipWindow ? 'text-green-400' : ''}`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <rect x="12" y="10" width="8" height="6" rx="1" fill={pipWindow ? 'currentColor' : 'none'} />
+            </svg>
+          </button>
+        )}
         <div data-orientation="vertical" role="none" className="shrink-0 bg-border w-[1px] h-4 self-center"></div>
         <button
           className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative"
@@ -54,7 +194,11 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
             <path d="M12.5 9a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7m.354 5.854 1.5-1.5a.5.5 0 0 0-.708-.708l-.646.647V10.5a.5.5 0 0 0-1 0v2.793l-.646-.647a.5.5 0 0 0-.708.708l1.5 1.5a.5.5 0 0 0 .708 0M11 5a3 3 0 1 1-6 0 3 3 0 0 1 6 0"></path>
             <path d="M2 13c0 1 1 1 1 1h5.256A4.5 4.5 0 0 1 8 12.5a4.5 4.5 0 0 1 1.544-3.393Q8.844 9.002 8 9c-5 0-6 3-6 4"></path>
           </svg>
-          <div className="inline-flex rounded-full border font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80 absolute top-0 right-0 p-0.5 h-4 w-4 items-center justify-center text-xs">1</div>
+          {requestCount > 0 && (
+            <div className="inline-flex rounded-full border font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80 absolute top-0 right-0 p-0.5 h-4 w-4 items-center justify-center text-[10px]">
+              {requestCount}
+            </div>
+          )}
         </button>
         <button
           className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative"

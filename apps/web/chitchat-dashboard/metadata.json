@@ -1,5 +1,5 @@
 {
-  "name": "Chitchat Dashoard",
-  "description": "A pixel-perfect implementation of the Chitchat.gg interface featuring a dark-themed chat dashboard, sidebar navigation, interest management, and settings.",
+  "name": "BuzzU Dashboard",
+  "description": "A pixel-perfect implementation of the BuzzU interface featuring a dark-themed chat dashboard, sidebar navigation, interest management, and settings.",
   "requestFramePermissions": []
 }

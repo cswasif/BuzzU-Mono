@@ -10,17 +10,17 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
   return (
     <>
       {/* Overlay */}
-      <div 
-        className={`absolute inset-0 z-10 bg-opacity-30 transition-opacity duration-300 ease-in-out lg:hidden pointer-events-none ${isOpen ? 'opacity-100 pointer-events-auto bg-black' : 'opacity-0'}`} 
+      <div
+        className={`absolute inset-0 z-10 bg-opacity-30 transition-opacity duration-300 ease-in-out lg:hidden pointer-events-none ${isOpen ? 'opacity-100 pointer-events-auto bg-black' : 'opacity-0'}`}
         tabIndex={-1}
         onClick={onClose}
       ></div>
-      
+
       {/* Right Sidebar */}
-      <div 
-        dir="ltr" 
-        className={`fixed inset-y-0 right-0 z-30 h-full w-64 bg-popover transition-transform duration-300 ease-in-out transform border-l border-border/10 ${isOpen ? 'translate-x-0 shadow-xl' : 'translate-x-full'}`} 
-        tabIndex={-1} 
+      <div
+        dir="ltr"
+        className={`fixed inset-y-0 right-0 z-30 h-full w-64 bg-popover transition-transform duration-300 ease-in-out transform border-l border-border/10 ${isOpen ? 'translate-x-0 shadow-xl' : 'translate-x-full'}`}
+        tabIndex={-1}
         style={{ position: 'absolute', '--radix-scroll-area-corner-width': '0px', '--radix-scroll-area-corner-height': '0px' } as React.CSSProperties}
       >
         <div data-radix-scroll-area-viewport="" className="h-full w-full rounded-[inherit]" style={{ overflow: 'hidden scroll' }}>

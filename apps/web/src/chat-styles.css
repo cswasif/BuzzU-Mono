@@ -2,8 +2,14 @@
 /* ===== BuzzU Chat & Match Styles ===== */
 
 :root {
-  --buzzu-primary: #f5a623;
-  --buzzu-primary-glow: rgba(245, 166, 35, 0.3);
+  /* BuzzU Primary Brand Colors (HSL components for Tailwind v4 compatibility) */
+  --primary: 45 100% 50%;
+  /* #FFD700 */
+  --primary-foreground: 0 0% 0%;
+  /* Black text on gold */
+
+  --buzzu-primary: hsl(var(--primary));
+  --buzzu-primary-glow: hsla(var(--primary), 0.3);
   --buzzu-bg: #0a0a0f;
   --buzzu-surface: #13131a;
   --buzzu-surface-hover: #1a1a24;
@@ -348,7 +354,7 @@
 .chat-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
   background: var(--buzzu-bg);
   color: var(--buzzu-text);
 }
@@ -356,8 +362,16 @@
 /* Video Area */
 .video-area {
   position: relative;
-  flex: 0 0 50vh;
+  flex: 0 0 45vh;
   background: #000;
+  transition: flex-basis 0.3s ease;
+}
+
+/* Adjust video area height for mobile landscape or keyboard focus */
+@media (max-height: 500px) {
+  .video-area {
+    flex-basis: 25vh;
+  }
 }
 
 .remote-video-container {
@@ -439,8 +453,10 @@
   overflow-y: auto;
   padding: 16px;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: 8px;
+  overflow-anchor: auto;
+  overscroll-behavior: contain;
 }
 
 .chat-empty {

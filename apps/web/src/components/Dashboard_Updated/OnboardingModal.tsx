@@ -84,7 +84,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ onStart }) => {
                 <button
                     onClick={handleStart}
                     disabled={!gender || !captchaVerified}
-                    className="w-full py-4 rounded-xl font-bold text-lg text-white bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-500 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0"
+                    className="w-full py-4 rounded-xl font-bold text-lg text-white bg-gradient-to-r from-indigo-600 to-emerald-700 hover:from-indigo-500 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0"
                 >
                     Start Chatting
                 </button>

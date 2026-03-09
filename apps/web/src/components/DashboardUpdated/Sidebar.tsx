@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSessionStore } from '../../stores/sessionStore';
 import {
   LogoIcon,
   MicIcon, SoundIcon, SettingsIcon, MenuIcon
@@ -19,6 +20,9 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfile, isOpen, onClose, theme, toggleTheme }) => {
+  const { displayName, avatarSeed, avatarUrl } = useSessionStore();
+  const dicebearUrl = `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${avatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`;
+  const avatarSrc = avatarUrl || dicebearUrl;
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -84,12 +88,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
                 >
                   <div className="relative">
                     <span className="flex shrink-0 overflow-hidden relative h-8 w-8 rounded-full">
-                      <img className="aspect-square h-full w-full" alt="brand-new olive" src="https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&&seed=698a1c9eebb5a312f8caacd9&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80" />
+                      <img className="aspect-square h-full w-full" alt={displayName} src={avatarSrc} />
                     </span>
                     <div className="absolute rounded-full ring-2 ring-zinc-700 h-2 w-2 bottom-0 right-0 mr-[1px] mb-[1px] bg-success"></div>
                   </div>
                   <div className="flex w-20 flex-col items-start justify-around self-center">
-                    <span className="w-full text-start truncate text-sm font-bold leading-4">brand-new olive</span>
+                    <span className="w-full text-start truncate text-sm font-bold leading-4">{displayName}</span>
                     <span className="text-xs leading-3">Free</span>
                   </div>
                 </button>

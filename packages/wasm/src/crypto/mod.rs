@@ -122,6 +122,9 @@ pub fn hash_string(input: &str) -> String {
     general_purpose::STANDARD.encode(result.as_slice())
 }
 
+pub mod signal;
+pub mod chacha;
+
 #[wasm_bindgen]
 pub fn hash_bytes(data: &[u8]) -> String {
     let mut hasher = Sha256::new();

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -42,30 +42,38 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
     return (
         <AnimatePresence>
             {isOpen && (
-                <motion.div
-                    ref={pickerRef}
-                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                    className="absolute bottom-full right-0 z-50 mb-4"
-                    style={{
-                        filter: 'drop-shadow(0 10px 15px rgba(0, 0, 0, 0.4))'
-                    }}
-                >
-                    <Picker
-                        data={data}
-                        onEmojiSelect={onEmojiSelect}
-                        theme="dark"
-                        set="native"
-                        icons="outline"
-                        skinTonePosition="none"
-                        previewPosition="none"
-                        navPosition="bottom"
-                        perLine={8}
-                        maxFrequentRows={1}
-                        autoFocus={true}
+                <>
+                    {/* Click-outside backdrop */}
+                    <div
+                        className="fixed inset-0 z-[60]"
+                        onClick={onClose}
                     />
-                </motion.div>
+
+                    {/* Picker Container */}
+                    <motion.div
+                        ref={pickerRef}
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        className="absolute right-0 z-[70]"
+                        style={{
+                            bottom: 'calc(100% + 20px)',
+                            filter: 'drop-shadow(0 10px 15px rgba(0, 0, 0, 0.4))'
+                        }}
+                    >
+                        <Picker
+                            data={data}
+                            onEmojiSelect={onEmojiSelect}
+                            theme={document.documentElement.classList.contains('dark') || document.body.classList.contains('theme-dark') ? 'dark' : 'light'}
+                            set="native"
+                            icons="outline"
+                            previewPosition="none"
+                            skinTonePosition="none"
+                            navPosition="bottom"
+                            perLine={8}
+                        />
+                    </motion.div>
+                </>
             )}
         </AnimatePresence>
     );

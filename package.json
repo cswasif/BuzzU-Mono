@@ -12,15 +12,19 @@
         "lint": "turbo lint",
         "deploy:signaling": "cd apps/signaling-worker && npx wrangler deploy",
         "deploy:matchmaker": "cd apps/matchmaker-worker && npx wrangler deploy",
-        "deploy:web": "cd apps/web && npx wrangler pages deploy dist",
+        "deploy:web": "cd apps/web && npx wrangler pages deploy dist --project-name buzzu",
         "deploy": "turbo deploy"
     },
     "devDependencies": {
         "@types/node": "^22.19.12",
-        "turbo": "^2.4.0"
+        "turbo": "^2.4.0",
+        "wrangler": "^3.114.17"
     },
     "packageManager": "pnpm@9.15.0",
     "engines": {
         "node": ">=18.0.0"
+    },
+    "dependencies": {
+        "ws": "^8.19.0"
     }
 }

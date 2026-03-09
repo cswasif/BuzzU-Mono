@@ -1,0 +1,37 @@
+{
+  "name": "gif-picker-react-klipy",
+  "version": "1.0.0",
+  "description": "A modern, customizable GIF picker component for React using Klipy API (Tenor replacement)",
+  "main": "index.ts",
+  "types": "types.ts",
+  "keywords": [
+    "gif",
+    "gif-picker",
+    "react",
+    "klipy",
+    "tenor",
+    "tenor-alternative",
+    "gif-search",
+    "gif-selector",
+    "react-component",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "bugs": {
+    "url": ""
+  },
+  "homepage": "",
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": ">=18.0.0",
+    "typescript": ">=5.0.0"
+  }
+}

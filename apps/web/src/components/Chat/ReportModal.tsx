@@ -38,7 +38,7 @@ export function ReportModal({ isOpen, onClose, message }: ReportModalProps) {
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="fixed left-[50%] sm:top-[50%] max-sm:bottom-0 z-[70] w-full translate-x-[-50%] gap-4 border bg-background p-6 shadow-lg sm:max-w-lg sm:translate-y-[-50%] sm:rounded-lg md:w-full select-text md:max-w-[400px] max-h-96 flex flex-col"
+        className="fixed left-[50%] sm:top-[50%] max-sm:bottom-4 z-[70] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] gap-4 border bg-background p-6 shadow-lg sm:max-w-lg sm:translate-y-[-50%] sm:rounded-lg rounded-xl select-text max-h-[85dvh] flex flex-col"
         tabIndex={-1}
         style={{ pointerEvents: 'auto' }}
       >
@@ -59,7 +59,7 @@ export function ReportModal({ isOpen, onClose, message }: ReportModalProps) {
                       <img
                         className="aspect-square h-full w-full"
                         alt={message.username}
-                        src={`https://proxy.extractcss.dev/https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&&seed=${message.avatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`}
+                        src={`https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${message.avatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`}
                       />
                     </span>
                   </div>

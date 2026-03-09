@@ -1,0 +1,12 @@
+name = "buzzu-reputation"
+main = "build/worker/shim.mjs"
+compatibility_date = "2024-11-11"
+
+[durable_objects]
+bindings = [
+  { name = "REPUTATION_BUCKET", class_name = "ReputationBucket" },
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ReputationBucket"]

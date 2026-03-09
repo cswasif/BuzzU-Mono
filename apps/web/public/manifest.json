@@ -1,0 +1,28 @@
+{
+  "name": "BuzzU",
+  "short_name": "BuzzU",
+  "description": "Connecting you to the world via anonymous chatting.",
+  "start_url": "/",
+  "display": "standalone",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "orientation": "any",
+  "prefer_related_applications": false,
+  "scope": "/",
+  "categories": [
+    "social",
+    "communication"
+  ]
+}

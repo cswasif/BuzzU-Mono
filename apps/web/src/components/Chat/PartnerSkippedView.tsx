@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flag, ChevronDown, Check, X, Sparkles, Circle, CircleHelp, Crown } from 'lucide-react';
+import { Flag, ChevronDown, Check, X, Sparkles, CircleHelp } from 'lucide-react';
+import { LightningIcon, MaleIcon, FemaleIcon, BothIcon } from '../Dashboard_Updated/Icons';
 
 interface PartnerSkippedViewProps {
     onReport?: () => void;
-    onGetPremium?: () => void;
+    onGetPremium?: () => void; // Keeping prop for backwards compatibility with any parents rendering it until we can clean it up
+    isSelfSkip?: boolean;
 }
 
 export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
     onReport,
-    onGetPremium
+    isSelfSkip = false,
 }) => {
     const [isInterestsOpen, setIsInterestsOpen] = useState(false);
     const [isGenderFilterOpen, setIsGenderFilterOpen] = useState(false);
@@ -22,14 +24,18 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
             <div className="w-full max-w-lg px-4 pb-2">
                 {/* Skipping Status */}
                 <div className="flex flex-col items-start md:items-center md:flex-row gap-2 font-bold text-foreground">
-                    <span className="flex items-center gap-1">💔 Your chat partner has skipped this chat.</span>
-                    <button
-                        onClick={onReport}
-                        className="inline-flex items-center justify-center text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-6 rounded-md px-2 transition-colors"
-                    >
-                        <Flag className="mr-1 h-3.5 w-3.5" />
-                        Report
-                    </button>
+                    <span className="flex items-center gap-1">
+                        {isSelfSkip ? '⏭️ You have skipped this chat.' : '💔 Your chat partner has skipped this chat.'}
+                    </span>
+                    {!isSelfSkip && (
+                        <button
+                            onClick={onReport}
+                            className="inline-flex items-center justify-center text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-6 rounded-md px-2 transition-colors"
+                        >
+                            <Flag className="mr-1 h-3.5 w-3.5" />
+                            Report
+                        </button>
+                    )}
                 </div>
 
                 {/* Divider */}
@@ -46,7 +52,7 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
                             >
                                 <div className="flex items-center gap-2">
                                     <span className="rounded-full bg-muted aspect-square w-10 h-10 flex items-center justify-center">
-                                        <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="20" width="20" xmlns="http://www.w3.org/2000/svg">
+                                        <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 24 24" height="20" width="20" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M10 2a3 3 0 0 1 2.995 2.824l.005 .176v1h3a2 2 0 0 1 1.995 1.85l.005 .15v3h1a3 3 0 0 1 .176 5.995l-.176 .005h-1v3a2 2 0 0 1 -1.85 1.995l-.15 .005h-3a2 2 0 0 1 -1.995 -1.85l-.005 -.15v-1a1 1 0 0 0 -1.993 -.117l-.007 .117v1a2 2 0 0 1 -1.85 1.995l-.15 .005h-3a2 2 0 0 1 -1.995 -1.85l-.005 -.15v-3a2 2 0 0 1 1.85 -1.995l.15 -.005h1a1 1 0 0 0 .117 -1.993l-.117 -.007h-1a2 2 0 0 1 -1.995 -1.85l-.005 -.15v-3a2 2 0 0 1 1.85 -1.995l.15 -.005h3v-1a3 3 0 0 1 3 -3z"></path>
                                         </svg>
                                     </span>
@@ -147,59 +153,82 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
                                     className="overflow-hidden text-sm"
                                 >
                                     <div className="pb-4 pt-0">
-                                        <p className="mb-3 text-muted-foreground">Choose the gender you wish to match with.</p>
-                                        <div className="flex flex-wrap gap-2.5 justify-center">
-                                            {[
-                                                { id: 'male', label: 'Male', val: 'M', color: 'text-blue-600 dark:text-blue-300' },
-                                                { id: 'both', label: 'Both', val: 'both', color: 'text-foreground' },
-                                                { id: 'female', label: 'Female', val: 'F', color: 'text-pink-600 dark:text-pink-300' }
-                                            ].map((item) => (
-                                                <div key={item.id} className="relative flex-1 min-w-[100px] sm:min-w-[120px]">
-                                                    <button
-                                                        onClick={() => setGenderFilter(item.val)}
-                                                        className={`w-full relative flex flex-col items-center justify-center gap-2 p-3 rounded-lg border transition-all ${genderFilter === item.val ? 'bg-muted border-primary ring-1 ring-primary' : 'bg-popover border-border hover:bg-muted'}`}
-                                                    >
-                                                        {item.id === 'both' && (
-                                                            <div className="absolute inset-0 bg-gradient-to-r from-blue-400/10 to-pink-400/10 blur-xl opacity-50 pointer-events-none rounded-lg" />
-                                                        )}
+                                        <p className="mb-3 text-muted-foreground text-center">Choose the gender you wish to match with.</p>
+                                        <div className="flex justify-center">
+                                            <div role="radiogroup" className="flex justify-center gap-3 sm:gap-6 w-full" style={{ outline: 'none' }}>
 
-                                                        {/* Premium Locked state simulation */}
-                                                        {(item.id === 'male' || item.id === 'female') && (
-                                                            <div className="absolute top-0 right-0 transform translate-x-1/3 -translate-y-1/3 flex bg-orange-600 text-white w-5 h-5 rounded-full items-center justify-center z-10 shadow-sm">
-                                                                <Crown className="w-3 h-3" />
-                                                            </div>
-                                                        )}
-
-                                                        <span className={`text-2xl ${item.color}`}>
-                                                            {item.id === 'male' ? '♂️' : item.id === 'female' ? '♀️' : '👫'}
-                                                        </span>
-                                                        <span className={`font-bold ${item.color}`}>{item.label}</span>
-                                                    </button>
+                                                {/* Male Option */}
+                                                <div className="max-sm:w-full relative group">
+                                                    <button type="button" role="radio" aria-checked={genderFilter === 'M'} onClick={() => setGenderFilter('M')} className="sr-only" />
+                                                    <div className="p-0.5">
+                                                        <label
+                                                            className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
+                                        ${genderFilter === 'M'
+                                                                    ? 'bg-blue-500/15 border-blue-500 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.25)] scale-[1.05]'
+                                                                    : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
+                                                            onClick={() => setGenderFilter('M')}
+                                                        >
+                                                            {genderFilter === 'M' && (
+                                                                <div className="absolute -top-2 -right-2 items-center justify-center flex bg-blue-500 text-white w-5 h-5 rounded-full shadow-lg shadow-blue-500/50 animate-in zoom-in duration-200">
+                                                                    <LightningIcon className="w-3 h-3" />
+                                                                </div>
+                                                            )}
+                                                            <MaleIcon className="mb-2 w-7 h-7 text-inherit transition-transform group-hover:scale-110" />
+                                                            Male
+                                                        </label>
+                                                    </div>
                                                 </div>
-                                            ))}
+
+                                                {/* Both Option */}
+                                                <div className="max-sm:w-full relative group">
+                                                    <button type="button" role="radio" aria-checked={genderFilter === 'both'} onClick={() => setGenderFilter('both')} className="sr-only" />
+                                                    <div className="p-0.5">
+                                                        <label
+                                                            className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
+                                        ${genderFilter === 'both'
+                                                                    ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)] scale-[1.05]'
+                                                                    : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
+                                                            onClick={() => setGenderFilter('both')}
+                                                        >
+                                                            {genderFilter === 'both' && (
+                                                                <div className="absolute -top-2 -right-2 items-center justify-center flex bg-emerald-500 text-white w-5 h-5 rounded-full shadow-lg shadow-emerald-500/50 animate-in zoom-in duration-200">
+                                                                    <LightningIcon className="w-3 h-3" />
+                                                                </div>
+                                                            )}
+                                                            <BothIcon className="mb-2 w-7 h-7 text-inherit transition-transform group-hover:scale-110" />
+                                                            Both
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                {/* Female Option */}
+                                                <div className="max-sm:w-full relative group">
+                                                    <button type="button" role="radio" aria-checked={genderFilter === 'F'} onClick={() => setGenderFilter('F')} className="sr-only" />
+                                                    <div className="p-0.5">
+                                                        <label
+                                                            className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
+                                        ${genderFilter === 'F'
+                                                                    ? 'bg-pink-500/15 border-pink-500 text-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.25)] scale-[1.05]'
+                                                                    : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
+                                                            onClick={() => setGenderFilter('F')}
+                                                        >
+                                                            {genderFilter === 'F' && (
+                                                                <div className="absolute -top-2 -right-2 items-center justify-center flex bg-pink-500 text-white w-5 h-5 rounded-full shadow-lg shadow-pink-500/50 animate-in zoom-in duration-200">
+                                                                    <LightningIcon className="w-3 h-3" />
+                                                                </div>
+                                                            )}
+                                                            <FemaleIcon className="mb-2 w-7 h-7 text-inherit transition-transform group-hover:scale-110" />
+                                                            Female
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                            </div>
                                         </div>
                                     </div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
-                    </div>
-                </div>
-
-                {/* Premium Banner */}
-                <div className="py-2">
-                    <p className="text-sm sm:text-base text-fuchsia-700 dark:text-yellow-300 font-semibold mb-3">
-                        Get premium to unlock the gender filter and to send and receive media! 🎉
-                    </p>
-                    <div className="flex flex-row gap-4 items-center">
-                        <button
-                            type="button"
-                            onClick={onGetPremium}
-                            className="group h-10 relative uppercase text-sm px-6 font-bold text-white rounded-md bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 shadow-lg transition-all duration-300 hover:scale-105 active:scale-95 overflow-hidden flex items-center gap-2"
-                        >
-                            <Crown className="h-4 w-4 text-yellow-300 fill-yellow-300" />
-                            <span className="relative z-10">Get Premium</span>
-                            <div className="absolute left-[-50%] top-0 h-full w-1/2 -skew-x-12 transform bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-40 transition-all duration-500 ease-linear group-hover:left-[150%]"></div>
-                        </button>
                     </div>
                 </div>
             </div>

@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
     UserIcon, CogIcon, ShieldIcon, Settings2Icon, BanIcon,
     XIcon, CheckIcon, ChevronDownIcon, CircleQuestionIcon,
     DeleteAccountIcon, SolidCheckCircleIcon, LockIcon, UserXIcon
 } from './Icons';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useWasm } from '../../hooks/useWasm';
+import { AvatarCropModal } from '../AvatarCropModal';
 
 interface ModalProps {
     onClose: () => void;
@@ -202,48 +205,35 @@ const DeleteAccountModal: React.FC<{
     onClose: () => void;
     onDelete: () => void;
 }> = ({ isOpen, onClose, onDelete }) => {
-    const [confirmation, setConfirmation] = useState('');
 
     if (!isOpen) return null;
 
     return createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-background border border-border p-6 rounded-lg shadow-lg w-full max-w-md flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="bg-background text-foreground border border-border p-6 rounded-lg shadow-lg w-full max-w-md flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                 <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2 text-destructive font-bold text-lg">
                         <UserXIcon className="w-6 h-6" />
                         <h2>Delete Account</h2>
                     </div>
                     <p className="text-sm text-muted-foreground">Note: If you want to take a break, you can log out instead.</p>
-                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                        <li>Your account will be scheduled for deletion and will be deleted before 14 days</li>
-                        <li>You can cancel the deletion process within 14 days by logging in.</li>
-                        <li>After 14 days, your user data will be permanently deleted. You won't be able to recover it.</li>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground/90 space-y-1">
+                        <li>This clears all BuzzU data stored in this browser (localStorage, sessionStorage, IndexedDB, caches).</li>
+                        <li>You will be signed out and the app will immediately reload.</li>
+                        <li>This does not delete any server-side account data.</li>
                     </ul>
                 </div>
 
-                <input
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    placeholder="Type 'DELETE MY ACCOUNT' to confirm"
-                    value={confirmation}
-                    onChange={(e) => setConfirmation(e.target.value)}
-                />
-
                 <div className="flex justify-end gap-2">
                     <button
-                        onClick={() => {
-                            if (confirmation === 'DELETE MY ACCOUNT') {
-                                onDelete();
-                            }
-                        }}
-                        disabled={confirmation !== 'DELETE MY ACCOUNT'}
+                        onClick={onDelete}
                         className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 px-4 py-2"
                     >
                         Delete My Account
                     </button>
                     <button
                         onClick={onClose}
-                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
                     >
                         Cancel
                     </button>
@@ -256,164 +246,177 @@ const DeleteAccountModal: React.FC<{
 
 // --- Interests Modal ---
 export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
+    const { interests, setInterests, verifiedOnly, setVerifiedOnly, genderFilter, setGenderFilter, isVerified } = useSessionStore();
     const [matchEnabled, setMatchEnabled] = useState(true);
-    const [selectedDuration, setSelectedDuration] = useState('30s');
+    const [selectedDuration, setSelectedDuration] = useState('10s');
+    const [newInterest, setNewInterest] = useState('');
+
+    const handleAddInterest = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' && newInterest.trim()) {
+            if (!interests.includes(newInterest.trim())) {
+                setInterests([...interests, newInterest.trim()]);
+            }
+            setNewInterest('');
+        }
+    };
+
+    const removeInterest = (interest: string) => {
+        setInterests(interests.filter(i => i !== interest));
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
             <div
                 role="dialog"
-                id="radix-_r_8g_"
-                aria-describedby="radix-_r_8i_"
-                aria-labelledby="radix-_r_8h_"
+                id="radix-_r_6a_"
+                aria-describedby="radix-_r_6c_"
+                aria-labelledby="radix-_r_6b_"
                 data-state="open"
-                className="relative z-50 grid w-full gap-4 border bg-background p-6 shadow-lg duration-200 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 sm:max-w-lg sm:rounded-lg md:w-full select-text"
+                className="fixed left-[50%] sm:top-[50%] max-sm:bottom-0 z-50 grid w-full translate-x-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=open]:slide-in-from-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] data-[state=closed]:slide-out-to-bottom-[48%] sm:data-[state=open]:slide-in-from-top-[48%] data-[state=open]:slide-in-from-bottom-[48%] sm:max-w-lg sm:translate-y-[-50%] sm:rounded-lg md:w-full select-text"
                 tabIndex={-1}
                 style={{ pointerEvents: 'auto' }}
             >
                 <div className="flex flex-col space-y-1.5 text-center sm:text-left">
-                    <h2 id="radix-_r_8h_" className="font-semibold tracking-tight flex flex-row text-start gap-2 text-2xl">Manage Interests</h2>
-                    <p id="radix-_r_8i_" className="text-sm text-muted-foreground text-start">Add and remove interests to help us find better matches for you.</p>
+                    <h2 id="radix-_r_6b_" className="font-semibold tracking-tight flex flex-row text-start gap-2 text-2xl">Manage Interests</h2>
+                    <p id="radix-_r_6c_" className="text-sm text-muted-foreground text-start">Add and remove interests to help us find better matches for you.</p>
                 </div>
-                <div className="w-full flex flex-row items-center justify-between font-semibold bg-card p-3 rounded-md border border-border/10">
-                    <span className="text-sm font-bold text-card-foreground uppercase tracking-tight">Match with interests</span>
+                <div className="w-full flex flex-row justify-between font-semibold bg-card p-2 rounded-md items-center">
+                    Match with interests
                     <button
                         type="button"
                         role="switch"
                         aria-checked={matchEnabled}
+                        data-state={matchEnabled ? "checked" : "unchecked"}
+                        value="on"
                         className="peer inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
                         style={{ backgroundColor: matchEnabled ? 'hsl(var(--primary))' : 'hsl(var(--input))' }}
                         onClick={() => setMatchEnabled(!matchEnabled)}
                     >
                         <span
-                            className="pointer-events-none relative block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform flex items-center justify-center"
+                            data-state={matchEnabled ? "checked" : "unchecked"}
+                            className="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
                             style={{ transform: matchEnabled ? 'translateX(20px)' : 'translateX(0px)' }}
-                        >
-                            {matchEnabled ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M20 6 9 17l-5-5"></path></svg>
-                            ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
-                            )}
-                        </span>
+                        />
                     </button>
+                </div>
+
+                <div className="w-full flex flex-row justify-between font-semibold bg-card p-2 rounded-md items-center">
+                    Verified Users Only
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={verifiedOnly}
+                        data-state={verifiedOnly ? "checked" : "unchecked"}
+                        disabled={!isVerified}
+                        className="peer inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{ backgroundColor: (verifiedOnly && isVerified) ? 'hsl(var(--primary))' : 'hsl(var(--input))' }}
+                        onClick={() => setVerifiedOnly(!verifiedOnly)}
+                    >
+                        <span
+                            data-state={verifiedOnly ? "checked" : "unchecked"}
+                            className="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
+                            style={{ transform: verifiedOnly ? 'translateX(20px)' : 'translateX(0px)' }}
+                        />
+                    </button>
+                </div>
+
+                <div className="w-full flex flex-col font-semibold bg-card p-2 rounded-md gap-2">
+                    <span className="text-sm">Gender Filter</span>
+                    <div className="flex flex-row gap-2">
+                        {['both', 'male', 'female'].map((filter) => (
+                            <button
+                                key={filter}
+                                onClick={() => setGenderFilter(filter)}
+                                className={`flex-1 px-2 py-1.5 text-xs rounded-md transition-colors border ${genderFilter === filter
+                                        ? 'bg-primary text-primary-foreground border-primary'
+                                        : 'bg-muted text-muted-foreground border-border hover:bg-accent'
+                                    }`}
+                            >
+                                {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                            </button>
+                        ))}
+                    </div>
                 </div>
                 <div>
                     <div className="flex flex-wrap gap-2 bg-muted rounded-md p-2 py-4 mb-4">
-                        <input className="w-32 select-auto sm:text-sm text-sm rounded-md bg-[hsl(var(--input-bg))] p-1 focus-visible:outline-none inline-flex" maxLength={32} placeholder="Add an interest..." type="text" />
+                        {interests.map(interest => (
+                            <div key={interest} className="inline-flex items-center justify-center px-2.5 py-1 text-sm font-medium rounded-full bg-action/80 dark:bg-placeholder/50 gap-1.5 group">
+                                {interest}
+                                <button
+                                    type="button"
+                                    onClick={() => removeInterest(interest)}
+                                    className="flex-shrink-0 ml-1.5 h-3.5 w-3.5 rounded-full inline-flex items-center justify-center text-card bg-card-foreground hover:bg-card-foreground/80 focus:bg-card-foreground-hover"
+                                >
+                                    <span className="sr-only">Remove</span>
+                                    <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" height="10" width="10" xmlns="http://www.w3.org/2000/svg">
+                                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        ))}
+                        <input
+                            className="w-32 select-auto sm:text-sm text-sm rounded-md bg-popover dark:bg-placeholder p-1 focus-visible:outline-none inline-flex"
+                            maxLength={32}
+                            placeholder="Add an interest..."
+                            type="text"
+                            value={newInterest}
+                            onChange={(e) => setNewInterest(e.target.value)}
+                            onKeyDown={handleAddInterest}
+                        />
                     </div>
                     <div className="flex flex-col gap-2.5 pt-2.5 pr-2 bg-card py-3 rounded-md px-2">
                         <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex items-center gap-1 space-y-1" htmlFor="necessary">
                             Max Wait Duration
                             <span className="max-lg:hidden" data-state="closed">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16.5" height="16.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-circle-question-mark cursor-pointer focus:outline-primary max-lg:hidden" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16.5" height="16.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-circle-question-mark cursor-pointer focus:outline-primary max-lg:hidden" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                    <path d="M12 17h.01"></path>
+                                </svg>
                             </span>
                         </label>
                         <div role="radiogroup" aria-required="false" dir="ltr" className="flex flex-row gap-1.5 sm:gap-3" tabIndex={0} style={{ outline: 'none' }}>
-                            <div className="flex-shrink-0 flex-wrap">
-                                <button
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={selectedDuration === '5s'}
-                                    data-state={selectedDuration === '5s' ? "checked" : "unchecked"}
-                                    value="5s"
-                                    className="aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 peer sr-only"
-                                    id="5s"
-                                    tabIndex={-1}
-                                    data-radix-collection-item=""
-                                    onClick={() => setSelectedDuration('5s')}
-                                >
-                                    <span data-state={selectedDuration === '5s' ? "checked" : "unchecked"} className="flex items-center justify-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-circle h-2.5 w-2.5 fill-current text-current" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle></svg>
-                                    </span>
-                                </button>
-                                <label
-                                    className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 cursor-pointer peer-data-[state=checked]:text-primary-foreground peer-data-[state=checked]:bg-primary [&:has([data-state=checked])]:bg-primary [&:has([data-state=checked])]:text-primary-foreground"
-                                    htmlFor="5s"
-                                    onClick={() => setSelectedDuration('5s')}
-                                >
-                                    5 sec
-                                </label>
-                            </div>
-                            <div className="flex-shrink-0 flex-wrap">
-                                <button
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={selectedDuration === '10s'}
-                                    data-state={selectedDuration === '10s' ? "checked" : "unchecked"}
-                                    value="10s"
-                                    className="aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 peer sr-only"
-                                    id="10s"
-                                    tabIndex={-1}
-                                    data-radix-collection-item=""
-                                    onClick={() => setSelectedDuration('10s')}
-                                >
-                                    <span data-state={selectedDuration === '10s' ? "checked" : "unchecked"} className="flex items-center justify-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-circle h-2.5 w-2.5 fill-current text-current" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle></svg>
-                                    </span>
-                                </button>
-                                <label
-                                    className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 cursor-pointer peer-data-[state=checked]:text-primary-foreground peer-data-[state=checked]:bg-primary [&:has([data-state=checked])]:bg-primary [&:has([data-state=checked])]:text-primary-foreground"
-                                    htmlFor="10s"
-                                    onClick={() => setSelectedDuration('10s')}
-                                >
-                                    10 sec
-                                </label>
-                            </div>
-                            <div className="flex-shrink-0 flex-wrap">
-                                <button
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={selectedDuration === '30s'}
-                                    data-state={selectedDuration === '30s' ? "checked" : "unchecked"}
-                                    value="30s"
-                                    className="aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 peer sr-only"
-                                    id="30s"
-                                    tabIndex={-1}
-                                    data-radix-collection-item=""
-                                    onClick={() => setSelectedDuration('30s')}
-                                >
-                                    <span data-state={selectedDuration === '30s' ? "checked" : "unchecked"} className="flex items-center justify-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-circle h-2.5 w-2.5 fill-current text-current" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle></svg>
-                                    </span>
-                                </button>
-                                <label
-                                    className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 cursor-pointer peer-data-[state=checked]:text-primary-foreground peer-data-[state=checked]:bg-primary [&:has([data-state=checked])]:bg-primary [&:has([data-state=checked])]:text-primary-foreground"
-                                    htmlFor="30s"
-                                    onClick={() => setSelectedDuration('30s')}
-                                >
-                                    30 sec
-                                </label>
-                            </div>
-                            <div>
-                                <button
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={selectedDuration === '10m'}
-                                    data-state={selectedDuration === '10m' ? "checked" : "unchecked"}
-                                    value="10m"
-                                    className="aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 peer sr-only"
-                                    id="10m"
-                                    tabIndex={-1}
-                                    data-radix-collection-item=""
-                                    onClick={() => setSelectedDuration('10m')}
-                                >
-                                    <span data-state={selectedDuration === '10m' ? "checked" : "unchecked"} className="flex items-center justify-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-circle h-2.5 w-2.5 fill-current text-current" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle></svg>
-                                    </span>
-                                </button>
-                                <label
-                                    className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 cursor-pointer peer-data-[state=checked]:text-primary-foreground peer-data-[state=checked]:bg-primary [&:has([data-state=checked])]:bg-primary [&:has([data-state=checked])]:text-primary-foreground"
-                                    htmlFor="10m"
-                                    onClick={() => setSelectedDuration('10m')}
-                                >
-                                    Forever
-                                </label>
-                            </div>
+                            {[
+                                { id: '5s', label: '5 sec', value: '5s' },
+                                { id: '10s', label: '10 sec', value: '10s' },
+                                { id: '30s', label: '30 sec', value: '30s' },
+                                { id: '10m', label: 'Forever', value: '10m' }
+                            ].map((option) => (
+                                <div key={option.id} className="flex-shrink-0 flex-wrap">
+                                    <button
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={selectedDuration === option.value}
+                                        data-state={selectedDuration === option.value ? "checked" : "unchecked"}
+                                        value={option.value}
+                                        className="aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 peer sr-only"
+                                        id={option.id}
+                                        tabIndex={-1}
+                                        onClick={() => setSelectedDuration(option.value)}
+                                    >
+                                        <span data-state={selectedDuration === option.value ? "checked" : "unchecked"} className="flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-circle h-2.5 w-2.5 fill-current text-current" aria-hidden="true">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                    <label
+                                        className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 cursor-pointer peer-data-[state=checked]:text-primary-foreground peer-data-[state=checked]:bg-primary [&:has([data-state=checked])]:bg-primary [&:has([data-state=checked])]:text-primary-foreground"
+                                        htmlFor={option.id}
+                                        onClick={() => setSelectedDuration(option.value)}
+                                    >
+                                        {option.label}
+                                    </label>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
                 <div className="flex flex-col-reverse max-md:gap-3 sm:flex-row sm:justify-end sm:space-x-2">
-                    <button onClick={onClose} className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-4 py-2">
+                    <button
+                        onClick={onClose}
+                        className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-4 py-2"
+                    >
                         Done
                     </button>
                 </div>
@@ -423,30 +426,201 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
 };
 
 // --- Settings Modal ---
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInterests, theme = 'light' }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInterests, theme: propTheme = 'light' }) => {
+    const { displayName, setDisplayName, theme, setTheme, interests, avatarSeed, avatarUrl, setAvatarUrl } = useSessionStore();
+    const { wasm } = useWasm();
     const [activeTab, setActiveTab] = useState('Profile');
-    const [username, setUsername] = useState('brand-new olive');
     const [isEditingUsername, setIsEditingUsername] = useState(false);
-    const [tempUsername, setTempUsername] = useState(username);
+    const [tempUsername, setTempUsername] = useState(displayName);
     const [bannerType, setBannerType] = useState<'Simple' | 'Gradient'>('Simple');
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [bannerColor, setBannerColor] = useState('#5B21B6');
+    const mobileAvatarInputRef = useRef<HTMLInputElement>(null);
+    const desktopAvatarInputRef = useRef<HTMLInputElement>(null);
+    const [avatarBusy, setAvatarBusy] = useState(false);
+    const [avatarError, setAvatarError] = useState<string | null>(null);
+    const [showAvatarCropModal, setShowAvatarCropModal] = useState(false);
+    const [selectedImageSrc, setSelectedImageSrc] = useState<string>('');
+
+    // Sync temp username when displayName changes
+    useEffect(() => {
+        setTempUsername(displayName);
+    }, [displayName]);
+
+    const dicebearUrl = `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${avatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`;
+    const avatarSrc = avatarUrl || dicebearUrl;
+
+    const isWasmReady = Boolean(wasm?.ImageCompressor);
+
+    const getImageDimensions = useCallback(async (file: File) => {
+        if (typeof createImageBitmap !== 'function') return null;
+        let bitmap: ImageBitmap | null = null;
+        try {
+            bitmap = await createImageBitmap(file);
+            return { width: bitmap.width, height: bitmap.height };
+        } catch (err) {
+            return null;
+        } finally {
+            if (bitmap) {
+                try {
+                    bitmap.close();
+                } catch (e) {
+                }
+            }
+        }
+    }, []);
+
+    const compressAvatar = useCallback(async (file: File): Promise<Blob> => {
+        if (!isWasmReady) {
+            throw new Error('Image compressor not ready');
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const compressor = new wasm.ImageCompressor();
+        try {
+            const sizes = [512, 384, 256];
+            let lastBlob: Blob | null = null;
+            for (const size of sizes) {
+                const compressed = compressor.compress_to_webp(uint8Array, size, size);
+                const blob = new Blob([compressed], { type: 'image/webp' });
+                lastBlob = blob;
+                if (blob.size <= 512 * 1024) {
+                    return blob;
+                }
+            }
+            return lastBlob || file;
+        } finally {
+            try {
+                compressor.free();
+            } catch (err) {
+            }
+        }
+    }, [isWasmReady, wasm]);
+
+    const readBlobAsDataUrl = useCallback((blob: Blob) => (
+        new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(blob);
+        })
+    ), []);
+
+    const handleAvatarFile = useCallback(async (file: File) => {
+        setAvatarError(null);
+        if (!file.type.startsWith('image/')) {
+            setAvatarError('Please select an image file.');
+            return;
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            setAvatarError('Image exceeds 8MB limit.');
+            return;
+        }
+        const dimensions = await getImageDimensions(file);
+        if (dimensions && (dimensions.width < 256 || dimensions.height < 256)) {
+            setAvatarError('Image resolution is too low. Minimum 256x256.');
+            return;
+        }
+        if (!isWasmReady) {
+            setAvatarError('Image compressor is still loading.');
+            return;
+        }
+        setAvatarBusy(true);
+        try {
+            const processed = await compressAvatar(file);
+            if (processed.size > 1024 * 1024) {
+                setAvatarError('Image is still too large after optimization.');
+                return;
+            }
+            const dataUrl = await readBlobAsDataUrl(processed);
+            setAvatarUrl(dataUrl);
+        } catch (err) {
+            setAvatarError('Failed to process image.');
+        } finally {
+            setAvatarBusy(false);
+        }
+    }, [compressAvatar, getImageDimensions, isWasmReady, readBlobAsDataUrl, setAvatarUrl]);
+
+    const handleAvatarInputChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setAvatarError(null);
+        if (!file.type.startsWith('image/')) {
+            setAvatarError('Please select an image file.');
+            event.target.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setSelectedImageSrc(reader.result as string);
+            setShowAvatarCropModal(true);
+        };
+        reader.readAsDataURL(file);
+        event.target.value = '';
+    }, []);
+
+    const handleCropComplete = useCallback(async (blob: Blob) => {
+        setShowAvatarCropModal(false);
+        const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
+        await handleAvatarFile(file);
+    }, [handleAvatarFile]);
+
+    const triggerMobileAvatarPicker = useCallback(() => {
+        setAvatarError(null);
+        mobileAvatarInputRef.current?.click();
+    }, []);
+
+    const triggerDesktopAvatarPicker = useCallback(() => {
+        setAvatarError(null);
+        desktopAvatarInputRef.current?.click();
+    }, []);
+
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
-    // Preferences State
+    // Preferences State (Local for now, until added to sessionStore)
     const [convertEmoticons, setConvertEmoticons] = useState(true);
     const [blurImages, setBlurImages] = useState(true);
     const [notificationSound, setNotificationSound] = useState(true);
     const [pushNotifications, setPushNotifications] = useState(false);
-    const [darkMode, setDarkMode] = useState(true);
     const [friendRequests, setFriendRequests] = useState(true);
     const [badgeVisibility, setBadgeVisibility] = useState('Everyone');
     const [interestsVisibility, setInterestsVisibility] = useState('Friends');
 
     const handleSaveUsername = () => {
-        setUsername(tempUsername);
+        setDisplayName(tempUsername);
         setIsEditingUsername(false);
+    };
+
+    const handleDeleteAccount = async () => {
+        localStorage.clear();
+        sessionStorage.clear();
+        if ('caches' in window) {
+            const cacheKeys = await caches.keys();
+            await Promise.allSettled(cacheKeys.map((key) => caches.delete(key)));
+        }
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.allSettled(registrations.map((registration) => registration.unregister()));
+        }
+        const indexedDbAny = indexedDB as IDBFactory & { databases?: () => Promise<Array<{ name?: string }>> };
+        if (indexedDbAny.databases) {
+            const databases = await indexedDbAny.databases();
+            await Promise.allSettled(
+                databases
+                    .map((db) => db.name)
+                    .filter((name): name is string => Boolean(name))
+                    .map((name) => new Promise<void>((resolve, reject) => {
+                        const request = indexedDB.deleteDatabase(name);
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject(request.error);
+                        request.onblocked = () => resolve();
+                    }))
+            );
+        }
+        window.location.reload();
     };
 
     const renderSwitch = (checked: boolean, onChange: (val: boolean) => void) => (
@@ -538,15 +712,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                         <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_mobile"> Avatar </label>
                                         <div className="flex w-full gap-1 min-w-full justify-between items-center py-1 pb-2">
                                             <span className="relative flex shrink-0 overflow-hidden rounded-full w-16 h-16">
-                                                <img className="aspect-square h-full w-full" alt={username} src={`https://api.dicebear.com/5.x/thumbs/png?seed=${username}&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67`} />
+                                                <img className="aspect-square h-full w-full" alt={displayName} src={avatarSrc} />
                                             </span>
                                             <div className="flex flex-row gap-1">
-                                                <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Change</button>
-                                                <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness">Remove</button>
+                                                <button onClick={triggerMobileAvatarPicker} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button" disabled={avatarBusy || !isWasmReady}>Change</button>
+                                                <button onClick={() => { setAvatarUrl(null); setAvatarError(null); }} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness" type="button" disabled={avatarBusy || !avatarUrl}>Remove</button>
                                             </div>
-                                            <input className="hidden" id="_r_av_mobile" type="file" />
+                                            <input ref={mobileAvatarInputRef} className="hidden" id="_r_av_mobile" type="file" accept="image/*" onChange={handleAvatarInputChange} />
                                         </div>
-                                        <span className="text-xs text-card-foreground">Avatars are reviewed before displaying. Do not upload inappropriate avatars. Limit: 3 changes daily. Max 8MB.</span>
+                                        {avatarError ? (
+                                            <span className="text-xs text-destructive">{avatarError}</span>
+                                        ) : (
+                                            <span className="text-xs text-card-foreground">
+                                                {avatarBusy ? 'Optimizing image...' : !isWasmReady ? 'Image compressor loading...' : 'Avatars are reviewed before displaying. Do not upload inappropriate avatars. Limit: 3 changes daily. Max 8MB.'}
+                                            </span>
+                                        )}
 
                                         <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
 
@@ -586,45 +766,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
 
                                         <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
 
-                                        <div className="relative flex w-full basis-0 flex-col gap-1 min-w-full">
-                                            <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); handleSaveUsername(); }}>
-                                                <input hidden autoComplete="username" type="text" />
-                                                <div className="space-y-2">
-                                                    <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold text-card-foreground" htmlFor="_r_b1_-form-item-mobile">USERNAME</label>
-                                                    <div className="flex flex-col !mt-1" id="_r_b1_-form-item-mobile">
-                                                        {isEditingUsername ? (
-                                                            <div className="w-full max-w-sm items-center space-x-2 flex">
-                                                                <input
-                                                                    className="flex h-10 w-full rounded-md border border-input bg-field px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                                    placeholder="username"
-                                                                    value={tempUsername}
-                                                                    name="username"
-                                                                    onChange={(e) => setTempUsername(e.target.value)}
-                                                                />
-                                                                <button type="submit" className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10">
-                                                                    <CheckIcon className="h-4 w-4" />
-                                                                </button>
-                                                                <button type="button" onClick={() => setIsEditingUsername(false)} className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 w-10">
-                                                                    <XIcon className="h-4 w-4" />
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="w-full flex flex-row items-center justify-between">
-                                                                <span className="text-brightness/65">{username}</span>
-                                                                <button onClick={() => setIsEditingUsername(true)} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button">Edit</button>
-                                                            </div>
-                                                        )}
+                                        <div className="space-y-2">
+                                            <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold text-card-foreground" htmlFor="nickname-mobile">NICKNAME</label>
+                                            <div className="flex flex-col !mt-1">
+                                                {isEditingUsername ? (
+                                                    <form
+                                                        className="w-full max-w-sm items-center space-x-2 flex"
+                                                        onSubmit={(e) => { e.preventDefault(); handleSaveUsername(); }}
+                                                    >
+                                                        <input
+                                                            id="nickname-mobile"
+                                                            className="flex h-10 w-full rounded-md border border-input bg-field px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                            placeholder="nickname"
+                                                            value={tempUsername}
+                                                            name="username"
+                                                            onChange={(e) => setTempUsername(e.target.value)}
+                                                            autoFocus
+                                                        />
+                                                        <button type="submit" className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10">
+                                                            <CheckIcon className="h-4 w-4" />
+                                                        </button>
+                                                        <button type="button" onClick={() => setIsEditingUsername(false)} className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 w-10">
+                                                            <XIcon className="h-4 w-4" />
+                                                        </button>
+                                                    </form>
+                                                ) : (
+                                                    <div className="w-full flex flex-row items-center justify-between">
+                                                        <span className="text-brightness/65 translate-y-0.5">{displayName}</span>
+                                                        <button
+                                                            onClick={() => setIsEditingUsername(true)}
+                                                            className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary/80 text-secondary-foreground hover:bg-secondary h-9 rounded-md px-3"
+                                                            type="button"
+                                                        >
+                                                            Edit
+                                                        </button>
                                                     </div>
-                                                    <p id="_r_b1_-form-item-description-mobile" className="text-muted-foreground text-xs">You have <b>3</b> name changes left for today.</p>
-                                                </div>
-                                            </form>
+                                                )}
+                                            </div>
+                                            <p className="text-muted-foreground text-xs">You have <b>3</b> name changes left for today.</p>
                                         </div>
 
                                         <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
 
                                         <label className="text-sm font-bold text-card-foreground"> INTERESTS (ON)</label>
                                         <div className="relative flex w-full basis-0 flex-row items-center justify-between gap-1 min-w-full">
-                                            <label className="text-xs text-muted-foreground">You have 0 interests</label>
+                                            <label className="text-xs text-muted-foreground">You have {interests.length} interests</label>
                                             <button onClick={onOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
                                         </div>
                                     </div>
@@ -717,7 +903,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                 <span>Dark Mode</span>
                                                 <span className="font-normal leading-snug text-muted-foreground">Toggle the dark mode for the app.</span>
                                             </label>
-                                            {renderSwitch(darkMode, setDarkMode)}
+                                            {renderSwitch(theme === 'dark', (val) => setTheme(val ? 'dark' : 'light'))}
                                         </div>
                                     </div>
                                 </div>
@@ -760,15 +946,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_"> Avatar </label>
                                             <div className="flex w-full gap-1 min-w-full justify-between items-center py-1 pb-2">
                                                 <span className="relative flex shrink-0 overflow-hidden rounded-full w-16 h-16">
-                                                    <img className="aspect-square h-full w-full" alt={username} src={`https://api.dicebear.com/5.x/thumbs/png?seed=${username}&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67`} />
+                                                    <img className="aspect-square h-full w-full" alt={displayName} src={avatarSrc} />
                                                 </span>
                                                 <div className="flex flex-row gap-1">
-                                                    <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Change</button>
-                                                    <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness">Remove</button>
+                                                    <button onClick={triggerDesktopAvatarPicker} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button" disabled={avatarBusy || !isWasmReady}>Change</button>
+                                                    <button onClick={() => { setAvatarUrl(null); setAvatarError(null); }} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness" type="button" disabled={avatarBusy || !avatarUrl}>Remove</button>
                                                 </div>
-                                                <input className="hidden" id="_r_av_" type="file" />
+                                                <input ref={desktopAvatarInputRef} className="hidden" id="_r_av_" type="file" accept="image/*" onChange={handleAvatarInputChange} />
                                             </div>
-                                            <span className="text-xs text-card-foreground">Avatars are reviewed before displaying. Do not upload inappropriate avatars. Limit: 3 changes daily. Max 8MB.</span>
+                                            {avatarError ? (
+                                                <span className="text-xs text-destructive">{avatarError}</span>
+                                            ) : (
+                                                <span className="text-xs text-card-foreground">
+                                                    {avatarBusy ? 'Optimizing image...' : !isWasmReady ? 'Image compressor loading...' : 'Avatars are reviewed before displaying. Do not upload inappropriate avatars. Limit: 3 changes daily. Max 8MB.'}
+                                                </span>
+                                            )}
 
                                             <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
 
@@ -809,44 +1001,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
 
                                             <div className="relative flex w-full basis-0 flex-col gap-1 min-w-full">
-                                                <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); handleSaveUsername(); }}>
-                                                    <input hidden autoComplete="username" type="text" />
-                                                    <div className="space-y-2">
-                                                        <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold text-card-foreground" htmlFor="_r_b1_-form-item">USERNAME</label>
-                                                        <div className="flex flex-col !mt-1" id="_r_b1_-form-item">
-                                                            {isEditingUsername ? (
-                                                                <div className="w-full max-w-sm items-center space-x-2 flex">
-                                                                    <input
-                                                                        className="flex h-10 w-full rounded-md border border-input bg-field px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                                        placeholder="username"
-                                                                        value={tempUsername}
-                                                                        name="username"
-                                                                        onChange={(e) => setTempUsername(e.target.value)}
-                                                                    />
-                                                                    <button type="submit" className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10">
-                                                                        <CheckIcon className="h-4 w-4" />
-                                                                    </button>
-                                                                    <button type="button" onClick={() => setIsEditingUsername(false)} className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 w-10">
-                                                                        <XIcon className="h-4 w-4" />
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="w-full flex flex-row items-center justify-between">
-                                                                    <span className="text-brightness/65">{username}</span>
-                                                                    <button onClick={() => setIsEditingUsername(true)} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button">Edit</button>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <p id="_r_b1_-form-item-description" className="text-muted-foreground text-xs">You have <b>3</b> name changes left for today.</p>
+                                                <div className="space-y-2">
+                                                    <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold text-card-foreground" htmlFor="nickname-desktop">NICKNAME</label>
+                                                    <div className="flex flex-col !mt-1">
+                                                        {isEditingUsername ? (
+                                                            <form
+                                                                className="w-full max-w-sm items-center space-x-2 flex"
+                                                                onSubmit={(e) => { e.preventDefault(); handleSaveUsername(); }}
+                                                            >
+                                                                <input
+                                                                    id="nickname-desktop"
+                                                                    className="flex h-10 w-full rounded-md border border-input bg-field px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                    placeholder="nickname"
+                                                                    value={tempUsername}
+                                                                    name="username"
+                                                                    onChange={(e) => setTempUsername(e.target.value)}
+                                                                    autoFocus
+                                                                />
+                                                                <button type="submit" className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10">
+                                                                    <CheckIcon className="h-4 w-4" />
+                                                                </button>
+                                                                <button type="button" onClick={() => setIsEditingUsername(false)} className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 w-10">
+                                                                    <XIcon className="h-4 w-4" />
+                                                                </button>
+                                                            </form>
+                                                        ) : (
+                                                            <div className="w-full flex flex-row items-center justify-between">
+                                                                <span className="text-brightness/65 translate-y-0.5">{displayName}</span>
+                                                                <button
+                                                                    onClick={() => setIsEditingUsername(true)}
+                                                                    className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary/80 text-secondary-foreground hover:bg-secondary h-9 rounded-md px-3"
+                                                                    type="button"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                </form>
+                                                    <p className="text-muted-foreground text-xs">You have <b>3</b> name changes left for today.</p>
+                                                </div>
                                             </div>
 
                                             <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
 
                                             <label className="text-sm font-bold text-card-foreground"> INTERESTS (ON)</label>
                                             <div className="relative flex w-full basis-0 flex-row items-center justify-between gap-1 min-w-full">
-                                                <label className="text-xs text-muted-foreground">You have 0 interests</label>
+                                                <label className="text-xs text-muted-foreground">You have {interests.length} interests</label>
                                                 <button onClick={onOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
                                             </div>
                                         </div>
@@ -936,7 +1136,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                     <span>Dark Mode</span>
                                                     <span className="font-normal leading-snug text-muted-foreground">Toggle the dark mode for the app.</span>
                                                 </label>
-                                                {renderSwitch(darkMode, setDarkMode)}
+                                                {renderSwitch(theme === 'dark', (val) => setTheme(val ? 'dark' : 'light'))}
                                             </div>
                                         </div>
                                     )}
@@ -970,9 +1170,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                     isOpen={showDeleteModal}
                     onClose={() => setShowDeleteModal(false)}
                     onDelete={() => {
-                        setShowDeleteModal(false);
-                        onClose();
+                        handleDeleteAccount();
                     }}
+                />
+                <AvatarCropModal
+                    isOpen={showAvatarCropModal}
+                    imageSrc={selectedImageSrc}
+                    onClose={() => setShowAvatarCropModal(false)}
+                    onCropComplete={handleCropComplete}
                 />
             </div>
         </>

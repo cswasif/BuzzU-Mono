@@ -2,11 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../chat-styles.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSessionStore } from '../stores/sessionStore';
-import { useSignaling, SignalingMessage } from '../hooks/useSignaling';
+import { useSignaling } from '../hooks/useSignaling';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { BuzzULogoIcon } from '../../components/SocialLanding/Icons';
-
-const SIGNALING_URL = process.env.SIGNALING_URL || 'wss://buzzu-signaling.md-wasif-faisal.workers.dev';
 
 interface ChatMessage {
     id: string;
@@ -19,7 +17,7 @@ interface ChatMessage {
 export const ChatPage: React.FC = () => {
     const { roomId } = useParams<{ roomId: string }>();
     const navigate = useNavigate();
-    const { peerId, partnerId, chatMode, isVerified, idToken, leaveRoom, initSession } = useSessionStore();
+    const { peerId, partnerId, chatMode, isVerified, idToken, leaveRoom, initSession, avatarSeed } = useSessionStore();
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputText, setInputText] = useState('');
@@ -29,124 +27,65 @@ export const ChatPage: React.FC = () => {
 
     const localVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => { initSession(); }, [initSession]);
 
-    // WebRTC
     const {
-        localStream,
-        remoteStream,
-        connectionState,
-        isScreenSharing,
-        partnerVerified,
-        createPeerConnection,
-        startLocalMedia,
-        createOffer,
-        handleOffer,
-        handleAnswer,
-        addIceCandidate,
-        onIceCandidate,
-        sendDataMessage,
-        startScreenShare,
-        stopScreenShare,
-        cleanup: cleanupWebRTC,
-    } = useWebRTC({
-        localIdToken: isVerified ? idToken : null,
-        onDataMessage: (data) => {
-            try {
-                const msg = JSON.parse(data);
-                if (msg.type === 'chat') {
-                    addChatMessage(msg.from || 'Stranger', msg.text, false);
-                }
-            } catch { /* ignore non-json messages */ }
-        },
-        onRemoteStream: (stream) => {
-            if (remoteVideoRef.current) {
-                remoteVideoRef.current.srcObject = stream;
+        isConnected, connect, disconnect, localStream, startLocalStream, stopLocalStream,
+        sendChatMessage, onChatMessage, onPeerJoin, onPeerLeave
+    } = useSignaling();
+
+    const { initiateCall, closePeerConnection, setLocalStream } = useWebRTC();
+
+    useEffect(() => {
+        if (roomId && peerId) {
+            connect(roomId, peerId);
+        }
+        return () => disconnect();
+    }, [connect, disconnect, roomId, peerId]);
+
+    useEffect(() => {
+        onPeerJoin(async (joinedPeerId) => {
+            setPeerReady(true);
+            let stream = localStream;
+            if (chatMode === 'video' && !stream) {
+                try {
+                    stream = await startLocalStream({ video: true, audio: true });
+                } catch { /* ignore */ }
             }
-        },
-    });
-
-    // Signaling message handler
-    const handleSignalingMessage = useCallback(async (msg: SignalingMessage) => {
-        switch (msg.type) {
-            case 'Offer':
-                if (msg.payload) {
-                    const answerSdp = await handleOffer(msg.payload);
-                    sendAnswerSignal(msg.from!, answerSdp);
-                }
-                break;
-            case 'Answer':
-                if (msg.payload) {
-                    await handleAnswer(msg.payload);
-                }
-                break;
-            case 'IceCandidate':
-                if (msg.payload) {
-                    await addIceCandidate(msg.payload);
-                }
-                break;
-            case 'Join':
-                if (msg.peer_id !== peerId) {
-                    setPeerReady(true);
-                    // We initiate the offer
-                    await initiateConnection(msg.peer_id!);
-                }
-                break;
-            case 'Leave':
-                addChatMessage('System', 'Stranger has disconnected', false);
-                setPeerReady(false);
-                break;
-        }
-    }, [handleOffer, handleAnswer, addIceCandidate, peerId]);
-
-    const { isConnected, connect, disconnect, sendOffer, sendAnswer, sendIceCandidate } = useSignaling({
-        signalingUrl: SIGNALING_URL,
-        roomId: roomId || '',
-        peerId,
-        onMessage: handleSignalingMessage,
-        autoConnect: true,
-    });
-
-    const sendAnswerSignal = useCallback((toPeer: string, sdp: string) => {
-        sendAnswer(toPeer, sdp);
-    }, [sendAnswer]);
-
-    const initiateConnection = useCallback(async (targetPeerId: string) => {
-        createPeerConnection();
-
-        // Start local media for video mode
-        if (chatMode === 'video') {
-            try { await startLocalMedia(true, true); } catch { /* cam not available */ }
-        }
-
-        // Set up ICE candidate forwarding
-        onIceCandidate((candidate) => {
-            sendIceCandidate(targetPeerId, candidate);
+            if (stream) {
+                initiateCall(joinedPeerId, stream);
+            }
         });
 
-        const offerSdp = await createOffer();
-        sendOffer(targetPeerId, offerSdp);
-    }, [chatMode, createPeerConnection, startLocalMedia, onIceCandidate, sendIceCandidate, createOffer, sendOffer]);
+        onPeerLeave((leftPeerId) => {
+            addChatMessage('System', 'Stranger has disconnected', false);
+            setPeerReady(false);
+            closePeerConnection(leftPeerId);
+        });
+
+        onChatMessage((msg, from) => {
+            if (from !== peerId) {
+                addChatMessage(msg.username || 'Stranger', msg.content, false);
+            }
+        });
+    }, [onPeerJoin, onPeerLeave, onChatMessage, chatMode, localStream, startLocalStream, closePeerConnection, initiateCall, peerId]);
 
     // Attach local stream to video element
     useEffect(() => {
         if (localVideoRef.current && localStream) {
             localVideoRef.current.srcObject = localStream;
         }
-    }, [localStream]);
+        setLocalStream(localStream ?? null);
+    }, [localStream, setLocalStream]);
 
-    useEffect(() => {
-        if (remoteVideoRef.current && remoteStream) {
-            remoteVideoRef.current.srcObject = remoteStream;
-        }
-    }, [remoteStream]);
 
-    // Auto-scroll messages
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+
+    // Auto-scroll handled by CSS column-reverse pattern + reversed message mapping
+    const scrollToBottom = useCallback(() => {
+        // No-op - handled by CSS
+    }, []);
 
     const addChatMessage = (from: string, text: string, isOwn: boolean) => {
         setMessages(prev => [...prev, {
@@ -164,14 +103,19 @@ export const ChatPage: React.FC = () => {
         const text = inputText.trim();
         addChatMessage(peerId, text, true);
 
-        // Send via WebRTC data channel (P2P, no server)
-        sendDataMessage(JSON.stringify({ type: 'chat', from: peerId, text }));
+        sendChatMessage(partnerId || '', {
+            id: `${Date.now()}_${Math.random()}`,
+            username: 'You',
+            avatarSeed: 'test',
+            timestamp: Date.now().toString(),
+            content: text
+        });
 
         setInputText('');
     };
 
     const handleSkip = () => {
-        cleanupWebRTC();
+        stopLocalStream();
         disconnect();
         leaveRoom();
         navigate('/match');
@@ -202,7 +146,7 @@ export const ChatPage: React.FC = () => {
             {chatMode === 'video' && (
                 <div className="video-area">
                     <div className="remote-video-container">
-                        <video ref={remoteVideoRef} autoPlay playsInline className="remote-video" />
+                        <video ref={remoteVideoRef} data-remote-peer={partnerId} autoPlay playsInline className="remote-video" />
                         {!peerReady && (
                             <div className="video-placeholder">
                                 <span>Waiting for stranger...</span>
@@ -226,34 +170,23 @@ export const ChatPage: React.FC = () => {
                         {isConnected ? '🟢 Connected' : '🔴 Connecting...'}
                     </span>
                     <span className="connection-state">
-                        {connectionState === 'connected' ? '🔗 P2P Active' :
-                            connectionState === 'connecting' ? '⏳ Establishing P2P...' : ''}
+                        {peerReady ? '🔗 P2P Active' : '⏳ Establishing P2P...'}
                     </span>
                 </div>
                 <span className="encryption-badge">🔒 E2E Encrypted</span>
-                {partnerVerified && (
-                    <div className="verified-badge-mini flex items-center gap-1 bg-primary/10 px-2 py-0.5 rounded border border-primary/30">
-                        <span className="text-[10px] font-bold text-primary">✓ VERIFIED STUDENT</span>
-                    </div>
-                )}
+                {/* Removed Partner Verified temporarily as hook rewritten */}
             </div>
 
             {/* Chat Messages */}
             <div className="chat-area">
                 <div className="messages-container">
-                    {messages.length === 0 && (
-                        <div className="chat-empty">
-                            <p>👋 Say hi to your new stranger!</p>
-                            <p className="chat-hint">Messages are end-to-end encrypted and never stored.</p>
-                        </div>
-                    )}
-                    {messages.map(msg => (
+                    {[...messages].reverse().map(msg => (
                         <div key={msg.id} className={`message ${msg.isOwn ? 'own' : 'other'}`}>
                             <div className="message-sender flex items-center gap-1">
                                 {msg.isOwn ? (
                                     <>You {isVerified && <span className="text-primary text-xs">✓</span>}</>
                                 ) : (
-                                    <>Stranger {partnerVerified && <span className="text-primary text-xs">✓</span>}</>
+                                    <>Stranger</>
                                 )}
                             </div>
                             <div className="message-text">{msg.text}</div>
@@ -262,16 +195,25 @@ export const ChatPage: React.FC = () => {
                             </div>
                         </div>
                     ))}
-                    <div ref={messagesEndRef} />
+                    {messages.length === 0 && (
+                        <div className="chat-empty">
+                            <p>👋 Say hi to your new stranger!</p>
+                            <p className="chat-hint">Messages are end-to-end encrypted and never stored.</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Input */}
                 <div className="chat-input-area">
                     <input
+                        ref={inputRef}
                         type="text"
                         value={inputText}
                         onChange={e => setInputText(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
+                        onFocus={() => {
+                            // Handled by CSS column-reverse
+                        }}
                         placeholder="Type a message..."
                         className="chat-input"
                     />
@@ -291,12 +233,7 @@ export const ChatPage: React.FC = () => {
                         <button onClick={toggleCamera} className={`control-btn ${isCamOff ? 'active' : ''}`}>
                             {isCamOff ? '📷' : '📹'}
                         </button>
-                        <button
-                            onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-                            className={`control-btn ${isScreenSharing ? 'active' : ''}`}
-                        >
-                            🖥️
-                        </button>
+
                     </>
                 )}
                 <button onClick={handleSkip} className="skip-btn">
