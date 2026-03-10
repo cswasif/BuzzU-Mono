@@ -1,14 +1,25 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Smile, Paperclip, X, RotateCcw, Reply, Edit3, Image as ImageIcon, FileImage, XCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Message } from './types';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
-import { EmojiPicker } from './EmojiPicker';
-import { GifPicker } from './GifPicker';
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import {
+  Send,
+  Smile,
+  Paperclip,
+  X,
+  RotateCcw,
+  Reply,
+  Edit3,
+  Image as ImageIcon,
+  FileImage,
+  XCircle,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Message } from "./types";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { EmojiPicker } from "./EmojiPicker";
+import { GifPicker } from "./GifPicker";
 // IGif import removed because we are switching to Klipy
 
 function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(' ');
+  return classes.filter(Boolean).join(" ");
 }
 
 interface MessageInputProps {
@@ -16,7 +27,15 @@ interface MessageInputProps {
   editingMessage: Message | null;
   onCancelReply: () => void;
   onCancelEdit: () => void;
-  connectionState: 'idle' | 'setup' | 'searching' | 'connecting' | 'connected' | 'partner_skipped' | 'self_skipped' | 'waiting';
+  connectionState:
+    | "idle"
+    | "setup"
+    | "searching"
+    | "connecting"
+    | "connected"
+    | "partner_skipped"
+    | "self_skipped"
+    | "waiting";
   onStart: () => void;
   onStop: () => void;
   onSkip: () => void;
@@ -46,7 +65,7 @@ export function MessageInput({
   onSkip,
   onSend,
   isPartnerTyping = false,
-  partnerName = 'Stranger',
+  partnerName = "Stranger",
   onTyping,
   onSelectFiles,
   isGifPickerOpen = false,
@@ -59,7 +78,9 @@ export function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const gifButtonRef = useRef<HTMLButtonElement>(null);
-  const [skipState, setSkipState] = useState<'initial' | 'confirming'>('initial');
+  const [skipState, setSkipState] = useState<"initial" | "confirming">(
+    "initial",
+  );
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -69,8 +90,8 @@ export function MessageInput({
   };
 
   useEffect(() => {
-    if (connectionState !== 'connected') {
-      setSkipState('initial');
+    if (connectionState !== "connected") {
+      setSkipState("initial");
     }
   }, [connectionState]);
 
@@ -78,11 +99,15 @@ export function MessageInput({
     if (editingMessage && textareaRef.current) {
       textareaRef.current.value = editingMessage.content;
       textareaRef.current.focus();
+      // Trigger resize so multi-line edit content expands the box
+      textareaRef.current.style.height = "auto";
+      const maxH = window.innerWidth >= 1024 ? 384 : 112;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, maxH)}px`;
     }
   }, [editingMessage]);
 
   useEffect(() => {
-    if (!replyingTo || connectionState !== 'connected') return;
+    if (!replyingTo || connectionState !== "connected") return;
     const focusInput = () => {
       const input = textareaRef.current;
       if (!input) return;
@@ -94,7 +119,7 @@ export function MessageInput({
       const len = input.value.length;
       try {
         input.setSelectionRange(len, len);
-      } catch { }
+      } catch {}
     };
     const frame = requestAnimationFrame(() => focusInput());
     const timer = setTimeout(() => focusInput(), 50);
@@ -105,39 +130,48 @@ export function MessageInput({
   }, [replyingTo, connectionState]);
 
   const handleSkipClick = () => {
-    if (skipState === 'initial') {
-      setSkipState('confirming');
+    if (skipState === "initial") {
+      setSkipState("confirming");
     } else {
       onSkip();
-      setSkipState('initial');
+      setSkipState("initial");
     }
   };
 
   // Auto-reset confirming state after 3 seconds
   const confirmTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
-    if (skipState === 'confirming') {
-      confirmTimeoutRef.current = setTimeout(() => setSkipState('initial'), 3000);
+    if (skipState === "confirming") {
+      confirmTimeoutRef.current = setTimeout(
+        () => setSkipState("initial"),
+        3000,
+      );
     }
-    return () => { if (confirmTimeoutRef.current) clearTimeout(confirmTimeoutRef.current); };
+    return () => {
+      if (confirmTimeoutRef.current) clearTimeout(confirmTimeoutRef.current);
+    };
   }, [skipState]);
 
   // Global ESC key handler — drives the entire state machine
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== "Escape") return;
       e.preventDefault();
 
-      if (connectionState === 'idle' || connectionState === 'partner_skipped' || connectionState === 'self_skipped') {
+      if (
+        connectionState === "idle" ||
+        connectionState === "partner_skipped" ||
+        connectionState === "self_skipped"
+      ) {
         onStart();
-      } else if (connectionState === 'searching') {
+      } else if (connectionState === "searching") {
         onStop();
-      } else if (connectionState === 'connected') {
+      } else if (connectionState === "connected") {
         handleSkipClick();
       }
     };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
   }, [connectionState, skipState, onStart, onStop]); // handleSkipClick is stable via closure
 
   const handleEmojiSelect = (emoji: any) => {
@@ -150,50 +184,70 @@ export function MessageInput({
       const after = text.substring(end);
 
       textarea.value = before + emoji.native + after;
-      textarea.selectionStart = textarea.selectionEnd = start + emoji.native.length;
+      textarea.selectionStart = textarea.selectionEnd =
+        start + emoji.native.length;
       textarea.focus();
     }
     setIsEmojiPickerOpen(false);
   };
 
-  const handleGifSelect = useCallback((gif: any) => {
-    // Klipy GifImage object has a direct 'url' property for the full GIF
-    const gifUrl = gif.url;
-    onSend(`![gif](${gifUrl})`, replyingTo);
-    onCloseGifPicker();
-    onTyping(false);
-  }, [onSend, replyingTo, onCloseGifPicker, onTyping]);
+  const handleGifSelect = useCallback(
+    (gif: any) => {
+      // Klipy GifImage object has a direct 'url' property for the full GIF
+      const gifUrl = gif.url;
+      onSend(`![gif](${gifUrl})`, replyingTo);
+      onCloseGifPicker();
+      onTyping(false);
+    },
+    [onSend, replyingTo, onCloseGifPicker, onTyping],
+  );
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = textareaRef.current?.value.trim();
-    if (val && connectionState === 'connected') {
+    if (val && connectionState === "connected") {
       onSend(val, replyingTo);
       clearTypingState();
       if (textareaRef.current) {
-        textareaRef.current.value = '';
-        textareaRef.current.style.height = '44px';
+        textareaRef.current.value = "";
+        // Reset to single-row height after send
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.style.height = "44px";
       }
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      // Plain Enter → send message
       e.preventDefault();
       const val = textareaRef.current?.value.trim();
-      if (val && connectionState === 'connected') {
+      if (val && connectionState === "connected") {
         onSend(val, replyingTo);
         clearTypingState();
         if (textareaRef.current) {
-          textareaRef.current.value = '';
-          textareaRef.current.style.height = '44px';
+          textareaRef.current.value = "";
+          // Reset to single-row height after send
+          textareaRef.current.style.height = "auto";
+          textareaRef.current.style.height = "44px";
         }
       }
     }
+    // Shift+Enter → browser inserts a newline; handleInputChange will resize
   };
 
   const handleInputChange = () => {
-    if (connectionState === 'connected' && onTyping) {
+    // Auto-resize textarea to fit content (enables proper Shift+Enter multiline)
+    const textarea = textareaRef.current;
+    if (textarea) {
+      // Reset to auto so scrollHeight reflects actual content height
+      textarea.style.height = "auto";
+      // Cap at Tailwind's max-h-28 (112px) on mobile, max-h-96 (384px) on lg+
+      const maxH = window.innerWidth >= 1024 ? 384 : 112;
+      textarea.style.height = `${Math.min(textarea.scrollHeight, maxH)}px`;
+    }
+
+    if (connectionState === "connected" && onTyping) {
       onTyping(true);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
@@ -204,8 +258,10 @@ export function MessageInput({
 
   return (
     <div className="relative flex w-full flex-row bg-popover">
-      <div className="dmtextarea px-4 lg:px-7 mx-auto" style={{ width: '100%' }}>
-
+      <div
+        className="dmtextarea px-4 lg:px-7 mx-auto"
+        style={{ width: "100%" }}
+      >
         {/* Reply/Edit Banner (Matched to Screenshot) */}
         <AnimatePresence>
           {(replyingTo || editingMessage) && (
@@ -217,7 +273,7 @@ export function MessageInput({
             >
               <div className="flex-1 truncate">
                 <span className="text-muted-foreground mr-1.5 font-medium">
-                  {replyingTo ? 'Replying to' : 'Editing message for'}
+                  {replyingTo ? "Replying to" : "Editing message for"}
                 </span>
                 <span className="font-bold text-foreground">
                   {replyingTo?.username || editingMessage?.username}
@@ -241,23 +297,39 @@ export function MessageInput({
               </kbd>
               <button
                 onClick={
-                  connectionState === 'idle' || connectionState === 'partner_skipped' || connectionState === 'self_skipped' ? onStart :
-                    connectionState === 'searching' ? onStop :
-                      handleSkipClick
+                  connectionState === "idle" ||
+                  connectionState === "partner_skipped" ||
+                  connectionState === "self_skipped"
+                    ? onStart
+                    : connectionState === "searching"
+                      ? onStop
+                      : handleSkipClick
                 }
-                className={`inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-11 px-2 rounded-md lg:rounded-l-none ${connectionState === 'connected' || connectionState === 'partner_skipped' || connectionState === 'self_skipped'
-                  ? 'bg-warning text-warning-foreground hover:bg-warning/90 shadow'
-                  : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow'
-                  }`}
+                className={`inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-11 px-2 rounded-md lg:rounded-l-none ${
+                  connectionState === "connected" ||
+                  connectionState === "partner_skipped" ||
+                  connectionState === "self_skipped"
+                    ? "bg-warning text-warning-foreground hover:bg-warning/90 shadow"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90 shadow"
+                }`}
               >
-                {connectionState === 'idle' || connectionState === 'partner_skipped' || connectionState === 'self_skipped' ? 'START' :
-                  connectionState === 'searching' ? 'STOP' :
-                    (skipState === 'confirming' ? 'CONFIRM?' : 'SKIP')}
+                {connectionState === "idle" ||
+                connectionState === "partner_skipped" ||
+                connectionState === "self_skipped"
+                  ? "START"
+                  : connectionState === "searching"
+                    ? "STOP"
+                    : skipState === "confirming"
+                      ? "CONFIRM?"
+                      : "SKIP"}
               </button>
             </span>
           )}
 
-          <form className="flex flex-1 min-w-0 flex-col relative z-20" onSubmit={handleFormSubmit}>
+          <form
+            className="flex flex-1 min-w-0 flex-col relative z-20"
+            onSubmit={handleFormSubmit}
+          >
             <div className="flex flex-row gap-1.5">
               <div className="textarea flex-1 overflow-auto rounded-lg relative flex flex-row h-full items-center gap-1 bg-card dark:bg-placeholder py-0 px-2 outline-none">
                 <input
@@ -269,7 +341,7 @@ export function MessageInput({
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
                     if (files.length > 0 && onSelectFiles) onSelectFiles(files);
-                    e.target.value = ''; // Reset for same file selection
+                    e.target.value = ""; // Reset for same file selection
                   }}
                 />
 
@@ -277,10 +349,21 @@ export function MessageInput({
                 <button
                   type="button"
                   className="self-center text-zinc-600 dark:text-inherit hover:text-zinc-700 dark:hover:text-current p-1 disabled:opacity-50"
-                  disabled={connectionState !== 'connected'}
-                  onClick={() => document.getElementById('image-upload')?.click()}
+                  disabled={connectionState !== "connected"}
+                  onClick={() =>
+                    document.getElementById("image-upload")?.click()
+                  }
                 >
-                  <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 16 16" className="h-5 w-5" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
+                  <svg
+                    stroke="currentColor"
+                    fill="currentColor"
+                    strokeWidth="0"
+                    viewBox="0 0 16 16"
+                    className="h-5 w-5"
+                    height="1em"
+                    width="1em"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
                     <path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3"></path>
                     <path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 2 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2M14 2H4a1 1 0 0 0-1 1h9.002a2 2 0 0 1 2 2v7A1 1 0 0 0 15 11V3a1 1 0 0 0-1-1M2.002 4a1 1 0 0 0-1 1v8l2.646-2.354a.5.5 0 0 1 .63-.062l2.66 1.773 3.71-3.71a.5.5 0 0 1 .577-.094l1.777 1.947V5a1 1 0 0 0-1-1z"></path>
                   </svg>
@@ -288,11 +371,17 @@ export function MessageInput({
 
                 <textarea
                   ref={textareaRef}
-                  placeholder={connectionState !== 'connected' ? 'Click START to chat...' : (editingMessage ? 'Edit message' : 'Send a message')}
+                  placeholder={
+                    connectionState !== "connected"
+                      ? "Click START to chat..."
+                      : editingMessage
+                        ? "Edit message"
+                        : "Send a message"
+                  }
                   aria-label="Send a message"
                   maxLength={2000}
                   rows={1}
-                  disabled={connectionState !== 'connected'}
+                  disabled={connectionState !== "connected"}
                   onKeyDown={handleKeyDown}
                   onChange={handleInputChange}
                   className="max-h-28 text-base md:text-sm px-1 py-3 outline-none lg:max-h-96 bg-inherit resize-none w-full scrollbar-t placeholder:truncate placeholder:text-placeholder-foreground/80 dark:placeholder:text-placeholder-foreground/50 disabled:opacity-50 disabled:cursor-not-allowed fixed-input-height"
@@ -306,12 +395,19 @@ export function MessageInput({
                   onClick={onToggleGifPicker}
                   className={cn(
                     "p-2 hover:bg-accent rounded-full transition-colors",
-                    isGifPickerOpen && "text-primary bg-accent"
+                    isGifPickerOpen && "text-primary bg-accent",
                   )}
                   title="GIPHY GIFs"
-                  disabled={connectionState !== 'connected'}
+                  disabled={connectionState !== "connected"}
                 >
-                  <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 256 256" className="w-[1.125rem] h-[1.125rem]" xmlns="http://www.w3.org/2000/svg">
+                  <svg
+                    stroke="currentColor"
+                    fill="currentColor"
+                    strokeWidth="0"
+                    viewBox="0 0 256 256"
+                    className="w-[1.125rem] h-[1.125rem]"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
                     <path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM112,144a32,32,0,0,1-64,0V112a32,32,0,0,1,55.85-21.33,8,8,0,1,1-11.92,10.66A16,16,0,0,0,64,112v32a16,16,0,0,0,32,0v-8H88a8,8,0,0,1,0-16h16a8,8,0,0,1,8,8Zm32,24a8,8,0,0,1-16,0V88a8,8,0,0,1,16,0Zm60-72H176v24h20a8,8,0,0,1,0,16H176v32a8,8,0,0,1-16,0V88a8,8,0,0,1,8-8h36a8,8,0,0,1,0,16Z"></path>
                   </svg>
                 </button>
@@ -322,9 +418,18 @@ export function MessageInput({
                   type="button"
                   onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
                   className="p-1 disabled:opacity-50"
-                  disabled={connectionState !== 'connected'}
+                  disabled={connectionState !== "connected"}
                 >
-                  <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 496 512" className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition" height="20" width="20" xmlns="http://www.w3.org/2000/svg">
+                  <svg
+                    stroke="currentColor"
+                    fill="currentColor"
+                    strokeWidth="0"
+                    viewBox="0 0 496 512"
+                    className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
+                    height="20"
+                    width="20"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
                     <path d="M248 8C111 8 0 119 0 256s111 248 248 248 248-111 248-248S385 8 248 8zm80 168c17.7 0 32 14.3 32 32s-14.3 32-32 32-32-14.3-32-32 14.3-32 32-32zm-160 0c17.7 0 32 14.3 32 32s-14.3 32-32 32-32-14.3-32-32 14.3-32 32-32zm194.8 170.2C334.3 380.4 292.5 400 248 400s-86.3-19.6-114.8-53.8c-13.6-16.3 11-36.7 24.6-20.5 22.4 26.9 55.2 42.2 90.2 42.2s67.8-15.4 90.2-42.2c13.4-16.2 38.1 4.2 24.6 20.5z"></path>
                   </svg>
                 </button>
@@ -344,7 +449,7 @@ export function MessageInput({
         {!editingMessage && isGifPickerOpen && (
           <GifPicker
             isOpen={isGifPickerOpen}
-            onClose={onCloseGifPicker || (() => { })}
+            onClose={onCloseGifPicker || (() => {})}
             onGifSelect={handleGifSelect}
             variant="floating"
             anchorRef={gifButtonRef}
@@ -368,7 +473,8 @@ export function MessageInput({
                   <span className="typing-dot" />
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  <strong className="text-foreground">{partnerName}</strong> is typing...
+                  <strong className="text-foreground">{partnerName}</strong> is
+                  typing...
                 </div>
               </motion.div>
             )}

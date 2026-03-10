@@ -35,13 +35,33 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
     const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
-    const { sendDmMessage, editDmMessage, deleteDmMessage } = useDmSignaling();
+    const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+    const { sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping } = useDmSignaling();
 
     const currentMessages = activeDmFriend ? (dmMessages[activeDmFriend.id] || []) : [];
 
     useEffect(() => {
-        if (activeDmFriend) setHasNewDmMessage(false);
+        if (activeDmFriend) {
+            setHasNewDmMessage(false);
+            setIsPartnerTyping(false); // Reset on switch
+        }
     }, [activeDmFriend, setHasNewDmMessage]);
+
+    // Handle incoming typing events
+    useEffect(() => {
+        if (!activeDmFriend) return;
+        return onTyping((friendId, isTyping) => {
+            if (friendId === activeDmFriend.id) {
+                setIsPartnerTyping(isTyping);
+            }
+        });
+    }, [activeDmFriend, onTyping]);
+
+    const handleTyping = useCallback((isTyping: boolean) => {
+        if (activeDmFriend) {
+            sendTyping(activeDmFriend.id, isTyping);
+        }
+    }, [activeDmFriend, sendTyping]);
 
     const handleReply = (message: Message) => {
         setReplyingTo(message);
@@ -145,7 +165,7 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
                     partnerName={activeDmFriend.username}
                     onReply={handleReply}
                     onEdit={handleEdit}
-                    onReport={() => {}}
+                    onReport={() => { }}
                     onDelete={handleDelete}
                     highlightedMessageId={highlightedMessageId}
                     editingMessageId={editingMessageId}
@@ -161,11 +181,13 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
             <MessageInput
                 onSend={handleSendMessage}
                 connectionState="connected"
-                onStart={() => {}}
-                onStop={() => {}}
-                onSkip={() => {}}
-                onTyping={() => {}}
-                onSelectFiles={() => {}}
+                onStart={() => { }}
+                onStop={() => { }}
+                onSkip={() => { }}
+                onTyping={handleTyping}
+                isPartnerTyping={isPartnerTyping}
+                partnerName={activeDmFriend.username}
+                onSelectFiles={() => { }}
                 replyingTo={replyingTo}
                 editingMessage={null}
                 onCancelReply={() => setReplyingTo(null)}
@@ -184,7 +206,7 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
                     username={activeDmFriend.username}
                     avatarSeed={activeDmFriend.avatarSeed}
                     requestStatus="friends"
-                    onAddFriend={() => {}}
+                    onAddFriend={() => { }}
                 />
             )}
         </main>

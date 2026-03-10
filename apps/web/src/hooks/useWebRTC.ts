@@ -121,6 +121,13 @@ async function preferH264Codec(pc: RTCPeerConnection, isOffer = true): Promise<R
   return offerOptions;
 }
 
+// Global reference for connection type monitoring
+declare global {
+  interface Window {
+    __peerConnections?: Map<string, RTCPeerConnection>;
+  }
+}
+
 export function useWebRTC(): UseWebRTCResult {
   const { stunServers, turnServers } = useIceServers();
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -652,6 +659,12 @@ export function useWebRTC(): UseWebRTCResult {
           console.log('[useWebRTC] Detected remote SCREEN SHARE video track from', targetPeerId,
             '(signaled:', screenShareState.isRemoteSharing, 'existingVideo:', existingVideoReceivers.length, ')');
 
+          // Ensure the track is enabled - some browsers disable tracks on ICE disruption
+          if (event.track.readyState === 'live' && !event.track.enabled) {
+            console.log('[useWebRTC] Enabling disabled screen share track from', targetPeerId);
+            event.track.enabled = true;
+          }
+
           // Set correct contentHint for the screen share track on the
           // receiver side. contentHint does NOT propagate over WebRTC —
           // the sender sets 'detail' on their end but the receiver gets a
@@ -714,6 +727,13 @@ export function useWebRTC(): UseWebRTCResult {
 
         if (isScreenShareAudio) {
           console.log('[useWebRTC] Detected remote SCREEN SHARE audio track from', targetPeerId);
+          
+          // Ensure the audio track is enabled
+          if (event.track.readyState === 'live' && !event.track.enabled) {
+            console.log('[useWebRTC] Enabling disabled screen share audio track from', targetPeerId);
+            event.track.enabled = true;
+          }
+          
           // Update the screen share stream so the ScreenShareViewer
           // <video> element picks up the audio track for playback.
           useScreenShareStore.getState().setRemoteSharing(stream);
@@ -802,6 +822,11 @@ export function useWebRTC(): UseWebRTCResult {
     }
 
     peerConnectionsRef.current.set(targetPeerId, pc);
+    
+    // Make peer connections globally accessible for connection type monitoring
+    if (typeof window !== 'undefined') {
+      window.__peerConnections = peerConnectionsRef.current;
+    }
 
     // ── PC-scoped fallback timers ─────────────────────────────────
     // Capture `pc` so stale timers from a destroyed PC don't fire

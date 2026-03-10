@@ -11,3 +11,33 @@ target/
 **/target/
 **/dist/
 **/.wrangler/
+
+# Build artifacts & logs
+build_error.log
+apps/web/build_error.log
+apps/web/page-dump.html
+
+# Archives & zips (should not be committed)
+*.7z
+*.zip
+
+# Generated/placeholder images committed by mistake
+apps/web/Gemini_Generated_Image_*.png
+apps/web/c2a75d542a5313cc03932e7a8e85c61b.jpg
+apps/web/mobile2.png
+
+# Dev/scratch scripts at repo root
+load-test.js
+test_ws.js
+test.html
+test_avatars.html
+
+# Web app scratch files
+apps/web/buzzu_vibes_1000.txt
+apps/web/extract_songs.cjs
+apps/web/chitchat-dashboard/
+apps/web/x-_-twitter-clone/
+
+# WASM build tooling installers
+packages/wasm/vs_buildtools.exe
+packages/wasm/vs_community.exe

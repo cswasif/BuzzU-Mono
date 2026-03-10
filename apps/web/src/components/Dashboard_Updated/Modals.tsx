@@ -209,31 +209,37 @@ const DeleteAccountModal: React.FC<{
     if (!isOpen) return null;
 
     return createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-background text-foreground border border-border p-6 rounded-lg shadow-lg w-full max-w-md flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-destructive font-bold text-lg">
-                        <UserXIcon className="w-6 h-6" />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+            <div
+                className="bg-background text-foreground border border-border p-6 shadow-lg duration-200 animate-in fade-in zoom-in-95 sm:rounded-lg w-full max-w-md flex flex-col gap-4 select-text"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+                    <div className="flex items-center gap-2 text-destructive font-semibold leading-none tracking-tight text-lg mb-1">
+                        <UserXIcon className="w-5 h-5" />
                         <h2>Delete Account</h2>
                     </div>
-                    <p className="text-sm text-muted-foreground">Note: If you want to take a break, you can log out instead.</p>
-                    <ul className="list-disc list-inside text-sm text-muted-foreground/90 space-y-1">
+                    <p className="text-sm text-muted-foreground text-start">Note: If you want to take a break, you can log out instead.</p>
+                </div>
+
+                <div className="flex flex-col gap-3 py-2">
+                    <ul className="list-disc list-inside text-sm text-muted-foreground/90 space-y-2">
                         <li>This clears all BuzzU data stored in this browser (localStorage, sessionStorage, IndexedDB, caches).</li>
                         <li>You will be signed out and the app will immediately reload.</li>
                         <li>This does not delete any server-side account data.</li>
                     </ul>
                 </div>
 
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-row gap-2 justify-end pt-2">
                     <button
                         onClick={onDelete}
-                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 px-4 py-2"
+                        className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-[#ef4444] text-white hover:bg-[#dc2626] h-10 px-4 active:scale-95 shadow-sm"
                     >
                         Delete My Account
                     </button>
                     <button
                         onClick={onClose}
-                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+                        className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-4 active:scale-95"
                     >
                         Cancel
                     </button>
@@ -328,8 +334,8 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
                                 key={filter}
                                 onClick={() => setGenderFilter(filter)}
                                 className={`flex-1 px-2 py-1.5 text-xs rounded-md transition-colors border ${genderFilter === filter
-                                        ? 'bg-primary text-primary-foreground border-primary'
-                                        : 'bg-muted text-muted-foreground border-border hover:bg-accent'
+                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    : 'bg-muted text-muted-foreground border-border hover:bg-accent'
                                     }`}
                             >
                                 {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -427,14 +433,36 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
 
 // --- Settings Modal ---
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInterests, theme: propTheme = 'light' }) => {
-    const { displayName, setDisplayName, theme, setTheme, interests, avatarSeed, avatarUrl, setAvatarUrl } = useSessionStore();
+    const {
+        displayName, setDisplayName,
+        theme, setTheme,
+        interests, avatarSeed, avatarUrl, setAvatarUrl,
+        bannerType, setBannerType,
+        bannerColor, setBannerColor,
+        bannerGradient, setBannerGradient
+    } = useSessionStore();
     const { wasm } = useWasm();
     const [activeTab, setActiveTab] = useState('Profile');
     const [isEditingUsername, setIsEditingUsername] = useState(false);
     const [tempUsername, setTempUsername] = useState(displayName);
-    const [bannerType, setBannerType] = useState<'Simple' | 'Gradient'>('Simple');
     const [showColorPicker, setShowColorPicker] = useState(false);
-    const [bannerColor, setBannerColor] = useState('#5B21B6');
+
+    const gradients = [
+        'linear-gradient(45deg, #d53f8c, #4f46e5)', // Default/Lavender-ish
+        'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // Deep Purple
+        'linear-gradient(to right, #00c6ff, #0072ff)', // Ocean Blue
+        'linear-gradient(to right, #f83600 0%, #f9d423 100%)', // Sunset
+        'linear-gradient(to right, #11998e, #38ef7d)', // Emerald
+        'linear-gradient(to right, #ff00cc, #3333ff)', // Neon
+        'linear-gradient(to right, #000000, #434343)', // Pitch Black / Carbon
+    ];
+
+    const exoticGradients = [
+        { name: 'Aurora', class: 'bg-mesh-aurora' },
+        { name: 'Midnight', class: 'bg-mesh-midnight' },
+        { name: 'Velvet', class: 'bg-mesh-velvet' },
+        { name: 'Cyber', class: 'bg-mesh-cyber' }
+    ];
     const mobileAvatarInputRef = useRef<HTMLInputElement>(null);
     const desktopAvatarInputRef = useRef<HTMLInputElement>(null);
     const [avatarBusy, setAvatarBusy] = useState(false);
@@ -645,7 +673,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
     const renderDropdown = (id: string, value: string, onChange: (val: string) => void, options: string[]) => (
         <div className="relative">
             <button
-                className="flex h-9 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-[140px]"
+                className="flex h-9 items-center justify-between rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-[140px]"
                 onClick={() => setOpenDropdown(openDropdown === id ? null : id)}
             >
                 <span>{value}</span>
@@ -710,13 +738,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                 <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
                                     <div className="flex flex-col w-full animate-in fade-in slide-in-from-right-4 duration-200">
                                         <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_mobile"> Avatar </label>
-                                        <div className="flex w-full gap-1 min-w-full justify-between items-center py-1 pb-2">
+                                        <div className="flex w-full gap-1 justify-between items-center py-1 pb-2">
                                             <span className="relative flex shrink-0 overflow-hidden rounded-full w-16 h-16">
                                                 <img className="aspect-square h-full w-full" alt={displayName} src={avatarSrc} />
                                             </span>
                                             <div className="flex flex-row gap-1">
                                                 <button onClick={triggerMobileAvatarPicker} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button" disabled={avatarBusy || !isWasmReady}>Change</button>
-                                                <button onClick={() => { setAvatarUrl(null); setAvatarError(null); }} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness" type="button" disabled={avatarBusy || !avatarUrl}>Remove</button>
+                                                <button onClick={() => { setAvatarUrl(null); setAvatarError(null); }} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button" disabled={avatarBusy || !avatarUrl}>Remove</button>
                                             </div>
                                             <input ref={mobileAvatarInputRef} className="hidden" id="_r_av_mobile" type="file" accept="image/*" onChange={handleAvatarInputChange} />
                                         </div>
@@ -732,35 +760,69 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
 
                                         <span className="text-sm font-bold text-card-foreground">Banner</span>
                                         <span></span>
-                                        <div className="flex flex-row gap-2 items-center">
-                                            <div className="flex items-center flex-col gap-0.5">
+                                        <div className="flex flex-row gap-3 items-center">
+                                            <div className="flex items-center flex-col gap-1.5">
                                                 <button
                                                     onClick={() => {
                                                         setBannerType('Simple');
                                                         setShowColorPicker(true);
                                                     }}
-                                                    className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-12 w-14 rounded-md bg-muted relative flex flex-col p-0 m-0"
-                                                    style={{ backgroundColor: bannerColor }}
+                                                    className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:brightness-110 h-10 w-12 rounded-lg bg-muted relative flex flex-col p-0 m-0 transition-all border-2"
+                                                    style={{
+                                                        backgroundColor: bannerColor,
+                                                        borderColor: bannerType === 'Simple' ? 'white' : 'transparent'
+                                                    }}
                                                 >
-                                                    {bannerType === 'Simple' && (
-                                                        <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="absolute right-0 top-0 mr-1 mt-1" color="white" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg" style={{ color: 'white' }}><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
-                                                    )}
+                                                    <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="text-white drop-shadow-sm" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
                                                 </button>
-                                                <span className="text-xs">Simple</span>
+                                                <span className="text-[10px] font-bold text-muted-foreground uppercase">Simple</span>
                                             </div>
-                                            <div>
-                                                <div className="flex items-center flex-col gap-0.5">
-                                                    <button
-                                                        onClick={() => setBannerType('Gradient')}
-                                                        className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-12 w-14 rounded-md bg-muted relative flex flex-col p-0 m-0"
-                                                        style={{ backgroundImage: 'linear-gradient(45deg, rgb(213, 63, 140), rgb(79, 70, 229))' }}
-                                                    >
-                                                        {bannerType === 'Gradient' && (
-                                                            <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="absolute right-0 top-0 mr-1 mt-1" color="white" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg" style={{ color: 'white' }}><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
-                                                        )}
-                                                    </button>
-                                                    <span className="text-xs">Gradient</span>
-                                                </div>
+
+                                            <div className="w-px h-8 bg-border"></div>
+
+                                            <div className="flex flex-row gap-1.5 overflow-x-auto pb-1 max-w-[120px] scrollbar-none">
+                                                {gradients.map((grad, i) => (
+                                                    <div key={i} className="flex items-center flex-col gap-1.5">
+                                                        <button
+                                                            onClick={() => {
+                                                                setBannerType('Gradient');
+                                                                setBannerGradient(grad);
+                                                            }}
+                                                            className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:brightness-110 h-10 w-12 rounded-lg relative flex flex-col p-0 m-0 transition-all border-2 shrink-0"
+                                                            style={{
+                                                                backgroundImage: grad,
+                                                                borderColor: (bannerType === 'Gradient' && bannerGradient === grad) ? 'white' : 'transparent'
+                                                            }}
+                                                        >
+                                                            {(bannerType === 'Gradient' && bannerGradient === grad) && (
+                                                                <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="text-white drop-shadow-sm" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            <div className="w-px h-8 bg-border"></div>
+
+                                            <div className="flex flex-row gap-1.5 overflow-x-auto pb-1 max-w-[120px] scrollbar-none">
+                                                {exoticGradients.map((mesh, i) => (
+                                                    <div key={i} className="flex items-center flex-col gap-1.5">
+                                                        <button
+                                                            onClick={() => {
+                                                                setBannerType('Mesh');
+                                                                setBannerGradient(mesh.class);
+                                                            }}
+                                                            className={`disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:brightness-110 h-10 w-12 rounded-lg relative flex flex-col p-0 m-0 transition-all border-2 shrink-0 overflow-hidden ${mesh.class}`}
+                                                            style={{
+                                                                borderColor: (bannerType === 'Mesh' && bannerGradient === mesh.class) ? 'white' : 'transparent'
+                                                            }}
+                                                        >
+                                                            {(bannerType === 'Mesh' && bannerGradient === mesh.class) && (
+                                                                <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="text-white drop-shadow-sm z-10" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
 
@@ -795,7 +857,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                         <span className="text-brightness/65 translate-y-0.5">{displayName}</span>
                                                         <button
                                                             onClick={() => setIsEditingUsername(true)}
-                                                            className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary/80 text-secondary-foreground hover:bg-secondary h-9 rounded-md px-3"
+                                                            className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
                                                             type="button"
                                                         >
                                                             Edit
@@ -809,7 +871,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                         <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
 
                                         <label className="text-sm font-bold text-card-foreground"> INTERESTS (ON)</label>
-                                        <div className="relative flex w-full basis-0 flex-row items-center justify-between gap-1 min-w-full">
+                                        <div className="relative flex w-full flex-row items-center justify-between gap-1">
                                             <label className="text-xs text-muted-foreground">You have {interests.length} interests</label>
                                             <button onClick={onOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
                                         </div>
@@ -826,7 +888,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             </label>
                                             <button
                                                 onClick={() => setShowDeleteModal(true)}
-                                                className="inline-flex items-center justify-center text-sm font-medium border border-destructive text-destructive hover:bg-destructive/10 h-9 rounded-md px-3 gap-2"
+                                                className="inline-flex items-center justify-center text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 rounded-md px-3 gap-2"
                                             >
                                                 <DeleteAccountIcon className="w-4 h-4" /> Delete
                                             </button>
@@ -940,17 +1002,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
 
                         <div dir="ltr" className="relative overflow-hidden pr-3 w-full [&>*]:pb-1 [&>*]:pr-1" style={{ position: 'relative', '--radix-scroll-area-corner-width': '0px', '--radix-scroll-area-corner-height': '0px' } as React.CSSProperties}>
                             <div data-radix-scroll-area-viewport="" className="h-full w-full rounded-[inherit]" style={{ overflow: 'hidden scroll' }}>
-                                <div style={{ minWidth: '100%', display: 'table' }}>
+                                <div className="w-full block">
                                     {activeTab === 'Profile' && (
                                         <div className="flex flex-col w-full animate-in fade-in slide-in-from-right-4 duration-200">
                                             <label className="text-sm font-bold text-card-foreground" htmlFor="_r_av_"> Avatar </label>
-                                            <div className="flex w-full gap-1 min-w-full justify-between items-center py-1 pb-2">
+                                            <div className="flex w-full gap-1 justify-between items-center py-1 pb-2 pr-6">
                                                 <span className="relative flex shrink-0 overflow-hidden rounded-full w-16 h-16">
                                                     <img className="aspect-square h-full w-full" alt={displayName} src={avatarSrc} />
                                                 </span>
                                                 <div className="flex flex-row gap-1">
                                                     <button onClick={triggerDesktopAvatarPicker} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button" disabled={avatarBusy || !isWasmReady}>Change</button>
-                                                    <button onClick={() => { setAvatarUrl(null); setAvatarError(null); }} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness" type="button" disabled={avatarBusy || !avatarUrl}>Remove</button>
+                                                    <button onClick={() => { setAvatarUrl(null); setAvatarError(null); }} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3" type="button" disabled={avatarBusy || !avatarUrl}>Remove</button>
                                                 </div>
                                                 <input ref={desktopAvatarInputRef} className="hidden" id="_r_av_" type="file" accept="image/*" onChange={handleAvatarInputChange} />
                                             </div>
@@ -966,41 +1028,76 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
 
                                             <span className="text-sm font-bold text-card-foreground">Banner</span>
                                             <span></span>
-                                            <div className="flex flex-row gap-2 items-center">
-                                                <div className="flex items-center flex-col gap-0.5">
+                                            <div className="flex flex-row gap-3 items-center">
+                                                <div className="flex items-center flex-col gap-1.5">
                                                     <button
                                                         onClick={() => {
                                                             setBannerType('Simple');
                                                             setShowColorPicker(true);
                                                         }}
-                                                        className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-12 w-14 rounded-md bg-muted relative flex flex-col p-0 m-0"
-                                                        style={{ backgroundColor: bannerColor }}
+                                                        className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:brightness-110 h-10 w-12 rounded-lg bg-muted relative flex flex-col p-0 m-0 transition-all border-2"
+                                                        style={{
+                                                            backgroundColor: bannerColor,
+                                                            borderColor: bannerType === 'Simple' ? 'white' : 'transparent'
+                                                        }}
                                                     >
-                                                        {bannerType === 'Simple' && (
-                                                            <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="absolute right-0 top-0 mr-1 mt-1" color="white" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg" style={{ color: 'white' }}><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
-                                                        )}
+                                                        <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="text-white drop-shadow-sm" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
                                                     </button>
-                                                    <span className="text-xs">Simple</span>
+                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase">Simple</span>
                                                 </div>
-                                                <div>
-                                                    <div className="flex items-center flex-col gap-0.5">
-                                                        <button
-                                                            onClick={() => setBannerType('Gradient')}
-                                                            className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-12 w-14 rounded-md bg-muted relative flex flex-col p-0 m-0"
-                                                            style={{ backgroundImage: 'linear-gradient(45deg, rgb(213, 63, 140), rgb(79, 70, 229))' }}
-                                                        >
-                                                            {bannerType === 'Gradient' && (
-                                                                <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="absolute right-0 top-0 mr-1 mt-1" color="white" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg" style={{ color: 'white' }}><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
-                                                            )}
-                                                        </button>
-                                                        <span className="text-xs">Gradient</span>
-                                                    </div>
+
+                                                <div className="w-px h-8 bg-border"></div>
+
+                                                <div className="flex flex-row gap-1.5 overflow-x-auto pb-1 max-w-[150px] scrollbar-none">
+                                                    {gradients.map((grad, i) => (
+                                                        <div key={i} className="flex items-center flex-col gap-1.5">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setBannerType('Gradient');
+                                                                    setBannerGradient(grad);
+                                                                }}
+                                                                className="disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:brightness-110 h-10 w-12 rounded-lg relative flex flex-col p-0 m-0 transition-all border-2 shrink-0"
+                                                                style={{
+                                                                    backgroundImage: grad,
+                                                                    borderColor: (bannerType === 'Gradient' && bannerGradient === grad) ? 'white' : 'transparent'
+                                                                }}
+                                                            >
+                                                                {(bannerType === 'Gradient' && bannerGradient === grad) && (
+                                                                    <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="text-white drop-shadow-sm" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    ))}
                                                 </div>
+
+                                                <div className="w-px h-8 bg-border"></div>
+
+                                                <div className="flex flex-row gap-1.5 overflow-x-auto pb-1 max-w-[150px] scrollbar-none">
+                                                    {exoticGradients.map((mesh, i) => (
+                                                        <div key={i} className="flex items-center flex-col gap-1.5">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setBannerType('Mesh');
+                                                                    setBannerGradient(mesh.class);
+                                                                }}
+                                                                className={`disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:brightness-110 h-10 w-12 rounded-lg relative flex flex-col p-0 m-0 transition-all border-2 shrink-0 overflow-hidden ${mesh.class}`}
+                                                                style={{
+                                                                    borderColor: (bannerType === 'Mesh' && bannerGradient === mesh.class) ? 'white' : 'transparent'
+                                                                }}
+                                                            >
+                                                                {(bannerType === 'Mesh' && bannerGradient === mesh.class) && (
+                                                                    <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" className="text-white drop-shadow-sm z-10" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"></path></svg>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
                                             </div>
 
                                             <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
 
-                                            <div className="relative flex w-full basis-0 flex-col gap-1 min-w-full">
+                                            <div className="relative flex w-full flex-col gap-1 pr-6">
                                                 <div className="space-y-2">
                                                     <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs font-bold text-card-foreground" htmlFor="nickname-desktop">NICKNAME</label>
                                                     <div className="flex flex-col !mt-1">
@@ -1030,7 +1127,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                                 <span className="text-brightness/65 translate-y-0.5">{displayName}</span>
                                                                 <button
                                                                     onClick={() => setIsEditingUsername(true)}
-                                                                    className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary/80 text-secondary-foreground hover:bg-secondary h-9 rounded-md px-3"
+                                                                    className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
                                                                     type="button"
                                                                 >
                                                                     Edit
@@ -1045,7 +1142,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
 
                                             <label className="text-sm font-bold text-card-foreground"> INTERESTS (ON)</label>
-                                            <div className="relative flex w-full basis-0 flex-row items-center justify-between gap-1 min-w-full">
+                                            <div className="relative flex w-full flex-row items-center justify-between gap-1 pr-6">
                                                 <label className="text-xs text-muted-foreground">You have {interests.length} interests</label>
                                                 <button onClick={onOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
                                             </div>
@@ -1061,7 +1158,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                 </label>
                                                 <button
                                                     onClick={() => setShowDeleteModal(true)}
-                                                    className="inline-flex items-center justify-center text-sm font-medium border border-destructive text-destructive hover:bg-destructive/10 h-9 rounded-md px-3 gap-2"
+                                                    className="inline-flex items-center justify-center text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 rounded-md px-3 gap-2"
                                                 >
                                                     <DeleteAccountIcon className="w-4 h-4" /> Delete
                                                 </button>

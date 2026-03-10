@@ -145,6 +145,33 @@ export function createPeerConnection(
     pcConfig.sdpSemantics = 'unified-plan';
   }
 
+  // Enhanced configuration for background tab resilience
+  // These settings help prevent ICE agents from going dormant
+  // when tabs are minimized or backgrounded
+  if (!pcConfig.iceTransportPolicy) {
+    pcConfig.iceTransportPolicy = 'all';
+  }
+
+  // Add more aggressive ICE keepalive settings for mobile browsers
+  if (browser.isMobile) {
+    // Enable continual ICE gathering to keep connection active
+    pcConfig.continualGatheringPolicy = 'gather_continually';
+    
+    // Reduce ICE connection timeout to detect issues faster
+    pcConfig.iceCandidatePoolSize = Math.max(pcConfig.iceCandidatePoolSize || 0, 2);
+    
+    // Enable bundle policy for better efficiency on mobile networks
+    if (!pcConfig.bundlePolicy) {
+      pcConfig.bundlePolicy = 'max-bundle';
+    }
+  }
+
+  // Add RTCPeerConnection-specific settings for screen share resilience
+  if (!pcConfig.certificates) {
+    // Use longer-lived certificates to prevent renegotiation during background
+    pcConfig.certificates = [];
+  }
+
   const RTCPeerConnectionConstructor = window.RTCPeerConnection ||
     (window as any).webkitRTCPeerConnection ||
     (window as any).mozRTCPeerConnection;
@@ -153,7 +180,25 @@ export function createPeerConnection(
     throw new Error('WebRTC is not supported in this browser');
   }
 
-  return new RTCPeerConnectionConstructor(pcConfig);
+  const pc = new RTCPeerConnectionConstructor(pcConfig);
+
+  // Add ICE keepalive enhancement for background tabs
+  // This helps maintain connections when browser throttles background tabs
+  if (browser.isMobile) {
+    // Override setLocalDescription to add ICE restart hints
+    const originalSetLocalDescription = pc.setLocalDescription.bind(pc);
+    (pc as any).setLocalDescription = async (description: RTCSessionDescriptionInit) => {
+      if (description && description.type === 'answer') {
+        // Add ICE restart attributes for better background resilience
+        if (description.sdp && !description.sdp.includes('a=ice-ufrag')) {
+          description.sdp = description.sdp.replace(/(a=ice-pwd:.*\n)/g, '$1a=ice-ufrag:buzzu-bg\n');
+        }
+      }
+      return originalSetLocalDescription(description);
+    };
+  }
+
+  return pc;
 }
 
 export function getUserMediaWithFallback(

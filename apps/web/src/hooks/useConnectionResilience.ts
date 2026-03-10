@@ -49,6 +49,7 @@ export function useConnectionResilience({
   const silentAudioRef = useRef<{ ctx: AudioContext; osc: OscillatorNode; gain: GainNode } | null>(null);
   const webLockAbortRef = useRef<AbortController | null>(null);
   const frozenTimestampRef = useRef<number | null>(null);
+  const screenShareKeepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { isConnected: signalingConnected } = useSignalingContext();
   const context = useSignalingContext();
 
@@ -149,11 +150,43 @@ export function useConnectionResilience({
         }
       }
 
-      // 6. Screen share stream recovery
+      // 6. Enhanced screen share stream recovery
       const ssState = useScreenShareStore.getState();
       if (ssState.isRemoteSharing && ssState.remoteStream) {
-        console.log('[Resilience] Nudging remote screen share stream');
+        console.log('[Resilience] Enhanced remote screen share stream recovery');
+        // Force stream re-attachment by incrementing version
         useScreenShareStore.getState().setRemoteSharing(ssState.remoteStream);
+        
+        // Ensure video elements are playing the screen share
+        setTimeout(() => {
+          document.querySelectorAll('video[srcobject]').forEach(video => {
+            const media = video as HTMLVideoElement;
+            if (media.srcObject instanceof MediaStream) {
+              const stream = media.srcObject as MediaStream;
+              const isScreenShare = stream.getVideoTracks().some(track => 
+                ssState.remoteStream?.getVideoTracks().some(rt => rt.id === track.id)
+              );
+              
+              if (isScreenShare && media.paused) {
+                media.play().catch(() => {
+                  // Expected if still in background, but worth trying
+                  console.log('[Resilience] Screen share video play failed (still background?)');
+                });
+              }
+            }
+          });
+        }, 100); // Small delay to ensure DOM is ready
+      }
+
+      // 7. Local screen share recovery - ensure tracks are enabled
+      if (ssState.isLocalSharing && ssState.localStream) {
+        console.log('[Resilience] Checking local screen share tracks');
+        ssState.localStream.getVideoTracks().forEach(track => {
+          if (track.readyState === 'live' && !track.enabled) {
+            track.enabled = true;
+            console.log('[Resilience] Re-enabled local screen share track');
+          }
+        });
       }
     }, 1500);
   }, [signalingConnected, context, acquireWakeLock, getPeerConnections, applyTurnFallback, isFallbackActive]);
@@ -366,6 +399,89 @@ export function useConnectionResilience({
       }
     };
   }, [isInChat]);
+
+  // ── Screen Share Background Keepalive ─────────────────────────────
+  // Browsers aggressively throttle video tracks when tabs are backgrounded.
+  // This keepalive specifically targets screen share streams to ensure they
+  // continue transmitting even when the sharing tab is minimized.
+  useEffect(() => {
+    // Check if screen sharing is active (local or remote)
+    const checkScreenShareActive = () => {
+      const ssState = useScreenShareStore.getState();
+      return ssState.isLocalSharing || ssState.isRemoteSharing;
+    };
+
+    const cleanup = () => {
+      if (screenShareKeepaliveRef.current) {
+        clearInterval(screenShareKeepaliveRef.current);
+        screenShareKeepaliveRef.current = null;
+      }
+    };
+
+    if (!checkScreenShareActive()) {
+      cleanup();
+      return;
+    }
+
+    // Create interval that keeps screen share streams active in background
+    screenShareKeepaliveRef.current = setInterval(() => {
+      const ssState = useScreenShareStore.getState();
+      if (!ssState.isLocalSharing && !ssState.isRemoteSharing) {
+        cleanup();
+        return;
+      }
+
+      // For local screen sharing: ensure tracks remain enabled
+      if (ssState.localStream) {
+        ssState.localStream.getVideoTracks().forEach(track => {
+          // Prevent track from being disabled by browser throttling
+          if (track.readyState === 'live' && !track.enabled) {
+            track.enabled = true;
+            console.log('[Resilience] Re-enabled local screen share video track');
+          }
+        });
+      }
+
+      // For remote screen sharing: ensure video elements continue playing
+      if (ssState.remoteStream) {
+        document.querySelectorAll('video[srcobject]').forEach(video => {
+          const media = video as HTMLVideoElement;
+          if (media.srcObject instanceof MediaStream) {
+            const stream = media.srcObject as MediaStream;
+            // Check if this is our screen share stream
+            const isScreenShare = stream.getVideoTracks().some(track => 
+              ssState.remoteStream?.getVideoTracks().some(rt => rt.id === track.id)
+            );
+            
+            if (isScreenShare && media.paused && !media.ended) {
+              media.play().catch(() => { 
+                // Expected in background - browser will block autoplay
+              });
+            }
+          }
+        });
+      }
+
+      // Force peer connection to stay active by requesting stats
+      // This prevents ICE agents from going dormant in background tabs
+      const pcs = getPeerConnections();
+      pcs.forEach((pc, peerId) => {
+        if (pc.connectionState !== 'closed') {
+          // Requesting stats keeps the connection active even in background
+          pc.getStats().then(() => {
+            // Stats request completed successfully
+          }).catch(err => {
+            console.warn(`[Resilience] Stats request failed for peer ${peerId}:`, err);
+          });
+        }
+      });
+
+    }, 3000); // Every 3 seconds - aggressive enough to prevent throttling
+
+    console.log('[Resilience] Screen share background keepalive started');
+
+    return cleanup;
+  }, [isInChat, getPeerConnections]);
 
   // ── pagehide cleanup ──────────────────────────────────────────────
   // On mobile, `pagehide` is more reliable than `beforeunload` for

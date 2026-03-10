@@ -22,6 +22,10 @@ interface DmSignalingContextType {
     editDmMessage: (friendId: string, messageId: string, newContent: string) => void;
     /** Delete a message. Auto-syncs via Yjs CRDT. */
     deleteDmMessage: (friendId: string, messageId: string) => void;
+    /** Send typing status to a friend. */
+    sendTyping: (friendId: string, isTyping: boolean) => void;
+    /** Subscribe to typing events from any friend. */
+    onTyping: (callback: (friendId: string, isTyping: boolean) => void) => () => void;
 }
 
 const DmSignalingContext = createContext<DmSignalingContextType | null>(null);
@@ -76,6 +80,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const connectionsRef = useRef<Map<string, WebSocket>>(new Map());
     const cleanupRef = useRef<Map<string, (() => void)[]>>(new Map());
     const reconnectTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+    const typingCallbacksRef = useRef<Set<(friendId: string, isTyping: boolean) => void>>(new Set());
 
     const peerIdRef = useRef(peerId);
     peerIdRef.current = peerId;
@@ -85,7 +90,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const myPeerId = peerIdRef.current;
         const snapshot = DmYjsManager.getSnapshot(roomId);
         const storeMessages = snapshot.map(m => yjsToStoreMessage(m, myPeerId));
-        console.log(`[DmYjs] 🔄 Syncing to Zustand store | friend=${friendId.slice(0,15)}… messages=${storeMessages.length}`);
+        console.log(`[DmYjs] 🔄 Syncing to Zustand store | friend=${friendId.slice(0, 15)}… messages=${storeMessages.length}`);
         useSessionStore.getState().syncDmMessages(friendId, storeMessages);
     }, []);
 
@@ -152,20 +157,25 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
                         return;
                     }
 
+                    if (msg.type === 'Typing' && msg.from === friendId) {
+                        typingCallbacksRef.current.forEach(cb => cb(friendId, !!msg.typing));
+                        return;
+                    }
+
                     if (msg.type !== 'Chat' || msg.from !== friendId) return;
 
                     const payload = JSON.parse(msg.payload);
 
                     if (payload._yjs === 'sv') {
                         // Peer sent their state vector → respond with missing updates
-                        console.log(`[DmYjs] 📨 Received state vector from ${friendId.slice(0,15)}… | room=${roomId}`);
+                        console.log(`[DmYjs] 📨 Received state vector from ${friendId.slice(0, 15)}… | room=${roomId}`);
                         const update = DmYjsManager.computeUpdate(roomId, payload.data);
-                        console.log(`[DmYjs] 📤 Sending missing updates to ${friendId.slice(0,15)}… | base64len=${update.length}`);
+                        console.log(`[DmYjs] 📤 Sending missing updates to ${friendId.slice(0, 15)}… | base64len=${update.length}`);
                         sendYjsPayload(ws, friendId, { _yjs: 'update', data: update });
 
                     } else if (payload._yjs === 'update') {
                         // Peer sent Yjs update → apply to local Y.Doc
-                        console.log(`[DmYjs] 📥 Received Yjs update from ${friendId.slice(0,15)}… | base64len=${payload.data.length}`);
+                        console.log(`[DmYjs] 📥 Received Yjs update from ${friendId.slice(0, 15)}… | base64len=${payload.data.length}`);
                         const map = DmYjsManager.getMessagesMap(roomId);
                         const countBefore = map.size;
 
@@ -298,7 +308,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if (!myPeerId) return;
 
         const roomId = DmYjsManager.getDmRoomId(myPeerId, friendId);
-        console.log(`[DmYjs] 💬 sendDmMessage | to=${friendId.slice(0,15)}… room=${roomId} content="${message.content.slice(0,50)}"`);
+        console.log(`[DmYjs] 💬 sendDmMessage | to=${friendId.slice(0, 15)}… room=${roomId} content="${message.content.slice(0, 50)}"`);
         DmYjsManager.addMessage(roomId, {
             ...message,
             senderId: myPeerId,
@@ -325,9 +335,30 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
         DmYjsManager.deleteMessage(roomId, messageId);
     }, []);
 
+    /** Send typing status to a friend. */
+    const sendTyping = useCallback((friendId: string, isTyping: boolean) => {
+        const ws = connectionsRef.current.get(friendId);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'Typing',
+                from: peerIdRef.current,
+                to: friendId,
+                typing: isTyping,
+            }));
+        }
+    }, []);
+
+    /** Subscribe to typing events from any friend. */
+    const onTyping = useCallback((callback: (friendId: string, isTyping: boolean) => void) => {
+        typingCallbacksRef.current.add(callback);
+        return () => {
+            typingCallbacksRef.current.delete(callback);
+        };
+    }, []);
+
     const value = React.useMemo(
-        () => ({ sendDmMessage, editDmMessage, deleteDmMessage }),
-        [sendDmMessage, editDmMessage, deleteDmMessage]
+        () => ({ sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping }),
+        [sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping]
     );
 
     return (

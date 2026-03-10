@@ -54,18 +54,40 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
       playRetryTimerRef.current = null;
     }
 
+    // Force re-attachment by clearing srcObject first
+    video.srcObject = null;
+    video.load(); // Reset the video element state
+
+    // Attach the new stream
     video.srcObject = stream;
     if (bgVideoRef.current) {
       bgVideoRef.current.srcObject = stream;
     }
     setNeedsAudioUnlock(false);
 
-    const attemptPlay = (attempt = 0, maxAttempts = 3) => {
+    const attemptPlay = (attempt = 0, maxAttempts = 5) => {
+      // Check if the stream has active tracks before attempting play
+      const videoTrack = stream.getVideoTracks()[0];
+      if (!videoTrack || videoTrack.readyState !== 'live') {
+        console.warn('[ScreenShareViewer] Video track not ready, retrying...', {
+          hasTrack: !!videoTrack,
+          readyState: videoTrack?.readyState,
+          muted: videoTrack?.muted,
+          enabled: videoTrack?.enabled
+        });
+
+        if (attempt < maxAttempts - 1) {
+          const delay = 200 * Math.pow(1.5, attempt);
+          playRetryTimerRef.current = setTimeout(() => attemptPlay(attempt + 1, maxAttempts), delay);
+          return;
+        }
+      }
+
       video.play()
         .then(() => {
           console.log('[ScreenShareViewer] play() succeeded');
           setNeedsAudioUnlock(false);
-          bgVideoRef.current?.play().catch(() => {});
+          bgVideoRef.current?.play().catch(() => { });
         })
         .catch(err => {
           console.warn(`[ScreenShareViewer] play() failed (attempt ${attempt + 1}):`, err.name, err.message);
@@ -278,6 +300,7 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
             autoPlay
             playsInline
             muted
+            disablePictureInPicture
             className="w-full aspect-video object-contain bg-black"
           />
           <div className="absolute top-0 inset-x-0 flex items-center justify-between px-2.5 py-1.5 bg-gradient-to-b from-black/80 to-transparent">
@@ -333,7 +356,7 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
       className={`${isFullscreen
         ? 'fixed inset-0 z-[9999] bg-black'
         : isTheater
-          ? 'relative w-full h-full bg-black/95 z-20 shadow-[0_30px_120px_rgba(0,0,0,0.7)] rounded-2xl overflow-hidden'
+          ? 'relative w-full h-full bg-black/95 z-20 shadow-[0_30px_120px_rgba(0,0,0,0.7)] md:rounded-2xl overflow-hidden'
           : 'relative w-full flex-none bg-black z-20 shadow-lg border-b border-border/20'
         } flex flex-col`}
       style={!isFullscreen && !isTheater ? { maxHeight: 'clamp(200px, 45vh, 600px)', aspectRatio: '16/9' } : {}}
@@ -420,6 +443,7 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
             autoPlay
             playsInline
             muted
+            disablePictureInPicture
             className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40"
           />
         )}

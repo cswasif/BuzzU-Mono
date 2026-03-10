@@ -118,42 +118,14 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
   return (
     <>
       <main className="w-full flex h-full flex-grow flex-col overflow-hidden relative">
-        {/* PWA Update Banner */}
-        <AnimatePresence>
-          {needRefresh && (
-            <motion.div
-              initial={{ opacity: 0, y: -50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -50 }}
-              className="absolute top-0 left-0 right-0 z-50 bg-primary text-primary-foreground px-4 py-3 flex items-center justify-between shadow-lg"
-            >
-              <span className="text-sm font-medium">A new version of BuzzU is available!</span>
-              <div className="flex space-x-2">
-                <button
-                  onClick={closeUpdateTrigger}
-                  className="text-xs px-3 py-1.5 rounded-md bg-transparent hover:bg-black/10 transition-colors"
-                >
-                  Dismiss
-                </button>
-                <button
-                  onClick={updateApp}
-                  className="text-xs px-3 py-1.5 rounded-md bg-white text-black font-bold shadow-sm hover:bg-zinc-200 transition-colors"
-                >
-                  Update Now
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="relative h-full bg-background flex flex-col overflow-y-auto pt-8 md:pt-12">
+          <div className="flex-none flex items-center justify-start flex-col space-y-4 mb-4" style={{ opacity: 1, transform: 'none' }}>
 
-        <div className="relative h-full bg-background flex flex-col overflow-y-auto">
-          <div className="flex-1 flex items-center justify-center flex-col md:space-y-2 space-y-3.5 mb-1.5" style={{ opacity: 1, transform: 'none' }}>
-
-            {/* Central Logo */}
-            <div className="flex flex-col space-y-4 items-center justify-center relative z-10 pt-20 md:pt-40">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-emerald-600/20 opacity-50 blur-[100px] rounded-full scale-[2.5]"></div>
-                <svg width="110" height="110" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#FFD700" stroke="#FFD700" className="relative z-10 drop-shadow-[0_0_20px_rgba(255,215,0,0.25)]">
+            {/* Central Logo & Brand */}
+            <div className="flex flex-col items-center justify-center relative z-10">
+              <div className="relative mb-2">
+                <div className="absolute inset-0 bg-[#8d96f6]/10 blur-[60px] rounded-full scale-[2]"></div>
+                <svg width="64" height="64" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#8d96f6" stroke="#8d96f6" className="relative z-10 drop-shadow-[0_0_15px_rgba(141,150,246,0.15)]">
                   <g id="SVGRepo_bgCarrier" strokeWidth="0" />
                   <g id="SVGRepo_tracerCarrier" strokeLinecap="round" strokeLinejoin="round" stroke="#CCCCCC" strokeWidth="0.336" />
                   <g id="SVGRepo_iconCarrier">
@@ -161,21 +133,22 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                   </g>
                 </svg>
               </div>
+              <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-brightness mb-4">
+                BuzzU
+              </h1>
             </div>
 
             {/* Social Links */}
-            <div className="w-full max-w-52 p-2 rounded-lg">
-              <div className="flex justify-center space-x-4">
-                <a href="https://instagram.com/chitchat.gg" target="_blank" rel="noopener noreferrer" className="w-10 h-10 flex items-center justify-center rounded-full text-white transition-colors duration-300 ease-in-out bg-zinc-900/70 hover:bg-zinc-800/90">
-                  <InstagramIcon className="text-xl" />
-                </a>
-                <a href="https://x.com/chitchatgg" target="_blank" rel="noopener noreferrer" className="w-10 h-10 flex items-center justify-center rounded-full text-white transition-colors duration-300 ease-in-out bg-zinc-900/70 hover:bg-zinc-800/90">
-                  <XIcon className="text-xl" />
-                </a>
-                <a href="https://tiktok.com/@chitchat.gg" target="_blank" rel="noopener noreferrer" className="w-10 h-10 flex items-center justify-center rounded-full text-white transition-colors duration-300 ease-in-out bg-zinc-900/70 hover:bg-zinc-800/90">
-                  <TikTokIcon className="text-xl" />
-                </a>
-              </div>
+            <div className="flex justify-center space-x-3 mb-2">
+              <a href="https://instagram.com/buzzu" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
+                <InstagramIcon className="text-lg" />
+              </a>
+              <a href="https://x.com/buzzu" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
+                <XIcon className="text-lg" />
+              </a>
+              <a href="https://tiktok.com/@buzzu" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
+                <TikTokIcon className="text-lg" />
+              </a>
             </div>
 
             <AnimatePresence>
@@ -190,7 +163,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                     onClick={installApp}
                     className="w-full flex items-center justify-center bg-zinc-800/80 hover:bg-zinc-700/90 border border-zinc-700 backdrop-blur-sm text-white rounded-xl py-3 px-4 shadow-lg transition-all active:scale-[0.98]"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-yellow-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-[#8d96f6]">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                       <polyline points="7 10 12 15 17 10"></polyline>
                       <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -203,9 +176,12 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
 
           </div>
 
+          {/* Flexible spacer to push the card to bottom on mobile */}
+          <div className="flex-grow" />
+
           {/* Panel Card */}
           <div className="bg-panel lg:mb-4 lg:rounded-3xl rounded-t-3xl shadow-lg max-w-lg xl:max-w-3xl self-center w-full" style={{ opacity: 1, transform: 'none' }}>
-            <div className="flex flex-col p-4 md:p-6 md:pb-2 pb-1.5 space-y-6">
+            <div className="flex flex-col p-4 md:p-5 md:pb-2 pb-1.5 space-y-4">
 
               {/* Interests Section */}
               <div className="space-y-3">
@@ -224,13 +200,13 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                     </span>
                   </div>
                   <div
-                    className="mb-4 cursor-pointer"
+                    className="mb-2 cursor-pointer"
                     role="button"
                     tabIndex={0}
                     aria-label="Edit interests"
                     onClick={onManageInterests}
                   >
-                    <div className="border-2 border-dashed border-[hsla(var(--dashed-border)/var(--dashed-border-opacity))] rounded-lg p-3 min-h-[60px] flex items-center">
+                    <div className="border-2 border-dashed border-[hsla(var(--dashed-border)/var(--dashed-border-opacity))] rounded-lg p-3 min-h-[48px] flex items-center">
                       <AnimatePresence mode="wait">
                         <motion.div
                           key={currentInterestSet}
@@ -345,7 +321,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                   <VideoIcon className="lg:w-6 lg:h-6 relative z-10 drop-shadow-md transition-transform group-hover:scale-110 duration-300" />
                 </button>
                 <button
-                  className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 h-10 px-4 flex-1 !text-white bg-gradient-to-r from-indigo-600 to-emerald-700 py-6 rounded-xl font-semibold hover:from-indigo-700 hover:to-emerald-800 transition-all duration-300 shadow-md hover:shadow-lg lg:py-7 lg:text-lg active:scale-[0.98]"
+                  className="inline-flex disabled:select-none items-center justify-center text-sm ring-offset-background disabled:pointer-events-none disabled:opacity-50 hover:bg-primary/90 h-10 px-4 flex-1 !text-white bg-gradient-to-r from-indigo-600 to-emerald-700 py-6 rounded-xl font-semibold hover:from-indigo-700 hover:to-emerald-800 transition-all duration-300 shadow-md hover:shadow-lg lg:py-6 lg:text-lg active:scale-[0.98]"
                   onClick={handleStartTextChat}
                 >
                   <TextChatIcon className="w-6 h-6 mr-2 lg:w-7 lg:h-7" />
@@ -355,7 +331,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
 
             </div>
 
-            <span className="text-xs md:text-xs text-foreground-muted w-full self-center text-center flex items-center justify-center pb-1.5 md:pb-2 gap-1 mt-6">
+            <span className="text-xs md:text-xs text-foreground-muted w-full self-center text-center flex items-center justify-center pb-1.5 md:pb-2 gap-1 mt-3">
               <span>Be respectful and follow our</span>
               <a href="https://www.chitchat.gg/guidelines" target="_blank" rel="noreferrer" className="underline text-[hsl(var(--link-color))]">chat rules</a>
             </span>

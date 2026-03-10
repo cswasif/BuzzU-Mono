@@ -38,7 +38,7 @@ const ProfilePopover: React.FC<ProfilePopoverProps> = ({ onClose, onEditProfile 
                                 <div className="mt-2 w-full flex items-center justify-center rounded-md">
                                     <button
                                         onClick={onEditProfile}
-                                        className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 w-full"
+                                        className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3 w-full"
                                     >
                                         Edit Profile
                                     </button>

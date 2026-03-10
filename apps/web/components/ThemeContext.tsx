@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type Theme = 'light' | 'dark' | 'yellow' | 'emerald' | 'aura';
+type Theme = 'light' | 'dark' | 'yellow' | 'lavender' | 'aura';
 
 interface ThemeColors {
   background: string;
@@ -65,29 +65,29 @@ const themes: Record<Theme, ThemeColors> = {
     accent: '#ee81ee', // Magenta/Pink
     accentHoverBg: 'rgba(238, 129, 238, 0.1)',
   },
-  // Dark Mode with Emerald Accent
-  emerald: {
+  // Dark Mode with Lavender Accent
+  lavender: {
     background: '#000000',
     textPrimary: '#e7e9ea',
     textSecondary: '#71767b',
     line: '#2f3336',
     buttonBorder: '#536471',
     buttonHoverBg: 'rgba(239, 243, 244, 0.1)',
-    accent: '#10b981', // Emerald
-    accentHoverBg: 'rgba(16, 185, 129, 0.1)',
+    accent: '#8d96f6', // Lavender/Purple
+    accentHoverBg: 'rgba(141, 150, 246, 0.1)',
   },
 };
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: 'aura',
+  theme: 'lavender',
   toggleTheme: () => { },
-  colors: themes.aura,
+  colors: themes.lavender,
 });
 
 export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<Theme>('aura');
+  const [theme, setTheme] = useState<Theme>('lavender');
   const colors = themes[theme];
 
   useEffect(() => {
@@ -124,8 +124,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTheme((prev) => {
       // Cycle: yellow -> aura -> lavender -> light -> dark -> yellow
       if (prev === 'yellow') return 'aura';
-      if (prev === 'aura') return 'emerald';
-      if (prev === 'emerald') return 'light';
+      if (prev === 'aura') return 'lavender';
+      if (prev === 'lavender') return 'light';
       if (prev === 'light') return 'dark';
       return 'yellow';
     });

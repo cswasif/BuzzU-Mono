@@ -93,6 +93,16 @@
   --glass-border: rgba(0, 255, 255, 0.2);
 }
 
+[data-theme='lavender'] {
+  --glass-bg: rgba(15, 12, 26, 0.4);
+  /* Deep dark purple base */
+  --glass-blur: 25px;
+  --glass-brightness: 1.1;
+  --glass-saturate: 180%;
+  --glass-border: rgba(141, 150, 246, 0.2);
+  /* Lavender border */
+}
+
 /* Mesh Gradient Animation for Aura theme */
 @keyframes meshGradient {
   0% {
@@ -174,6 +184,10 @@
   opacity: 0.05;
 }
 
+[data-theme='lavender'] .cinematic-grain {
+  opacity: 0.06;
+}
+
 .landing-root-bg[data-theme='aura'] {
   background: linear-gradient(-45deg, #0a0a1a, #1a0a2a, #0a2a2a, #0a0a1a) !important;
   background-size: 400% 400% !important;
@@ -190,6 +204,98 @@
   pointer-events: none;
   z-index: 0;
 }
+
+/* Mesh Gradient for Lavender theme */
+.landing-root-bg[data-theme='lavender'] {
+  background: linear-gradient(-45deg, #0f0c1a, #1a0c2a, #2a0c2a, #0f0c1a) !important;
+  background-size: 400% 400% !important;
+  animation: meshGradient 15s ease infinite !important;
+}
+
+.landing-root-bg[data-theme='lavender']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(at 0% 0%, rgba(141, 150, 246, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(181, 141, 246, 0.1) 0px, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* --- EXOTIC MESH GRADIENTS --- */
+.bg-mesh-midnight {
+  background: linear-gradient(-45deg, #09090b, #18181b, #27272a, #09090b);
+  background-size: 400% 400%;
+  animation: meshGradient 15s ease infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+.bg-mesh-midnight::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.2) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.15) 0px, transparent 50%);
+  pointer-events: none;
+}
+
+.bg-mesh-aurora {
+  background: linear-gradient(-45deg, #064e3b, #022c22, #065f46, #064e3b);
+  background-size: 400% 400%;
+  animation: meshGradient 15s ease infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+.bg-mesh-aurora::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(at 0% 0%, rgba(52, 211, 153, 0.25) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(45, 212, 191, 0.2) 0px, transparent 50%);
+  pointer-events: none;
+}
+
+.bg-mesh-velvet {
+  background: linear-gradient(-45deg, #4c1d95, #7c2d12, #9f1239, #4c1d95);
+  background-size: 400% 400%;
+  animation: meshGradient 15s ease infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+.bg-mesh-velvet::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(at 0% 0%, rgba(244, 63, 94, 0.3) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(251, 146, 60, 0.2) 0px, transparent 50%);
+  pointer-events: none;
+}
+
+.bg-mesh-cyber {
+  background: linear-gradient(-45deg, #831843, #1e1b4b, #312e81, #831843);
+  background-size: 400% 400%;
+  animation: meshGradient 15s ease infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+.bg-mesh-cyber::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(at 0% 0%, rgba(236, 72, 153, 0.25) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.25) 0px, transparent 50%);
+  pointer-events: none;
+}
+
 
 @layer component {
   iframe {
@@ -785,6 +891,72 @@
     width: 100% !important;
   }
 
+  /* === ROBUST MODAL FIXES FOR /chat/new DIRECT ACCESS === */
+  /* Fix white border on Radix UI modals */
+  [role="dialog"].fixed {
+    border-color: transparent !important;
+    border-width: 0 !important;
+    border: none !important;
+  }
+
+  [role="dialog"].fixed *,
+  [role="dialog"].fixed *::before,
+  [role="dialog"].fixed *::after {
+    border-color: transparent !important;
+    border-width: 0 !important;
+    border: none !important;
+  }
+
+  /* Fix Start Text Chat button gradient */
+  button.from-indigo-600 {
+    --tw-gradient-from: rgb(79, 70, 229) !important;
+    background-color: rgb(79, 70, 229) !important;
+  }
+
+  button.bg-gradient-to-r {
+    background: linear-gradient(to right, rgb(79, 70, 229), rgb(4, 120, 87)) !important;
+    color: #ffffff !important;
+  }
+
+  button.bg-gradient-to-r * {
+    color: #ffffff !important;
+  }
+
+  /* Fix interests modal - make it more compact */
+  .bg-panel.lg\\:mb-4 {
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+  }
+
+  .bg-panel.lg\:mb-4>div {
+    padding: 1rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .bg-panel.lg\:mb-4 .space-y-3 {
+    gap: 0.75rem !important;
+  }
+
+  .bg-panel.lg\:mb-4 .space-y-2\.5 {
+    gap: 0.5rem !important;
+  }
+
+  .bg-panel.lg\:mb-4 .mb-4 {
+    margin-bottom: 0.75rem !important;
+  }
+
+  .bg-panel.lg\:mb-4 button.flex-1 {
+    background: linear-gradient(to right, rgb(79, 70, 229), rgb(4, 120, 87)) !important;
+    color: #ffffff !important;
+  }
+
+  /* Fix modal text color */
+  .bg-panel.lg\:mb-4 h2,
+  .bg-panel.lg\:mb-4 span,
+  .bg-panel.lg\:mb-4 div {
+    color: inherit !important;
+  }
+
   /* Mobile: Pure Background Focus */
   @media (max-width: 999px) {
     :root {
@@ -797,6 +969,11 @@
       --glass-blur: 0px !important;
       --glass-bg: rgba(10, 10, 26, 0.05) !important;
       /* Extreme transparency */
+    }
+
+    [data-theme='lavender'] {
+      --glass-blur: 0px !important;
+      --glass-bg: rgba(15, 12, 26, 0.06) !important;
     }
 
     .landing-root-bg {
@@ -1316,5 +1493,19 @@
   .mute-btn:hover {
     background: rgba(0, 0, 0, 0.8);
     transform: scale(1.05);
+  }
+
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
   }
 }

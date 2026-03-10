@@ -7,6 +7,25 @@ import type { Message } from '../components/Chat/types';
 // `import { Message } from '../../stores/sessionStore'` keep working.
 export type { Message };
 
+export interface MatchRecord {
+    id: string; // peerId
+    username: string;
+    avatarSeed: string;
+    avatarUrl: string | null;
+    timestamp: string;
+    isVerified: boolean;
+}
+
+export interface Notification {
+    id: string;
+    type: 'friend_request_accepted' | 'system';
+    fromId: string;
+    fromUsername: string;
+    fromAvatarSeed: string;
+    timestamp: string;
+    content: string;
+}
+
 export interface SessionState {
     // Identity
     peerId: string;
@@ -29,6 +48,9 @@ export interface SessionState {
     isBracuUser: boolean;
     selectedInstitution: string;
     adminAccessKey: string;
+    bannerType: 'Simple' | 'Gradient' | 'Mesh';
+    bannerColor: string;
+    bannerGradient: string;
 
     // Session
     currentRoomId: string | null;
@@ -46,6 +68,8 @@ export interface SessionState {
     activeDmFriend: { id: string; username: string; avatarSeed: string } | null;
     hasNewDmMessage: boolean;
     dmMessages: Record<string, Message[]>;
+    matchHistory: MatchRecord[];
+    notifications: Notification[];
 
     // Actions
     initSession: () => void;
@@ -61,6 +85,9 @@ export interface SessionState {
     setIsBracuUser: (isBracuUser: boolean) => void;
     setSelectedInstitution: (institution: string) => void;
     setAdminAccessKey: (key: string) => void;
+    setBannerType: (type: 'Simple' | 'Gradient' | 'Mesh') => void;
+    setBannerColor: (color: string) => void;
+    setBannerGradient: (gradient: string) => void;
     joinRoom: (roomId: string, partnerId: string, partnerIsVerified: boolean, partnerName?: string, partnerAvatarSeed?: string, partnerAvatarUrl?: string | null) => void;
     setPartnerAvatarUrl: (partnerAvatarUrl: string | null) => void;
     leaveRoom: () => void;
@@ -78,6 +105,10 @@ export interface SessionState {
     deleteDmMessage: (friendId: string, messageId: string) => void;
     syncDmMessages: (friendId: string, messages: Message[]) => void;
     removeFriend: (friendId: string) => void;
+    addMatchToHistory: (match: MatchRecord) => void;
+    addNotification: (notification: Notification) => void;
+    removeNotification: (id: string) => void;
+    clearNotifications: () => void;
 }
 
 function generatePeerId(): string {
@@ -113,6 +144,9 @@ export const useSessionStore = create<SessionState>()(
             isBracuUser: false,
             selectedInstitution: 'all',
             adminAccessKey: '',
+            bannerType: 'Simple',
+            bannerColor: '#5B21B6',
+            bannerGradient: 'linear-gradient(45deg, #d53f8c, #4f46e5)',
             currentRoomId: null,
             isInChat: false,
             partnerId: null,
@@ -128,6 +162,8 @@ export const useSessionStore = create<SessionState>()(
             activeDmFriend: null,
             hasNewDmMessage: false,
             dmMessages: {},
+            matchHistory: [],
+            notifications: [],
 
             // Actions
             initSession: () => {
@@ -179,6 +215,9 @@ export const useSessionStore = create<SessionState>()(
             setIsBracuUser: (isBracuUser) => set({ isBracuUser }),
             setSelectedInstitution: (institution) => set({ selectedInstitution: institution }),
             setAdminAccessKey: (key) => set({ adminAccessKey: key }),
+            setBannerType: (type) => set({ bannerType: type }),
+            setBannerColor: (color) => set({ bannerColor: color }),
+            setBannerGradient: (gradient) => set({ bannerGradient: gradient }),
             setPartnerAvatarUrl: (partnerAvatarUrl) => set({ partnerAvatarUrl }),
 
             joinRoom: (roomId, partnerId, partnerIsVerified, partnerName, partnerAvatarSeed, partnerAvatarUrl) => set({
@@ -339,6 +378,24 @@ export const useSessionStore = create<SessionState>()(
                     activeDmFriend: state.activeDmFriend?.id === friendId ? null : state.activeDmFriend,
                 };
             }),
+
+            addMatchToHistory: (match) => set((state) => {
+                // Remove existing entry for this peer if any
+                const filtered = state.matchHistory.filter(m => m.id !== match.id);
+                // Prepend new match and limit to last 20
+                const newHistory = [match, ...filtered].slice(0, 20);
+                return { matchHistory: newHistory };
+            }),
+
+            addNotification: (notification) => set((state) => ({
+                notifications: [notification, ...state.notifications].slice(0, 50)
+            })),
+
+            removeNotification: (id) => set((state) => ({
+                notifications: state.notifications.filter(n => n.id !== id)
+            })),
+
+            clearNotifications: () => set({ notifications: [] }),
         }),
         {
             name: 'buzzu-session',
@@ -359,6 +416,9 @@ export const useSessionStore = create<SessionState>()(
                 isBracuUser: state.isBracuUser,
                 selectedInstitution: state.selectedInstitution,
                 adminAccessKey: state.adminAccessKey,
+                bannerType: state.bannerType,
+                bannerColor: state.bannerColor,
+                bannerGradient: state.bannerGradient,
                 friendRequestsSent: state.friendRequestsSent,
                 friendRequestsReceived: state.friendRequestsReceived,
                 friendList: state.friendList,
@@ -371,6 +431,8 @@ export const useSessionStore = create<SessionState>()(
                 partnerAvatarSeed: state.partnerAvatarSeed,
                 partnerAvatarUrl: state.partnerAvatarUrl,
                 partnerIsVerified: state.partnerIsVerified,
+                matchHistory: state.matchHistory,
+                notifications: state.notifications,
             }),
         }
     )

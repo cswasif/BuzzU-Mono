@@ -113,9 +113,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
               {useSessionStore.getState().adminAccessKey && (
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('join-room-type', { detail: { type: 'admin' } }))}
-                  className="group w-full flex items-center gap-2.5 p-1.5 hover:bg-accent disabled:select-none rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 transition-all text-amber-500"
+                  className="group w-full flex items-center gap-2.5 p-1.5 hover:bg-accent disabled:select-none rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 transition-all text-[#8d96f6]"
                 >
-                  <div className="flex shrink-0 items-center justify-center h-7 w-7 rounded-md bg-amber-500/10 text-amber-500 group-hover:bg-amber-500/20 group-hover:text-amber-400 transition-all duration-200">
+                  <div className="flex shrink-0 items-center justify-center h-7 w-7 rounded-md bg-[#8d96f6]/10 text-[#8d96f6] group-hover:bg-[#8d96f6]/20 group-hover:text-[#8d96f6] transition-all duration-200">
                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
                     </svg>

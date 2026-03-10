@@ -1,9 +1,9 @@
-
 import React, { useEffect, useState } from 'react';
 import { AuthColumn } from './AuthColumn';
 import { Footer } from './Footer';
 import { SplashScreen } from './SplashScreen';
 import { useTheme } from '../ThemeContext';
+import { PWAInstallPill } from './PWAInstallPill';
 import '../../styles.css';
 
 const DESKTOP_IMAGES = ['/desktop1.png', '/desktop3.png'];
@@ -116,8 +116,14 @@ export default function SocialLanding() {
               <path d="M12 2L15 5M12 2L9 5M12 2V10M12 22V14M12 22L15 19M12 22L9 19M2 12L5 15M2 12L5 9M2 12H10M22 12H14M22 12L19 15M22 12L19 9"></path>
               <circle cx="12" cy="12" r="3"></circle>
             </svg>
-          ) : (
+          ) : theme === 'lavender' ? (
             // Flower/Feather-like Icon for Lavender
+            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+            </svg>
+          ) : (
+            // Default icon if theme doesn't match any specific case (e.g., for 'lavender' if it was the default before)
+            // Using the lavender icon as a fallback for any unhandled theme
             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
             </svg>
@@ -143,6 +149,8 @@ export default function SocialLanding() {
                     <AuthColumn onVideoReady={() => setIsVideoReady(true)} />
 
                     <Footer />
+
+                    <PWAInstallPill />
 
                   </div>
                 </div>

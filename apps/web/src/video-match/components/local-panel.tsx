@@ -120,10 +120,9 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
           <div className="w-full h-full relative rounded-xl overflow-hidden">
             {/* Simulated blurred canvas background */}
             <div
-              className="rounded-xl absolute inset-0 w-full h-full"
+              className="rounded-xl absolute inset-0 w-full h-full bg-cover bg-center"
               style={{
-                background:
-                  "linear-gradient(135deg, #5a6e7f 0%, #8b7d6b 25%, #6b8a7d 50%, #7d6b8a 75%, #6b7d8a 100%)",
+                backgroundImage: "url(/assets/partner_fallback.jpg)",
                 filter: "blur(30px)",
                 transform: "scale(1.1)",
               }}
@@ -172,13 +171,16 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
           </div>
 
           {/* Video element (behind overlay) */}
-          <div className="absolute inset-0 w-full h-full">
+          <div
+            className="absolute inset-0 w-full h-full bg-cover bg-center"
+            style={{ backgroundImage: 'url(/assets/partner_fallback.jpg)' }}
+          >
             <video
               ref={videoRef}
               autoPlay
               playsInline
               disablePictureInPicture
-              className={`absolute inset-0 w-full h-full object-cover rounded-sm md:rounded-xl bg-black transform-gpu will-change-transform transition-opacity duration-300 ${remoteStream ? "opacity-100" : "opacity-0"}`}
+              className={`absolute inset-0 w-full h-full object-cover rounded-sm md:rounded-xl bg-transparent transform-gpu will-change-transform transition-opacity duration-300 ${remoteStream ? "opacity-100" : "opacity-0"}`}
             />
           </div>
         </div>
@@ -269,13 +271,16 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
           </div>
 
           {/* Video element */}
-          <div className="relative w-full h-full">
+          <div
+            className="relative w-full h-full bg-cover bg-center"
+            style={{ backgroundImage: 'url(/assets/partner_fallback.jpg)' }}
+          >
             <video
               ref={videoRef}
               autoPlay
               playsInline
               disablePictureInPicture
-              className={`absolute inset-0 w-full h-full object-cover rounded-sm md:rounded-xl bg-black transform-gpu will-change-transform transition-opacity duration-300 ${remoteStream ? "opacity-100" : "opacity-0"}`}
+              className={`absolute inset-0 w-full h-full object-cover rounded-sm md:rounded-xl bg-transparent transform-gpu will-change-transform transition-opacity duration-300 ${remoteStream ? "opacity-100" : "opacity-0"}`}
             />
           </div>
         </div>
@@ -287,9 +292,12 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
   return (
     <div className="flex items-center justify-center w-full h-1/2 lg:w-1/2 lg:h-full bg-[hsl(var(--cc-panel))] rounded-sm lg:rounded-lg">
       <div className="relative w-full h-full group overflow-hidden">
-        <div className="w-full h-full relative bg-black rounded-sm md:rounded-xl overflow-hidden">
+        <div
+          className="w-full h-full relative bg-black rounded-sm md:rounded-xl overflow-hidden bg-cover bg-center"
+          style={{ backgroundImage: 'url(/assets/partner_fallback.jpg)' }}
+        >
           {/* Main UI elements */}
-          {!isSearching && <AnimatedBackground />}
+          {!isSearching && <div className="absolute inset-0 bg-black/40 z-10" />}
 
           {/* Dark overlay when searching */}
           {isSearching && (

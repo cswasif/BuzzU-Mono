@@ -509,7 +509,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
     const renderDropdown = (id: string, value: string, onChange: (val: string) => void, options: string[]) => (
         <div className="relative">
             <button
-                className="flex h-9 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-[140px]"
+                className="flex h-9 items-center justify-between rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-[140px]"
                 onClick={() => setOpenDropdown(openDropdown === id ? null : id)}
             >
                 <span>{value}</span>
@@ -585,7 +585,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                     console.log('File input element:', fileInput);
                                                     fileInput?.click();
                                                 }} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Change</button>
-                                                <button onClick={() => setCroppedAvatarUrl('')} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness">Remove</button>
+                                                <button onClick={() => setCroppedAvatarUrl('')} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Remove</button>
                                             </div>
                                             <input className="hidden" id="_r_av_mobile" type="file" accept="image/*" onChange={handleAvatarFileSelect} />
                                         </div>
@@ -683,7 +683,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             </label>
                                             <button
                                                 onClick={() => setShowDeleteModal(true)}
-                                                className="inline-flex items-center justify-center text-sm font-medium border border-destructive text-destructive hover:bg-destructive/10 h-9 rounded-md px-3 gap-2"
+                                                className="inline-flex items-center justify-center text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 rounded-md px-3 gap-2"
                                             >
                                                 <DeleteAccountIcon className="w-4 h-4" /> Delete
                                             </button>
@@ -812,7 +812,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                         console.log('File input element (desktop):', fileInput);
                                                         fileInput?.click();
                                                     }} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Change</button>
-                                                    <button onClick={() => setCroppedAvatarUrl('')} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-brightness">Remove</button>
+                                                    <button onClick={() => setCroppedAvatarUrl('')} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Remove</button>
                                                 </div>
                                                 <input className="hidden" id="_r_av_" type="file" accept="image/*" onChange={handleAvatarFileSelect} />
                                             </div>
@@ -909,7 +909,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                 </label>
                                                 <button
                                                     onClick={() => setShowDeleteModal(true)}
-                                                    className="inline-flex items-center justify-center text-sm font-medium border border-destructive text-destructive hover:bg-destructive/10 h-9 rounded-md px-3 gap-2"
+                                                    className="inline-flex items-center justify-center text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 rounded-md px-3 gap-2"
                                                 >
                                                     <DeleteAccountIcon className="w-4 h-4" /> Delete
                                                 </button>

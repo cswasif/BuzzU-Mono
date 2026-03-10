@@ -73,8 +73,8 @@ export const GenderSelectionModal: React.FC<GenderSelectionModalProps> = ({ isOp
                                                 }
                                             }}
                                             className={`flex-1 flex items-center justify-center gap-2 w-full py-2 px-4 cursor-pointer rounded-md border text-sm font-medium leading-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedGender === 'M'
-                                                ? 'bg-secondary text-white border-primary'
-                                                : 'bg-popover hover:bg-accent border-input text-foreground'
+                                                ? 'bg-secondary text-white border-primary hover:scale-105 hover:shadow-md'
+                                                : 'bg-popover hover:bg-accent hover:scale-105 hover:shadow-md border-input text-foreground'
                                                 }`}
                                         >
                                             <MaleIcon className="w-5 h-5" />
@@ -94,8 +94,8 @@ export const GenderSelectionModal: React.FC<GenderSelectionModalProps> = ({ isOp
                                                 }
                                             }}
                                             className={`flex-1 flex items-center justify-center gap-2 w-full py-2 px-4 cursor-pointer rounded-md border text-sm font-medium leading-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedGender === 'F'
-                                                ? 'bg-secondary text-white border-primary'
-                                                : 'bg-popover hover:bg-accent border-input text-foreground'
+                                                ? 'bg-secondary text-white border-primary hover:scale-105 hover:shadow-md'
+                                                : 'bg-popover hover:bg-accent hover:scale-105 hover:shadow-md border-input text-foreground'
                                                 }`}
                                         >
                                             <FemaleIcon className="w-5 h-5" />
@@ -113,20 +113,20 @@ export const GenderSelectionModal: React.FC<GenderSelectionModalProps> = ({ isOp
 
                                 <span className="text-sm text-foreground/80">
                                     I'm at least <b className="text-warning font-bold">18 years old</b> and have read and agree to the{' '}
-                                    <a href="/terms" target="_blank" className="text-blue-500 hover:underline">Terms of Service</a>{' '}
-                                    and <a href="/privacy" target="_blank" className="text-blue-500 hover:underline">Privacy Policy</a>
+                                    <a href="/terms" target="_blank" className="text-blue-500 hover:underline hover:text-blue-400 transition-colors duration-200">Terms of Service</a>{' '}
+                                    and <a href="/privacy" target="_blank" className="text-blue-500 hover:underline hover:text-blue-400 transition-colors duration-200">Privacy Policy</a>
                                 </span>
 
                                 <div className="flex-col-reverse max-md:gap-3 sm:flex-row sm:justify-end sm:space-x-2 pt-1.5 grid grid-cols-1 gap-2">
                                     <button
                                         disabled={!selectedGender}
-                                        className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full active:scale-[0.98]"
+                                        className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 hover:shadow-lg active:scale-95 h-10 px-4 py-2 w-full"
                                         type="submit"
                                     >
                                         I AGREE, LET'S GO!
                                     </button>
                                     <span className="text-xs text-center sm:text-left mt-2 hidden">
-                                        Already have an account? <a href="/login" className="text-blue-500 hover:underline">Login</a>
+                                        Already have an account? <a href="/login" className="text-blue-500 hover:underline hover:text-blue-400 transition-colors duration-200">Login</a>
                                     </span>
                                 </div>
                             </form>

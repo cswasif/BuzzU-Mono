@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useState, useCallback, useEffect } from 'react';
+import { ConnectionIndicator } from '../Chat/ConnectionIndicator';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -13,7 +14,7 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRequestsClick, onInboxClick, theme, toggleTheme, isLeftSidebarOpen }) => {
-  const { friendRequestsReceived, avatarSeed, isInChat, partnerName, activeDmFriend } = useSessionStore();
+  const { friendRequestsReceived, avatarSeed, isInChat, partnerName, activeDmFriend, partnerId } = useSessionStore();
   const requestCount = Object.keys(friendRequestsReceived).length;
   const location = useLocation();
 
@@ -120,7 +121,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
       : 'New Chat';
 
   return (
-    <div className="z-20 flex-row w-full flex items-center flex-grow flex-shrink-0 max-h-12 h-12 p-0 pr-2 shadow-md">
+    <div className="z-40 flex-row w-full flex items-center flex-grow flex-shrink-0 max-h-12 h-12 p-0 pr-2 shadow-md">
       {/* Hamburger menu - always visible on mobile; on desktop, it sits in a w-12 block over the sidebar (or alone) */}
       <div className={`flex h-full flex-none items-center justify-center !pointer-events-auto transition-all duration-300 w-12 ${isLeftSidebarOpen ? 'lg:bg-popover' : ''}`}>
         <span className="mt-1 flex px-2 lg:px-0 lg:ml-2">
@@ -137,7 +138,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
       {/* Brand Logo - hidden on mobile. On desktop, expands to fill up to w-64 (along with the w-12 above, total w-64 bg-popover) */}
       <div className={`h-full overflow-hidden hidden lg:flex items-center shrink-0 transition-all duration-300 ${isLeftSidebarOpen ? 'w-[13rem] bg-popover border-border/10 border-r' : 'w-auto'}`}>
         <a className="hidden h-full flex-row items-center gap-2 px-4 text-xl normal-case no-underline hover:no-underline lg:flex" href="/chat/new" title="Home" aria-label="Home">
-          <svg width="32" height="32" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#FFD700" stroke="#FFD700">
+          <svg width="32" height="32" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#8d96f6" stroke="#8d96f6">
             <g id="SVGRepo_bgCarrier" strokeWidth="0" />
             <g id="SVGRepo_tracerCarrier" strokeLinecap="round" strokeLinejoin="round" stroke="#CCCCCC" strokeWidth="0.336" />
             <g id="SVGRepo_iconCarrier">
@@ -147,8 +148,11 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           <span className="font-bold tracking-tight text-brightness">BuzzU</span>
         </a>
       </div>
-      <span className="text-md truncate font-bold normal-case ml-4 cursor-default px-2 text-brightness" role="button" tabIndex={0}>{headerTitle}</span>
-      <div className="flex flex-1 justify-end gap-1 md:gap-2">
+      <div className="flex items-center ml-4 gap-2 flex-1 min-w-0">
+        <span className="text-md truncate font-bold normal-case cursor-default px-2 text-brightness" role="button" tabIndex={0}>{headerTitle}</span>
+        {(partnerId || activeDmFriend) && <ConnectionIndicator size="sm" className="flex-shrink-0" tooltipPlacement="bottom" />}
+      </div>
+      <div className="flex justify-end gap-1 md:gap-2 shrink-0">
         {/* Fullscreen toggle */}
         <button
           onClick={toggleFullscreen}

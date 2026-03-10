@@ -8,6 +8,7 @@ import { InterestsModal, SettingsModal } from '../components/Dashboard_Updated/M
 import Banner from '../components/Dashboard_Updated/Banner';
 import FriendRequestsModal from '../components/Dashboard_Updated/FriendRequestsModal';
 import InboxModal from '../components/Dashboard_Updated/InboxModal';
+import NotificationListener from '../components/Dashboard_Updated/NotificationListener';
 import { ProfileModal } from '../components/Chat/ProfileModal';
 import { DmSignalingProvider } from '../context/DmSignalingContext';
 import { useSessionStore } from '../stores/sessionStore';
@@ -97,9 +98,9 @@ export default function DashboardLayout() {
     return (
         <DmSignalingProvider>
             <div className={`chitchat-dashboard-theme ${theme === 'dark' ? 'theme-dark' : ''} min-h-[100dvh] bg-background text-foreground`}>
+                <NotificationListener />
                 <div className="text-foreground bg-background h-[100dvh] flex flex-col overflow-hidden text-sm md:text-base">
-                    {/* Banner + Header — hidden when video mode etc. */}
-                    {!hideChrome && <Banner />}
+                    {/* Header — hidden when video mode etc. */}
                     {!hideChrome && (
                         <Header
                             onMenuClick={() => setIsLeftSidebarOpen(o => !o)}

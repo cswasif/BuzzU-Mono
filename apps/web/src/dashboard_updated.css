@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap");
 @import "./tailwind-theme.css";
 
 @layer inherited, component;
@@ -61,7 +61,7 @@
     /* Base Styling */
     background-color: hsl(var(--background)) !important;
     color: hsl(var(--foreground)) !important;
-    font-family: 'DM Sans', sans-serif !important;
+    font-family: "DM Sans", sans-serif !important;
     tab-size: 4;
     font-feature-settings: normal;
     font-variation-settings: normal;
@@ -76,7 +76,9 @@
 
 /* Message hover effect */
 .chitchat-dashboard-theme .chat-message-item {
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease;
     border-left: 3px solid transparent;
 }
 
@@ -110,20 +112,18 @@
     /* teal-400 */
 }
 
-
 /* Logo Breathing Animation for Search */
 @keyframes logo-breathe {
-
     0%,
     100% {
         transform: scale(1);
-        filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.2));
+        filter: drop-shadow(0 0 5px rgba(141, 150, 246, 0.2));
         opacity: 0.8;
     }
 
     50% {
         transform: scale(1.1);
-        filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.5));
+        filter: drop-shadow(0 0 20px rgba(141, 150, 246, 0.5));
         opacity: 1;
     }
 }
@@ -184,7 +184,7 @@
 /* ============================================================
    MASTER FIX: Neutralize Tailwind dark: classes leaking into
    our light-mode chitchat container.
-   
+
    BuzzU sets `class="dark"` on <html>, which makes Tailwind's
    `dark:*` variants apply to ALL elements. These rules override
    those back to light-theme values inside our light container.
@@ -224,20 +224,28 @@
 }
 
 /* Placeholder text */
-.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:placeholder\:text-placeholder-foreground\/50::placeholder {
+.dark
+    .chitchat-dashboard-theme:not(.theme-dark)
+    .dark\:placeholder\:text-placeholder-foreground\/50::placeholder {
     color: hsla(var(--placeholder-foreground), 0.6) !important;
 }
 
 /* Hover utilities */
-.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:hover\:text-current:hover {
+.dark
+    .chitchat-dashboard-theme:not(.theme-dark)
+    .dark\:hover\:text-current:hover {
     color: hsl(var(--foreground)) !important;
 }
 
-.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:hover\:text-zinc-300:hover {
+.dark
+    .chitchat-dashboard-theme:not(.theme-dark)
+    .dark\:hover\:text-zinc-300:hover {
     color: hsl(var(--foreground)) !important;
 }
 
-.dark .chitchat-dashboard-theme:not(.theme-dark) .dark\:hover\:text-zinc-600:hover {
+.dark
+    .chitchat-dashboard-theme:not(.theme-dark)
+    .dark\:hover\:text-zinc-600:hover {
     color: hsl(var(--foreground)) !important;
 }
 
@@ -260,7 +268,8 @@
 .chitchat-dashboard-theme .from-background {
     --tw-gradient-from: hsl(var(--background)) !important;
     --tw-gradient-to: hsla(var(--background), 0) !important;
-    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+    --tw-gradient-stops:
+        var(--tw-gradient-from), var(--tw-gradient-to) !important;
 }
 
 .chitchat-dashboard-theme .to-background {
@@ -268,7 +277,10 @@
 }
 
 .chitchat-dashboard-theme .bg-gradient-to-b {
-    background-image: linear-gradient(to bottom, var(--tw-gradient-stops)) !important;
+    background-image: linear-gradient(
+        to bottom,
+        var(--tw-gradient-stops)
+    ) !important;
 }
 
 .chitchat-dashboard-theme .bg-primary {
@@ -394,7 +406,7 @@
 
 /* Force font-sans on everything */
 .chitchat-dashboard-theme .font-sans {
-    font-family: 'DM Sans', sans-serif !important;
+    font-family: "DM Sans", sans-serif !important;
 }
 
 /* Reset default borders to be very subtle */
@@ -403,7 +415,7 @@
 }
 
 /* Tab Active States */
-.chitchat-dashboard-theme button[data-state=active] {
+.chitchat-dashboard-theme button[data-state="active"] {
     background-color: hsl(var(--background)) !important;
     color: hsl(var(--foreground)) !important;
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
@@ -412,7 +424,9 @@
 /* Specific Popover Overrides */
 .chitchat-dashboard-theme .bg-popover {
     border: 1px solid hsla(var(--border), 0.15) !important;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1) !important;
+    box-shadow:
+        0 10px 15px -3px rgba(0, 0, 0, 0.2),
+        0 4px 6px -2px rgba(0, 0, 0, 0.1) !important;
 }
 
 /* Border utilities with more visibility */
@@ -496,7 +510,8 @@
 /* Textarea itself must have visible text */
 .chitchat-dashboard-theme textarea,
 .chitchat-dashboard-theme input[type="text"],
-.chitchat-dashboard-theme input:not([type="file"]):not([type="checkbox"]):not([type="radio"]) {
+.chitchat-dashboard-theme
+    input:not([type="file"]):not([type="checkbox"]):not([type="radio"]) {
     color: hsl(var(--foreground)) !important;
     caret-color: hsl(var(--foreground)) !important;
 }
@@ -676,7 +691,6 @@
 }
 
 @keyframes chitchat-bounce {
-
     0%,
     100% {
         transform: scale(0.6);
@@ -701,7 +715,8 @@
 }
 
 .chitchat-dashboard-theme .fixed-input-height {
-    height: 44px !important;
+    min-height: 44px;
+    height: auto;
 }
 
 /* ============================================================
@@ -712,13 +727,12 @@
 em-emoji-picker {
     --border-radius: 12px;
     --category-icon-size: 20px;
-    --font-family: 'DM Sans', sans-serif;
+    --font-family: "DM Sans", sans-serif;
     --rgb-accent: 112, 87, 186;
     --rgb-background: 24, 25, 28;
     --rgb-color: 255, 255, 255;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
-
 
 /* Neutralize Tailwind dark: bleed for input box in light mode */
 .dark .chitchat-dashboard-theme:not(.theme-dark) .textarea {
@@ -726,7 +740,6 @@ em-emoji-picker {
 }
 
 @layer inherited {
-
     #component,
     #component:before,
     #component:after {
@@ -760,13 +773,159 @@ em-emoji-picker {
 }
 
 @layer component {
+    /* Fix for modal white border issue */
+    [role="dialog"] {
+        border: none !important;
+        border-color: transparent !important;
+        border-width: 0 !important;
+    }
+
+    /* Also target the modal content specifically */
+    [role="dialog"].border,
+    [role="dialog"][class*="border"] {
+        border: none !important;
+        border-color: transparent !important;
+        border-width: 0 !important;
+    }
+
+    /* Force remove border on all dialogs */
+    [role="dialog"] *,
+    [role="dialog"] *::before,
+    [role="dialog"] *::after {
+        border-color: transparent !important;
+    }
+
+    /* Specific override for the modal */
+    [role="dialog"][data-state="open"] {
+        border: none !important;
+        border-color: transparent !important;
+        border-width: 0 !important;
+    }
+
+    /* Fix interests modal - make it more compact */
+    .bg-panel.lg\\:mb-4 {
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .bg-panel.lg\\:mb-4 .space-y-6 {
+        gap: 1rem !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .space-y-3 {
+        gap: 0.75rem !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .space-y-2\\.5 {
+        gap: 0.5rem !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .p-4 {
+        padding: 1rem !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .md\\:p-6 {
+        padding: 1rem !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .mb-4 {
+        margin-bottom: 0.75rem !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .mt-6 {
+        margin-top: 1rem !important;
+    }
+
+    /* Make gender filter more compact */
+    .bg-panel.lg\\:mb-4 [role="radiogroup"] {
+        gap: 0.5rem !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .min-w-16 {
+        min-width: 4rem !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .sm\\:w-20 {
+        width: 5rem !important;
+    }
+
+    /* Compact the gender filter labels */
+    .bg-panel.lg\\:mb-4 .p-3 {
+        padding: 0.5rem !important;
+    }
+
+    /* Reduce button area spacing */
+    .bg-panel.lg\\:mb-4 .space-x-2\\.5 {
+        gap: 0.75rem !important;
+    }
+
+    /* Compact the footer text area */
+    .bg-panel.lg\\:mb-4 .text-xs {
+        font-size: 0.65rem !important;
+    }
+
+    /* Make modal content wrapper more compact */
+    .bg-panel.lg\\:mb-4 > .flex > .flex-col {
+        max-height: 85vh;
+        overflow-y: auto;
+    }
+
+    /* Compact the manage button area */
+    .bg-panel.lg\\:mb-4 .flex.justify-between {
+        padding: 0.25rem 0 !important;
+    }
+
     .text-fuchsia-700 {
         --tw-text-opacity: 1;
         color: rgba(162, 28, 175, var(--tw-text-opacity, 1)) !important;
     }
 
     .bg-gradient-to-r {
-        background-image: linear-gradient(to right, var(--tw-gradient-stops)) !important;
+        background-image: linear-gradient(
+            to right,
+            var(--tw-gradient-stops)
+        ) !important;
+    }
+
+    /* Fix Start Text Chat button gradient */
+    .bg-panel.lg\\:mb-4 .from-indigo-600 {
+        --tw-gradient-from: rgb(79, 70, 229) !important;
+        background-color: rgb(79, 70, 229) !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .to-emerald-700 {
+        --tw-gradient-to: rgb(4, 120, 87) !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .hover\\:from-indigo-700:hover {
+        --tw-gradient-from: rgb(67, 56, 202) !important;
+    }
+
+    .bg-panel.lg\\:mb-4 .hover\\:to-emerald-800:hover {
+        --tw-gradient-to: rgb(6, 95, 70) !important;
+    }
+
+    /* Ensure white text on gradient button */
+    .bg-panel.lg\\:mb-4 .from-indigo-600,
+    .bg-panel.lg\\:mb-4 .to-emerald-700 {
+        color: #ffffff !important;
+    }
+
+    .bg-panel.lg\\:mb-4 button.flex-1 {
+        background: linear-gradient(
+            to right,
+            rgb(79, 70, 229),
+            rgb(4, 120, 87)
+        ) !important;
+        color: #ffffff !important;
+    }
+
+    .bg-panel.lg\\:mb-4 button.flex-1:hover {
+        background: linear-gradient(
+            to right,
+            rgb(67, 56, 202),
+            rgb(6, 95, 70)
+        ) !important;
     }
 
     /* Custom component IDs for specific styling provided by extraction */
@@ -829,8 +988,7 @@ em-emoji-picker {
    ============================================================ */
 
 /* PWA standalone / fullscreen detection */
-@media all and (display-mode: fullscreen),
-       all and (display-mode: standalone) {
+@media all and (display-mode: fullscreen), all and (display-mode: standalone) {
     body {
         /* Pad the edges to avoid content behind notch/status bar */
         padding-top: env(safe-area-inset-top);

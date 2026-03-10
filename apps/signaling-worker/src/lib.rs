@@ -110,6 +110,13 @@ pub enum SignalingMessage {
         to: String,
         sharing: bool,
     },
+    /// Voice chat mic state — relayed peer-to-peer, server treats as opaque.
+    /// `sharing` = true means mic is active, false means mic is muted/off.
+    VoiceChat {
+        from: String,
+        to: String,
+        sharing: bool,
+    },
     /// E2E encrypted envelope — server treats as opaque relay.
     /// Payload is base64 XChaCha20-Poly1305 ciphertext.
     Encrypted {
@@ -262,7 +269,7 @@ impl DurableObject for RoomDurableObject {
                 self.state.set_websocket_auto_response(&auto);
             }
 
-            if matches!(status, PeerStatus::Waiting) {
+            if matches!(attachment.status, PeerStatus::Waiting) {
                 let wait_msg = SignalingMessage::RoomStatus {
                     status: "waiting".to_string(),
                     active_peers,
@@ -603,6 +610,16 @@ impl DurableObject for RoomDurableObject {
                 self.forward_to_peer(
                     &to,
                     SignalingMessage::ScreenShare {
+                        from: from_peer,
+                        to: to.clone(),
+                        sharing,
+                    },
+                );
+            }
+            SignalingMessage::VoiceChat { to, sharing, .. } => {
+                self.forward_to_peer(
+                    &to,
+                    SignalingMessage::VoiceChat {
                         from: from_peer,
                         to: to.clone(),
                         sharing,

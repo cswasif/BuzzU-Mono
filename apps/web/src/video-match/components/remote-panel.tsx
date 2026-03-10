@@ -266,7 +266,10 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
         </button>
 
         {/* Video placeholder area */}
-        <div className="relative w-full h-full bg-[#121215]">
+        <div
+          className="relative w-full h-full bg-[#121215] bg-cover bg-center"
+          style={{ backgroundImage: 'url(/assets/camera_fallback.jfif)' }}
+        >
           {/* Waiting for camera / Denied state UI */}
           {!stream && (
             <div className="flex flex-col items-center justify-center w-full h-full absolute z-20">

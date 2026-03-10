@@ -1,5 +1,6 @@
 import React from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
+import Banner from './Banner';
 
 interface ProfilePopoverProps {
     onClose: () => void;
@@ -21,30 +22,39 @@ const ProfilePopover: React.FC<ProfilePopoverProps> = ({ onClose, onEditProfile 
             onClick={(e) => e.stopPropagation()}
         >
             <div className="bg-popover relative pb-1 max-h-[75vh] overflow-y-auto">
-                <div>
-                    <div className="space-y-1.5 text-center sm:text-left flex flex-col items-center rounded-t-lg justify-center gap-2 px-2 py-4 bg-muted h-24 relative">
+                <div className="relative">
+                    {/* Banner Background */}
+                    <div className="absolute top-0 left-0 right-0 h-32 rounded-t-lg overflow-hidden z-0">
+                        <Banner />
                     </div>
-                    <div className="absolute top-0 my-16 left-0 right-0 mx-auto inline-block w-min">
-                        <span className="flex shrink-0 overflow-hidden relative h-16 w-16 rounded-3xl ring-2 ring-popover">
-                            <img className="aspect-square h-full w-full" alt={displayName} src={avatarSrc} />
+
+                    {/* Spacer for Banner */}
+                    <div className="h-16"></div>
+
+                    {/* Avatar Container */}
+                    <div className="relative z-10 px-5 flex flex-col items-center">
+                        <span className="flex shrink-0 overflow-hidden relative h-24 w-24 rounded-[2rem] ring-4 ring-popover bg-popover rounded-3xl shadow-sm">
+                            <img className="aspect-square h-full w-full object-cover" alt={displayName} src={avatarSrc} />
                         </span>
-                    </div>
-                    <div>
-                        <div className="bg-action rounded-md my-2.5 mx-5 flex items-center justify-center flex-col overflow-y-auto">
-                            <span className="flex items-center gap-1 font-semibold w-full justify-center mt-8 text-brightness">{displayName}</span>
-                            <div className="flex flex-col items-center justify-center px-2 pb-4 w-full">
-                                <code className="text-muted-foreground rounded-md text-xs">ID: {peerId.split('_').pop()}</code>
-                                <div data-orientation="horizontal" role="none" className="shrink-0 h-[1px] w-full mt-2 bg-border/40"></div>
-                                <div className="mt-2 w-full flex items-center justify-center rounded-md">
+
+                        <div className="bg-action/90 backdrop-blur-sm rounded-xl mt-3 py-3 w-full flex items-center justify-center flex-col px-4 shadow-sm border border-border/50">
+                            <span className="flex items-center gap-1 font-semibold w-full justify-center text-brightness text-lg">{displayName}</span>
+                            <div className="flex flex-col items-center justify-center w-full">
+                                <code className="text-muted-foreground rounded-md text-xs mt-1 mb-3">ID: {peerId.split('_').pop()}</code>
+
+                                <div className="w-full flex items-center justify-center rounded-md">
                                     <button
                                         onClick={onEditProfile}
-                                        className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 w-full"
+                                        className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3 w-full transition-colors"
                                     >
                                         Edit Profile
                                     </button>
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <div className="pt-2">
                         <div className="bg-action rounded-md py-2.5 my-2.5 mx-5 flex items-center justify-center flex-col px-2">
                             <div className="mb-1 text-xs text-brightness/90 font-bold uppercase">BuzzU JOIN DATE</div>
                             <div className="text-xs">{formattedJoinDate}</div>
@@ -52,13 +62,13 @@ const ProfilePopover: React.FC<ProfilePopoverProps> = ({ onClose, onEditProfile 
                             <div className="mt-1 w-full max-w-xs rounded-md bg-panel px-4 py-2 text-center cursor-default max-h-64 overflow-y-auto scrollbar-thin scrollbar-t !px-6">
                                 <div id="parent" className="relative">
                                     <div className="">
-                                    {interests.length === 0 ? (
-                                        <div className="inline-flex items-center justify-center px-2.5 py-1 text-sm font-medium rounded-full my-2 mr-1 bg-placeholder" color="secondary">No interests</div>
-                                    ) : (
-                                        interests.map((interest) => (
-                                            <div key={interest} className="inline-flex items-center justify-center px-2.5 py-1 text-sm font-medium rounded-full my-2 mr-1 bg-placeholder" color="secondary">{interest}</div>
-                                        ))
-                                    )}
+                                        {interests.length === 0 ? (
+                                            <div className="inline-flex items-center justify-center px-2.5 py-1 text-sm font-medium rounded-full my-2 mr-1 bg-placeholder" color="secondary">No interests</div>
+                                        ) : (
+                                            interests.map((interest) => (
+                                                <div key={interest} className="inline-flex items-center justify-center px-2.5 py-1 text-sm font-medium rounded-full my-2 mr-1 bg-placeholder" color="secondary">{interest}</div>
+                                            ))
+                                        )}
                                     </div>
                                 </div>
                             </div>
