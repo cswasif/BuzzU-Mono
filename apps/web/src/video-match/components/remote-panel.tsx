@@ -16,6 +16,7 @@ interface ChatMessage {
   id: string | number;
   text: string;
   sender: "me" | "them";
+  username?: string;
 }
 
 interface RemotePanelProps {
@@ -63,6 +64,7 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
             id: chatMsg.id,
             text: chatMsg.content,
             sender: isSelf ? "me" : "them",
+            username: chatMsg.username || "Partner",
           },
         ]);
       } catch (e) {
@@ -113,6 +115,7 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
         id: chatMsg.id,
         text: chatMsg.content,
         sender: "me",
+        username: displayName,
       },
     ]);
     setInputValue("");
@@ -129,24 +132,30 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
           {/* Chat section */}
           <section className="absolute px-1 md:px-4 bottom-3 md:bottom-5 z-30 w-full" aria-label="Chat container">
             {/* Messages area */}
-            <div className="relative mb-1 md:mb-4 transition-opacity duration-500 hover:opacity-100 opacity-70">
+            <div className="relative mb-1 md:mb-4 transition-opacity duration-500 hover:opacity-100 opacity-90 h-[30vh] md:h-[40vh] overflow-hidden">
               <div
                 ref={chatRef}
-                className="relative h-[30vh] md:h-[40vh] overflow-y-auto p-1 md:p-1.5"
+                className="absolute bottom-0 left-0 w-full max-h-[100%] overflow-y-auto p-1 md:p-1.5 flex flex-col justify-start pb-2"
                 style={{ scrollbarWidth: "none" }}
               >
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`mb-1.5 flex ${msg.sender === "me" ? "justify-end" : "justify-start"}`}
+                    className={`mb-2.5 flex w-full animate-in fade-in slide-in-from-bottom-2 duration-300 ${msg.sender === "me" ? "justify-end pl-12" : "justify-start pr-12"}`}
                   >
-                    <div
-                      className={`max-w-[80%] px-3 py-1.5 rounded-2xl text-sm ${msg.sender === "me"
-                        ? "bg-violet-600/80 text-white"
-                        : "bg-white/15 text-white"
-                        }`}
-                    >
-                      {msg.text}
+                    <div className={`flex flex-col ${msg.sender === "me" ? "items-end" : "items-start"}`}>
+                      {/* Name header above the bubble */}
+                      <span className={`text-[10px] font-bold uppercase tracking-wider mb-1 drop-shadow-md ${msg.sender === "me" ? "mr-3 text-white/50" : "ml-3 text-white/80"}`}>
+                        {msg.username || (msg.sender === "me" ? "Me" : "Partner")}
+                      </span>
+
+                      {/* Message body */}
+                      <div className={`backdrop-blur-md px-4 py-2 max-w-full text-[14.5px] shadow-sm font-medium leading-snug w-fit ${msg.sender === "me"
+                          ? "bg-indigo-500/90 text-white rounded-2xl rounded-tr-sm"
+                          : "bg-black/50 border border-white/10 text-white rounded-2xl rounded-tl-sm"
+                        }`}>
+                        {msg.text}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -154,11 +163,11 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
             </div>
 
             {/* Message input */}
-            <form className="relative flex items-center" onSubmit={handleSend}>
-              <div className="absolute inset-0 bg-black/25 backdrop-blur-sm rounded-full" />
+            <form className="relative flex items-center z-40 mt-1" onSubmit={handleSend}>
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-xl border border-white/10 rounded-full" />
               <input
                 placeholder="Send a message..."
-                className="w-full bg-transparent relative py-3 md:py-4 pl-3 md:pl-4 rounded-full text-white placeholder:text-white/65 focus:outline-hidden text-sm pr-16"
+                className="w-full bg-transparent relative py-2.5 md:py-3.5 pl-4 md:pl-5 rounded-full text-white placeholder:text-white/60 focus:outline-hidden text-[15px] font-medium pr-16 shadow-inner"
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
@@ -166,7 +175,7 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
               <button
                 type="submit"
                 disabled={!inputValue.trim()}
-                className="absolute right-2 px-3 py-1.5 text-sm font-semibold text-white/90 disabled:text-white/40 disabled:cursor-not-allowed cursor-pointer"
+                className="absolute right-2 px-3 py-1.5 text-[14px] font-bold tracking-wide text-indigo-400 disabled:text-white/30 disabled:cursor-not-allowed cursor-pointer transition-colors hover:text-indigo-300"
               >
                 Send
               </button>

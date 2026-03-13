@@ -139,6 +139,7 @@ export const ChatPage: React.FC = () => {
       id: `${Date.now()}_${Math.random()}`,
       username: "You",
       avatarSeed: avatarSeed,
+      avatarUrl: useSessionStore.getState().avatarUrl,
       timestamp: Date.now().toString(),
       content: text,
     });

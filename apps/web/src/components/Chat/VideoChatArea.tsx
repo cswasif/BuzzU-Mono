@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CameraSetupLobby } from './CameraSetupLobby';
 import { ShieldCheck } from 'lucide-react';
@@ -15,6 +15,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useCrypto } from '../../hooks/useCrypto';
 import { useCamera } from '../../hooks/useCamera';
 import { BackgroundKeepAlive } from './BackgroundKeepAlive';
+import { createOutputAudioGraph, cleanupOutputAudioGraph, type OutputAudioGraph } from '../../utils/audioProcessing';
 
 function makeId() {
     return Date.now().toString() + Math.random().toString(36).slice(2);
@@ -32,6 +33,10 @@ export function VideoChatArea() {
     const partnerRef = useRef<{ name: string; avatar: string } | null>(null);
     const handledMatchId = useRef<string | null>(null);
     const keyExchangeInitiatedRef = useRef<string | null>(null);
+    const partnerLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingLeavePeerRef = useRef<string | null>(null);
+    const partnerSkipIntentRef = useRef<Set<string>>(new Set());
+    const partnerSkipHandledRef = useRef(false);
 
     const {
         isMatching,
@@ -49,6 +54,8 @@ export function VideoChatArea() {
         disconnect: disconnectSignaling,
         error: signalingError,
         onPeerLeave,
+        onPeerSkip,
+        onPeerJoin,
         sendChatMessage,
         onChatMessage,
         onTyping,
@@ -62,13 +69,37 @@ export function VideoChatArea() {
         onKeysRequest,
         onKeysResponse,
         onHandshake,
+        sendSkip,
+        sendProfileUpdate,
+        onProfile,
     } = useSignaling();
 
     const { createPeerConnection, closePeerConnection, initiateCall, setLocalStream } = useWebRTC();
-    const { partnerId, peerId, currentRoomId, isVerified, partnerIsVerified, partnerAvatarUrl, partnerName, displayName,
+    const { partnerId, peerId, currentRoomId, isVerified, partnerIsVerified, partnerAvatarUrl, partnerName, partnerAvatarSeed, displayName,
         friendRequestsSent, friendRequestsReceived, friendList,
         sendFriendRequest: sendFriendRequestAction, acceptFriendRequest, declineFriendRequest, handleReceivedFriendRequest
-        , avatarSeed, avatarUrl, leaveRoom, setPartnerAvatarUrl } = useSessionStore();
+        , avatarSeed, avatarUrl, leaveRoom, setPartnerAvatarUrl, setPartnerProfile, updatePeerProfile, addMatchToHistory, setChatMode } = useSessionStore();
+
+    // Effect to ensure correct matching queue
+    useEffect(() => {
+        setChatMode('video');
+    }, [setChatMode]);
+
+    useEffect(() => {
+        partnerSkipHandledRef.current = false;
+        if (partnerId) {
+            partnerSkipIntentRef.current.delete(partnerId);
+        }
+    }, [partnerId]);
+
+    const sendProfileToPartner = useCallback(() => {
+        if (!sendProfileUpdate || !partnerId) return;
+        sendProfileUpdate(partnerId, {
+            username: displayName || 'Anonymous',
+            avatarSeed,
+            avatarUrl: avatarUrl || null,
+        });
+    }, [sendProfileUpdate, partnerId, displayName, avatarSeed, avatarUrl]);
     const {
         isReady: isCryptoReady,
         encryptMessage,
@@ -107,6 +138,8 @@ export function VideoChatArea() {
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
     const [isVoiceOnly, setIsVoiceOnly] = useState(false);
     const [volumeLevel, setVolumeLevel] = useState(0);
+    const outputAudioGraphRef = useRef<OutputAudioGraph | null>(null);
+    const audioStreamIdRef = useRef<string | null>(null);
 
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -191,11 +224,22 @@ export function VideoChatArea() {
             const audioElement = remoteAudioRef.current;
             audioElement.srcObject = remoteStream;
             audioElement.muted = false;
+            audioElement.volume = 1;
             audioElement.play().then(() => {
                 console.log('[VideoChatArea] Remote audio playing successfully');
             }).catch(err => {
                 console.error('[VideoChatArea] Failed to play remote audio:', err.name, err.message);
             });
+
+            // ── Output Audio Processing (EQ + Compression) ──────────
+            // Mirrors ChatArea's professional audio pipeline
+            const needsNewGraph = audioStreamIdRef.current !== remoteStream.id;
+            if (needsNewGraph) {
+                cleanupOutputAudioGraph(outputAudioGraphRef.current);
+                outputAudioGraphRef.current = null;
+                outputAudioGraphRef.current = createOutputAudioGraph(remoteStream);
+                audioStreamIdRef.current = remoteStream.id;
+            }
         }
         if (!remoteStream) {
             if (remoteVideoRef.current) {
@@ -204,6 +248,9 @@ export function VideoChatArea() {
             if (remoteAudioRef.current) {
                 remoteAudioRef.current.srcObject = null;
             }
+            cleanupOutputAudioGraph(outputAudioGraphRef.current);
+            outputAudioGraphRef.current = null;
+            audioStreamIdRef.current = null;
         }
     }, [remoteStream]);
 
@@ -223,6 +270,10 @@ export function VideoChatArea() {
         return () => {
             stopCamera();
             disconnectSignaling();
+            // Clean up audio processing graph
+            cleanupOutputAudioGraph(outputAudioGraphRef.current);
+            outputAudioGraphRef.current = null;
+            audioStreamIdRef.current = null;
             // Use store directly to get current partnerId at cleanup time
             const currentPartnerId = useSessionStore.getState().partnerId;
             if (currentPartnerId) {
@@ -286,35 +337,113 @@ export function VideoChatArea() {
         }
     }, [isSignalReady, partnerId, currentRoomId, initiateCall, peerId, localStream]);
 
+    // ── Match History: Record match on success ──────────────────────────
+    const recordedRoomIdRef = useRef<string | null>(null);
+    const friendInfo = useMemo(() => friendList.find(f => f.id === partnerId), [friendList, partnerId]);
+
+    useEffect(() => {
+        if (
+            partnerId &&
+            currentRoomId &&
+            currentRoomId !== recordedRoomIdRef.current &&
+            (remoteStream || signalingConnected) // Consider matched when signaling connects or stream arrives
+        ) {
+            console.log('[VideoChatArea] Recording match in history:', partnerId);
+            recordedRoomIdRef.current = currentRoomId;
+            addMatchToHistory({
+                id: partnerId,
+                username: friendInfo?.username || partnerName || "Stranger",
+                avatarSeed: friendInfo?.avatarSeed || partnerAvatarSeed || partnerId,
+                avatarUrl: partnerAvatarUrl,
+                timestamp: new Date().toISOString(),
+                isVerified: partnerIsVerified,
+            });
+        }
+    }, [partnerId, currentRoomId, remoteStream, signalingConnected, friendInfo, partnerName, partnerAvatarSeed, partnerAvatarUrl, partnerIsVerified, addMatchToHistory]);
+
+    const finalizePartnerSkip = useCallback(() => {
+        if (partnerSkipHandledRef.current) return;
+        partnerSkipHandledRef.current = true;
+        if (partnerLeaveTimerRef.current) {
+            clearTimeout(partnerLeaveTimerRef.current);
+            partnerLeaveTimerRef.current = null;
+        }
+        pendingLeavePeerRef.current = null;
+        setConnectionState('partner_skipped');
+        disconnectSignaling();
+        if (partnerId) {
+            closePeerConnection(partnerId);
+        }
+        stopMatching(true);
+        leaveRoom();
+        setMatchData(null);
+        setIsSignalReady(false);
+        setPartner(null);
+        partnerRef.current = null;
+        handledMatchId.current = null;
+        keyExchangeInitiatedRef.current = null;
+        setMessages([]);
+        if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = null;
+        }
+        if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = null;
+        }
+    }, [
+        disconnectSignaling,
+        partnerId,
+        closePeerConnection,
+        stopMatching,
+        leaveRoom,
+        setMatchData,
+        setIsSignalReady,
+    ]);
+
     // Handle Signaling Events
     useEffect(() => {
-        onPeerLeave((leftPeerId) => {
-            if (leftPeerId === partnerId) {
-                console.log('[VideoChatArea] Partner skipped/left the match!');
-                setConnectionState('partner_skipped');
-                disconnectSignaling();
-                if (partnerId) {
-                    closePeerConnection(partnerId);
-                }
-                stopMatching(true);
-                leaveRoom();
-                setMatchData(null);
-                setIsSignalReady(false);
-                setPartner(null);
-                partnerRef.current = null;
-                handledMatchId.current = null;
-                keyExchangeInitiatedRef.current = null;
-                setMessages([]);
-                if (remoteVideoRef.current) {
-                    remoteVideoRef.current.srcObject = null;
-                }
-                if (remoteAudioRef.current) {
-                    remoteAudioRef.current.srcObject = null;
-                }
+        onPeerSkip((from) => {
+            if (from === partnerId) {
+                partnerSkipIntentRef.current.add(from);
+                finalizePartnerSkip();
             }
         });
 
+        onPeerLeave((leftPeerId) => {
+            if (leftPeerId === partnerId) {
+                if (partnerSkipIntentRef.current.has(leftPeerId)) {
+                    finalizePartnerSkip();
+                    return;
+                }
+                pendingLeavePeerRef.current = leftPeerId;
+                if (partnerLeaveTimerRef.current) {
+                    clearTimeout(partnerLeaveTimerRef.current);
+                }
+                setIsSignalReady(false);
+                partnerLeaveTimerRef.current = setTimeout(() => {
+                    if (pendingLeavePeerRef.current !== leftPeerId) return;
+                    finalizePartnerSkip();
+                }, 5000);
+            }
+        });
+
+        onPeerJoin((joinedPeerId) => {
+            if (joinedPeerId !== partnerId) return;
+            if (pendingLeavePeerRef.current === joinedPeerId) {
+                pendingLeavePeerRef.current = null;
+                if (partnerLeaveTimerRef.current) {
+                    clearTimeout(partnerLeaveTimerRef.current);
+                    partnerLeaveTimerRef.current = null;
+                }
+            }
+            partnerSkipIntentRef.current.delete(joinedPeerId);
+            partnerSkipHandledRef.current = false;
+        });
+
         onChatMessage(async (message, from) => {
+            try {
+                new Audio('/sounds/message.mp3').play().catch(() => { });
+            } catch (e) { }
+
             if (import.meta.env.DEV) console.log('[VideoChatArea] Received chat message:', message, 'from:', from);
 
             let decryptedContent = message.content;
@@ -417,33 +546,48 @@ export function VideoChatArea() {
             }
         });
 
-        onFriendRequest((action, from, username, avatarSeed) => {
+        onFriendRequest((action, from, username, avatarSeed, avatarUrl) => {
             console.log('[VideoChatArea] Received friend request action:', action, 'from:', from);
             if (action === 'send') {
                 handleReceivedFriendRequest({
                     id: from,
                     username: username || 'Partner',
-                    avatarSeed: avatarSeed || from
+                    avatarSeed: avatarSeed || from,
+                    avatarUrl: avatarUrl || null
                 });
             } else if (action === 'accept') {
-                acceptFriendRequest(from);
+                acceptFriendRequest(from, username, avatarSeed, avatarUrl);
             } else if (action === 'decline') {
                 declineFriendRequest(from);
             }
         });
-    }, [onPeerLeave, onChatMessage, onTyping, partnerId, disconnectSignaling, partnerIsVerified, isCryptoReady, decryptMessage, onKeysRequest, onKeysResponse, onHandshake, generatePreKeyBundle, sendKeysResponse, initiateSignalSession, respondToSignalSession, sendHandshake, onFriendRequest, closePeerConnection, stopMatching, leaveRoom, setMatchData]);
+
+        onProfile((from, username, avatarSeed, incomingAvatarUrl) => {
+            updatePeerProfile(from, {
+                username: username || undefined,
+                avatarSeed: avatarSeed || undefined,
+                avatarUrl: incomingAvatarUrl,
+            });
+        });
+    }, [onPeerLeave, onPeerSkip, onPeerJoin, finalizePartnerSkip, onChatMessage, onTyping, partnerId, disconnectSignaling, partnerIsVerified, isCryptoReady, decryptMessage, onKeysRequest, onKeysResponse, onHandshake, generatePreKeyBundle, sendKeysResponse, initiateSignalSession, respondToSignalSession, sendHandshake, onFriendRequest, onProfile, closePeerConnection, stopMatching, leaveRoom, setMatchData]);
+
+    useEffect(() => {
+        if (!signalingConnected) return;
+        if (!partnerId) return;
+        sendProfileToPartner();
+    }, [signalingConnected, partnerId, sendProfileToPartner, avatarUrl, avatarSeed, displayName]);
 
     const handleAddFriend = useCallback(() => {
         if (!partnerId) return;
         sendFriendRequestAction(partnerId);
-        sendFriendRequestSignaling(partnerId, 'send', displayName, peerId);
-    }, [partnerId, sendFriendRequestAction, sendFriendRequestSignaling, displayName, peerId]);
+        sendFriendRequestSignaling(partnerId, 'send', displayName, avatarSeed, avatarUrl);
+    }, [partnerId, sendFriendRequestAction, sendFriendRequestSignaling, displayName, avatarSeed, avatarUrl]);
 
     const handleAcceptFriendRequest = useCallback(() => {
         if (!partnerId) return;
-        acceptFriendRequest(partnerId);
-        sendFriendRequestSignaling(partnerId, 'accept');
-    }, [partnerId, acceptFriendRequest, sendFriendRequestSignaling]);
+        acceptFriendRequest(partnerId, displayName, avatarSeed, avatarUrl);
+        sendFriendRequestSignaling(partnerId, 'accept', displayName, avatarSeed, avatarUrl);
+    }, [partnerId, acceptFriendRequest, sendFriendRequestSignaling, displayName, avatarSeed, avatarUrl]);
 
     const handleDeclineFriendRequest = useCallback(() => {
         if (!partnerId) return;
@@ -487,6 +631,9 @@ export function VideoChatArea() {
         }
     };
     const handleSkip = () => {
+        if (partnerId && signalingConnected) {
+            sendSkip(partnerId, 'skip');
+        }
         stopMatching(true);
         disconnectSignaling();
         leaveRoom();
@@ -642,7 +789,7 @@ export function VideoChatArea() {
                                 partnerRef.current = null;
                                 setIsSignalReady(false);
                                 setConnectionState('searching');
-                                startMatching();
+                                startMatching(true);
                             }}
                         />
                     </div>
@@ -872,20 +1019,20 @@ export function VideoChatArea() {
                                             className={`flex items-end gap-2 ${msg.username === 'Me' ? 'self-end flex-row-reverse' : 'self-start'}`}
                                         >
                                             <div
-                                                className={`px-4 py-2.5 rounded-2xl text-[14.5px] font-medium backdrop-blur-lg border pointer-events-auto transition-all duration-300 hover:scale-[1.02] shadow-xl ${msg.username === 'Me'
-                                                    ? 'bg-indigo-600/60 border-indigo-400/30 text-white rounded-br-none shadow-indigo-900/10'
-                                                    : 'bg-white/10 border-white/20 text-white rounded-bl-none shadow-black/20'
+                                                className={`px-4 py-2.5 rounded-2xl text-[14.5px] font-medium backdrop-blur-md border pointer-events-auto transition-all duration-300 hover:scale-[1.02] ${msg.username === 'Me'
+                                                    ? 'bg-indigo-600/95 border-indigo-500/50 text-white rounded-br-none shadow-[0_8px_16px_rgba(0,0,0,0.4)]'
+                                                    : 'bg-white/95 border-white/50 text-zinc-900 rounded-bl-none shadow-[0_8px_16px_rgba(0,0,0,0.4)]'
                                                     }`}
                                                 onClick={() => handleProfileClick(msg.username, msg.avatarSeed, msg.avatarUrl, msg.isVerified)}
                                             >
                                                 <div className="flex flex-col gap-0.5">
                                                     {msg.username !== 'Me' && (
                                                         <div className="flex items-center gap-1.5 mb-0.5">
-                                                            <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-300">{msg.username}</span>
-                                                            {msg.isVerified && <ShieldCheck className="h-3 w-3 text-blue-400 shadow-sm" />}
+                                                            <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">{msg.username}</span>
+                                                            {msg.isVerified && <ShieldCheck className="h-3 w-3 text-blue-500 shadow-sm" />}
                                                         </div>
                                                     )}
-                                                    <span className="leading-relaxed drop-shadow-sm">{msg.content}</span>
+                                                    <span className="leading-relaxed font-semibold">{msg.content}</span>
                                                 </div>
                                             </div>
                                         </motion.div>
@@ -895,14 +1042,14 @@ export function VideoChatArea() {
                                     <motion.div
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
-                                        className="flex items-center gap-2 px-4 py-1.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full w-fit self-start ml-2"
+                                        className="flex items-center gap-2 px-4 py-1.5 bg-white/95 backdrop-blur-md border border-white/50 shadow-[0_8px_16px_rgba(0,0,0,0.4)] rounded-full w-fit self-start ml-2"
                                     >
                                         <span className="flex gap-1">
-                                            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce"></span>
+                                            <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                                            <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                                            <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"></span>
                                         </span>
-                                        <span className="text-[11px] font-bold text-indigo-200 uppercase tracking-widest">{partner?.name || 'Partner'} is typing</span>
+                                        <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">{partner?.name || 'Partner'} is typing</span>
                                     </motion.div>
                                 )}
                             </div>

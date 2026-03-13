@@ -5,6 +5,8 @@ import buzzuLogo from "figma:asset/buzzu.svg";
 import { useSignalingContext } from "../../context/SignalingContext";
 import { ShieldCheck } from "lucide-react";
 import { useSessionStore } from "../../stores/sessionStore";
+import { useLobbyProbe } from "../../hooks/useLobbyProbe";
+import { Wifi, WifiOff, AlertTriangle } from "lucide-react";
 
 const ICEBREAKERS = [
   "Your mood as a color? 🎨",
@@ -42,34 +44,51 @@ interface LocalPanelProps {
 export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, onSkip, onReport }: LocalPanelProps) {
   const { remoteStream } = useSignalingContext();
   const { partnerIsVerified } = useSessionStore();
+  const { quality, rtt, isUdpBlocked, warnings, isProbing } = useLobbyProbe();
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  // Sync remoteStream to video element whenever either changes
-  useEffect(() => {
-    const node = videoRef.current;
-    if (!node) return;
-
-    if (remoteStream) {
-      node.srcObject = remoteStream;
-      node.disableRemotePlayback = true;
-      node.preload = 'none';
-      node.playbackRate = 1.0;
-      node.defaultPlaybackRate = 1.0;
-      node.muted = isMuted;
-      node.play().catch(e => console.warn("Remote video play failed:", e));
-    } else {
-      node.srcObject = null;
-    }
-  }, [remoteStream]);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   // Remote audio mute toggle
   const [isMuted, setIsMuted] = useState(false);
+
+  // Sync remoteStream to video and audio elements whenever either changes
+  useEffect(() => {
+    const videoNode = videoRef.current;
+    const audioNode = audioRef.current;
+
+    if (remoteStream) {
+      if (videoNode) {
+        videoNode.srcObject = remoteStream;
+        videoNode.disableRemotePlayback = true;
+        videoNode.preload = 'none';
+        videoNode.playbackRate = 1.0;
+        videoNode.defaultPlaybackRate = 1.0;
+        videoNode.muted = true; // Mute the video specifically to let the audio tag handle sound
+        videoNode.play().catch(e => console.warn("Remote video play failed:", e));
+      }
+      if (audioNode) {
+        if (audioNode.srcObject !== remoteStream) {
+          audioNode.srcObject = remoteStream;
+        }
+        audioNode.muted = isMuted;
+        audioNode.play().catch(e => console.warn("Remote audio play failed:", e));
+      }
+    } else {
+      if (videoNode) videoNode.srcObject = null;
+      if (audioNode) audioNode.srcObject = null;
+    }
+  }, [remoteStream, isMuted]);
+
+
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {
       const newMuted = !prev;
       if (videoRef.current) {
-        videoRef.current.muted = newMuted;
+        videoRef.current.muted = true; // Video always muted to avoid double audio
+      }
+      if (audioRef.current) {
+        audioRef.current.muted = newMuted;
       }
       return newMuted;
     });
@@ -182,6 +201,7 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
               disablePictureInPicture
               className={`absolute inset-0 w-full h-full object-cover rounded-sm md:rounded-xl bg-transparent transform-gpu will-change-transform transition-opacity duration-300 ${remoteStream ? "opacity-100" : "opacity-0"}`}
             />
+            <audio ref={audioRef} className="hidden" playsInline autoPlay />
           </div>
         </div>
       </div>
@@ -282,6 +302,7 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
               disablePictureInPicture
               className={`absolute inset-0 w-full h-full object-cover rounded-sm md:rounded-xl bg-transparent transform-gpu will-change-transform transition-opacity duration-300 ${remoteStream ? "opacity-100" : "opacity-0"}`}
             />
+            <audio ref={audioRef} className="hidden" playsInline autoPlay />
           </div>
         </div>
       </div>
@@ -341,10 +362,36 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
             ) : (
               <>
                 {/* Idle state content */}
-                <div className="flex flex-col justify-center items-center h-full max-h-20">
+                <div className="flex flex-col justify-center items-center h-full max-h-32 gap-3">
                   <div className="flex items-center gap-1.5 transition-all duration-500 opacity-100">
                     <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
                     <span className="text-sm md:text-lg text-white">10,281 users online</span>
+                  </div>
+
+                  {/* Network Quality Indicator */}
+                  <div className="flex flex-col items-center gap-1">
+                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium backdrop-blur-md border ${quality === 'excellent' ? 'bg-green-500/20 border-green-500/30 text-green-400' :
+                      quality === 'good' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' :
+                        quality === 'fair' ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400' :
+                          'bg-red-500/20 border-red-500/30 text-red-400'
+                      }`}>
+                      {isUdpBlocked ? <WifiOff size={12} /> : <Wifi size={12} />}
+                      <span>
+                        {isProbing ? 'Checking connection...' :
+                          quality === 'excellent' ? 'Excellent Connection' :
+                            quality === 'good' ? 'Good Connection' :
+                              quality === 'fair' ? 'Fair Connection' :
+                                quality === 'poor' ? 'Poor Connection' : 'UDP Blocked'}
+                        {rtt && !isProbing && ` (${rtt.toFixed(0)}ms)`}
+                      </span>
+                    </div>
+
+                    {warnings.length > 0 && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-red-400 font-medium animate-pulse">
+                        <AlertTriangle size={10} />
+                        <span>{warnings[0]}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

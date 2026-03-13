@@ -23,10 +23,16 @@ test.describe('WebSocket Matchmaking & Signaling', () => {
         // Handle Gender Dialog which defaults to 'U' on first visit
         // Wait for it to appear then click Male and Female respectively
         try {
-            await page1.locator('.gender-option').filter({ hasText: 'Male' }).click({ timeout: 5000 });
+            await page1
+                .locator('.gender-option')
+                .filter({ has: page1.locator('.gender-option-label', { hasText: /^Male$/ }) })
+                .click({ timeout: 5000 });
             await page1.getByRole('button', { name: 'Continue' }).click();
 
-            await page2.locator('.gender-option').filter({ hasText: 'Female' }).click({ timeout: 5000 });
+            await page2
+                .locator('.gender-option')
+                .filter({ has: page2.locator('.gender-option-label', { hasText: /^Female$/ }) })
+                .click({ timeout: 5000 });
             await page2.getByRole('button', { name: 'Continue' }).click();
 
             // Wait a short moment for the dialog animation to close

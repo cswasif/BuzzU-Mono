@@ -36,10 +36,10 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
       const status = getStatus(match.id);
       if (status === 'none') {
         sendFriendRequestAction(match.id);
-        sendFriendRequestSignaling(match.id, 'send', displayName, avatarSeed);
+        sendFriendRequestSignaling(match.id, 'send', displayName, avatarSeed, useSessionStore.getState().avatarUrl);
       } else if (status === 'received') {
-        acceptFriendRequest(match.id);
-        sendFriendRequestSignaling(match.id, 'accept', displayName, avatarSeed);
+        acceptFriendRequest(match.id, displayName, avatarSeed, useSessionStore.getState().avatarUrl);
+        sendFriendRequestSignaling(match.id, 'accept', displayName, avatarSeed, useSessionStore.getState().avatarUrl);
       }
     },
     [
@@ -59,6 +59,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onClose }) => {
       detail: {
         username: match.username,
         avatarSeed: match.avatarSeed,
+        avatarUrl: match.avatarUrl,
         peerId: match.id,
       }
     }));

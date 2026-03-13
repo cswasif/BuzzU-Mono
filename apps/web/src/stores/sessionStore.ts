@@ -22,6 +22,7 @@ export interface Notification {
     fromId: string;
     fromUsername: string;
     fromAvatarSeed: string;
+    fromAvatarUrl: string | null;
     timestamp: string;
     content: string;
 }
@@ -29,6 +30,8 @@ export interface Notification {
 export interface SessionState {
     // Identity
     peerId: string;
+    deviceId: string;
+    tabId: string;
     displayName: string;
     isVerified: boolean;
     verifiedEmail: string | null;
@@ -63,9 +66,9 @@ export interface SessionState {
 
     // Friends
     friendRequestsSent: string[];
-    friendRequestsReceived: { [peerId: string]: { username: string; avatarSeed: string } };
-    friendList: { id: string; username: string; avatarSeed: string }[];
-    activeDmFriend: { id: string; username: string; avatarSeed: string } | null;
+    friendRequestsReceived: { [peerId: string]: { username: string; avatarSeed: string; avatarUrl?: string | null } };
+    friendList: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null }[];
+    activeDmFriend: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null } | null;
     hasNewDmMessage: boolean;
     dmMessages: Record<string, Message[]>;
     matchHistory: MatchRecord[];
@@ -90,14 +93,16 @@ export interface SessionState {
     setBannerGradient: (gradient: string) => void;
     joinRoom: (roomId: string, partnerId: string, partnerIsVerified: boolean, partnerName?: string, partnerAvatarSeed?: string, partnerAvatarUrl?: string | null) => void;
     setPartnerAvatarUrl: (partnerAvatarUrl: string | null) => void;
+    setPartnerProfile: (profile: { username?: string; avatarSeed?: string; avatarUrl?: string | null }) => void;
     leaveRoom: () => void;
     setVerified: (email: string, token: string) => void;
     resetSession: () => void;
     sendFriendRequest: (peerId: string) => void;
-    acceptFriendRequest: (peerId: string, username?: string, avatarSeed?: string) => void;
+    acceptFriendRequest: (peerId: string, username?: string, avatarSeed?: string, avatarUrl?: string | null) => void;
     declineFriendRequest: (peerId: string) => void;
-    handleReceivedFriendRequest: (request: { id: string; username: string; avatarSeed: string }) => void;
-    setDmFriend: (friend: { id: string; username: string; avatarSeed: string } | null) => void;
+    handleReceivedFriendRequest: (request: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null }) => void;
+    setDmFriend: (friend: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null } | null) => void;
+    updatePeerProfile: (peerId: string, profile: { username?: string; avatarSeed?: string; avatarUrl?: string | null }) => void;
     setHasNewDmMessage: (hasNew: boolean) => void;
     addDmMessage: (friendId: string, message: Message) => void;
     clearDmMessages: (friendId: string) => void;
@@ -111,22 +116,82 @@ export interface SessionState {
     clearNotifications: () => void;
 }
 
+function getRandomBytes(length: number): Uint8Array {
+    const buffer = new Uint8Array(length);
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        crypto.getRandomValues(buffer);
+        return buffer;
+    }
+    for (let i = 0; i < buffer.length; i += 1) {
+        buffer[i] = Math.floor(Math.random() * 256);
+    }
+    return buffer;
+}
+
+function randomHex(length: number): string {
+    const bytes = getRandomBytes(Math.ceil(length / 2));
+    let hex = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+        hex += bytes[i].toString(16).padStart(2, '0');
+    }
+    return hex.slice(0, length);
+}
+
 function generatePeerId(): string {
-    return `peer_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    return `peer_${Date.now()}_${randomHex(12)}`;
 }
 
 function generateAvatarSeed(): string {
-    return Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    return randomHex(24);
+}
+
+function generateDeviceId(): string {
+    return `device_${randomHex(16)}`;
+}
+
+function generateTabId(): string {
+    return `tab_${randomHex(12)}`;
+}
+
+const TAB_PEER_ID_KEY = 'buzzu_tab_peer_id';
+const TAB_ID_KEY = 'buzzu_tab_id';
+const DEVICE_ID_KEY = 'buzzu_device_id';
+
+let lastDisconnectAt = 0;
+let lastDisconnectPeerId = '';
+
+export function sendMatchmakerDisconnect(peerId: string | null | undefined, options?: { useBeacon?: boolean }) {
+    if (!peerId) return;
+    const now = Date.now();
+    if (peerId === lastDisconnectPeerId && now - lastDisconnectAt < 2000) return;
+    lastDisconnectAt = now;
+    lastDisconnectPeerId = peerId;
+
+    const baseUrl = (import.meta.env.VITE_MATCHMAKER_URL || 'wss://buzzu-matchmaker.md-wasif-faisal.workers.dev').replace(/^ws/, 'http');
+    const url = `${baseUrl}/match/disconnect?peer_id=${peerId}`;
+    if (options?.useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        try {
+            navigator.sendBeacon(url);
+        } catch {
+            fetch(url, { method: 'PATCH', credentials: 'include' }).catch(() => { });
+        }
+        return;
+    }
+    fetch(url, { method: 'PATCH', credentials: 'include' }).catch(() => { });
 }
 
 const initialPeerId = generatePeerId();
 const initialAvatarSeed = generateAvatarSeed();
+const initialDeviceId = generateDeviceId();
+const initialTabId = generateTabId();
 
 export const useSessionStore = create<SessionState>()(
     persist(
         (set, get) => ({
             // Initial state
             peerId: initialPeerId,
+            deviceId: initialDeviceId,
+            tabId: initialTabId,
             displayName: funAnimalName(initialPeerId),
             avatarSeed: initialAvatarSeed,
             avatarUrl: null,
@@ -170,7 +235,44 @@ export const useSessionStore = create<SessionState>()(
                 const state = get();
                 const updates: Partial<SessionState> = {};
 
-                if (!state.peerId) {
+                if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
+                    const existingPeerId = sessionStorage.getItem(TAB_PEER_ID_KEY);
+                    if (existingPeerId) {
+                        if (state.peerId !== existingPeerId) {
+                            updates.peerId = existingPeerId;
+                        }
+                    } else {
+                        const newPeerId = generatePeerId();
+                        sessionStorage.setItem(TAB_PEER_ID_KEY, newPeerId);
+                        updates.peerId = newPeerId;
+                    }
+
+                    const existingTabId = sessionStorage.getItem(TAB_ID_KEY);
+                    if (existingTabId) {
+                        if (state.tabId !== existingTabId) {
+                            updates.tabId = existingTabId;
+                        }
+                    } else {
+                        const newTabId = generateTabId();
+                        sessionStorage.setItem(TAB_ID_KEY, newTabId);
+                        updates.tabId = newTabId;
+                    }
+                }
+
+                if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+                    const existingDeviceId = localStorage.getItem(DEVICE_ID_KEY);
+                    if (existingDeviceId) {
+                        if (state.deviceId !== existingDeviceId) {
+                            updates.deviceId = existingDeviceId;
+                        }
+                    } else {
+                        const newDeviceId = generateDeviceId();
+                        localStorage.setItem(DEVICE_ID_KEY, newDeviceId);
+                        updates.deviceId = newDeviceId;
+                    }
+                }
+
+                if (!state.peerId && !updates.peerId) {
                     updates.peerId = generatePeerId();
                 }
 
@@ -185,10 +287,17 @@ export const useSessionStore = create<SessionState>()(
                     updates.joinedAt = new Date().toISOString();
                 }
 
+                const path = typeof window !== 'undefined' ? window.location.pathname : '';
+                const reconnectRoomId = path.startsWith('/chat/new/') ? path.split('/chat/new/')[1] : null;
+                const shouldPreserveChat =
+                    !!reconnectRoomId &&
+                    state.currentRoomId === reconnectRoomId &&
+                    !!state.partnerId;
+
                 // Clear stale in-chat state — on a fresh page load there is no
                 // active WebSocket / WebRTC connection, so any persisted chat
                 // state from a previous session is stale.
-                if (state.isInChat) {
+                if (state.isInChat && !shouldPreserveChat) {
                     updates.currentRoomId = null;
                     updates.isInChat = false;
                     updates.partnerId = null;
@@ -219,6 +328,11 @@ export const useSessionStore = create<SessionState>()(
             setBannerColor: (color) => set({ bannerColor: color }),
             setBannerGradient: (gradient) => set({ bannerGradient: gradient }),
             setPartnerAvatarUrl: (partnerAvatarUrl) => set({ partnerAvatarUrl }),
+            setPartnerProfile: (profile) => set((state) => ({
+                partnerName: profile.username !== undefined ? profile.username : state.partnerName,
+                partnerAvatarSeed: profile.avatarSeed !== undefined ? profile.avatarSeed : state.partnerAvatarSeed,
+                partnerAvatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : state.partnerAvatarUrl,
+            })),
 
             joinRoom: (roomId, partnerId, partnerIsVerified, partnerName, partnerAvatarSeed, partnerAvatarUrl) => set({
                 currentRoomId: roomId,
@@ -234,12 +348,7 @@ export const useSessionStore = create<SessionState>()(
                 // Trigger disconnect via matchmaker endpoint
                 const state = get();
                 if (state.currentRoomId && state.peerId) {
-                    const baseUrl = import.meta.env.VITE_MATCHMAKER_URL || 'wss://buzzu-matchmaker.md-wasif-faisal.workers.dev';
-                    const disconnectUrl = baseUrl.replace(/^ws/, 'http');
-                    fetch(`${disconnectUrl}/match/disconnect?peer_id=${state.peerId}`, {
-                        method: 'PATCH',
-                        credentials: 'include',
-                    }).catch(err => console.error('[sessionStore] Failed to disconnect:', err));
+                    sendMatchmakerDisconnect(state.peerId);
                 }
                 set({
                     currentRoomId: null,
@@ -260,8 +369,14 @@ export const useSessionStore = create<SessionState>()(
 
             resetSession: () => {
                 const id = generatePeerId();
+                let newTabId = generateTabId();
+                if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
+                    sessionStorage.setItem(TAB_PEER_ID_KEY, id);
+                    sessionStorage.setItem(TAB_ID_KEY, newTabId);
+                }
                 set({
                     peerId: id,
+                    tabId: newTabId,
                     displayName: funAnimalName(id),
                     isVerified: false,
                     verifiedEmail: null,
@@ -290,7 +405,7 @@ export const useSessionStore = create<SessionState>()(
                 }));
             },
 
-            acceptFriendRequest: (peerId, username, avatarSeed) => {
+            acceptFriendRequest: (peerId, username, avatarSeed, avatarUrl) => {
                 set((state) => {
                     const request = state.friendRequestsReceived[peerId];
                     const newRequestsReceived = { ...state.friendRequestsReceived };
@@ -303,8 +418,8 @@ export const useSessionStore = create<SessionState>()(
 
                     // Prefer stored request data > signaling message data > fallback
                     const newFriend = request
-                        ? { id: peerId, username: request.username, avatarSeed: request.avatarSeed }
-                        : { id: peerId, username: username || funAnimalName(peerId), avatarSeed: avatarSeed || peerId };
+                        ? { id: peerId, username: request.username, avatarSeed: request.avatarSeed, avatarUrl: request.avatarUrl }
+                        : { id: peerId, username: username || funAnimalName(peerId), avatarSeed: avatarSeed || peerId, avatarUrl: avatarUrl || null };
 
                     return {
                         friendRequestsReceived: newRequestsReceived,
@@ -329,7 +444,11 @@ export const useSessionStore = create<SessionState>()(
                     return {
                         friendRequestsReceived: {
                             ...state.friendRequestsReceived,
-                            [request.id]: { username: request.username, avatarSeed: request.avatarSeed }
+                            [request.id]: {
+                                username: request.username,
+                                avatarSeed: request.avatarSeed,
+                                avatarUrl: request.avatarUrl
+                            }
                         }
                     };
                 });
@@ -353,7 +472,7 @@ export const useSessionStore = create<SessionState>()(
                 dmMessages: {
                     ...state.dmMessages,
                     [friendId]: (state.dmMessages[friendId] || []).map(m =>
-                        m.id === messageId ? { ...m, content: newContent } : m
+                        m.id === messageId ? { ...m, content: newContent, isEdited: true } : m
                     )
                 }
             })),
@@ -380,10 +499,22 @@ export const useSessionStore = create<SessionState>()(
             }),
 
             addMatchToHistory: (match) => set((state) => {
-                // Remove existing entry for this peer if any
+                // Find existing match info to prevent stale data from overwriting recent updates
+                const existingMatch = state.matchHistory.find(m => m.id === match.id);
+                const existingFriend = state.friendList.find(f => f.id === match.id);
+
+                const isDefaultName = (name: string | undefined | null) => !name || name === 'Stranger' || name === 'Anonymous' || name === 'Partner';
+
+                // Prioritize the most "complete" data
+                const finalMatch: MatchRecord = {
+                    ...match,
+                    username: !isDefaultName(match.username) ? match.username : (!isDefaultName(existingMatch?.username) ? existingMatch!.username : (!isDefaultName(existingFriend?.username) ? existingFriend!.username : match.username)),
+                    avatarSeed: match.avatarSeed || existingMatch?.avatarSeed || existingFriend?.avatarSeed || match.avatarSeed,
+                    avatarUrl: match.avatarUrl || existingMatch?.avatarUrl || existingFriend?.avatarUrl || match.avatarUrl
+                };
+
                 const filtered = state.matchHistory.filter(m => m.id !== match.id);
-                // Prepend new match and limit to last 20
-                const newHistory = [match, ...filtered].slice(0, 20);
+                const newHistory = [finalMatch, ...filtered].slice(0, 40);
                 return { matchHistory: newHistory };
             }),
 
@@ -396,12 +527,66 @@ export const useSessionStore = create<SessionState>()(
             })),
 
             clearNotifications: () => set({ notifications: [] }),
+
+            updatePeerProfile: (peerId, profile) => set((state) => {
+                const updates: Partial<SessionState> = {};
+                let hasChanged = false;
+
+                // 1. Update Friend List
+                if (state.friendList.some(f => f.id === peerId)) {
+                    updates.friendList = state.friendList.map(f =>
+                        f.id === peerId ? {
+                            ...f,
+                            username: profile.username ?? f.username,
+                            avatarSeed: profile.avatarSeed ?? f.avatarSeed,
+                            avatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : f.avatarUrl
+                        } : f
+                    );
+                    hasChanged = true;
+                }
+
+                // 2. Update Active DM Friend
+                if (state.activeDmFriend?.id === peerId) {
+                    updates.activeDmFriend = {
+                        ...state.activeDmFriend,
+                        id: state.activeDmFriend.id, // keep ID
+                        username: profile.username ?? state.activeDmFriend.username,
+                        avatarSeed: profile.avatarSeed ?? state.activeDmFriend.avatarSeed,
+                        avatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : state.activeDmFriend.avatarUrl
+                    };
+                    hasChanged = true;
+                }
+
+                // 3. Update Match History
+                if (state.matchHistory.some(m => m.id === peerId)) {
+                    updates.matchHistory = state.matchHistory.map(m =>
+                        m.id === peerId ? {
+                            ...m,
+                            username: profile.username ?? m.username,
+                            avatarSeed: profile.avatarSeed ?? m.avatarSeed,
+                            avatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : m.avatarUrl
+                        } : m
+                    );
+                    hasChanged = true;
+                }
+
+                // 4. Update Partner if currently chatting
+                if (state.partnerId === peerId) {
+                    updates.partnerName = profile.username ?? state.partnerName;
+                    updates.partnerAvatarSeed = profile.avatarSeed ?? state.partnerAvatarSeed;
+                    updates.partnerAvatarUrl = profile.avatarUrl !== undefined ? profile.avatarUrl : state.partnerAvatarUrl;
+                    hasChanged = true;
+                }
+
+                return hasChanged ? updates : state;
+            }),
         }),
         {
             name: 'buzzu-session',
             storage: createJSONStorage(() => localStorage),
             partialize: (state) => ({
                 peerId: state.peerId,
+                deviceId: state.deviceId,
                 displayName: state.displayName,
                 avatarSeed: state.avatarSeed,
                 avatarUrl: state.avatarUrl,

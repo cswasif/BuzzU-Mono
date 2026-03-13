@@ -1,21 +1,5 @@
 import { useState } from "react";
 
-function CoinIcon() {
-  return (
-    <svg
-      stroke="currentColor"
-      fill="currentColor"
-      strokeWidth="0"
-      viewBox="0 0 512 512"
-      className="size-3"
-      height="1em"
-      width="1em"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path d="M0 405.3V448c0 35.3 86 64 192 64s192-28.7 192-64v-42.7C342.7 434.4 267.2 448 192 448S41.3 434.4 0 405.3zM320 128c106 0 192-28.7 192-64S426 0 320 0 128 28.7 128 64s86 64 192 64zM0 300.4V352c0 35.3 86 64 192 64s192-28.7 192-64v-51.6c-41.3 34-116.9 51.6-192 51.6S41.3 334.4 0 300.4zm416 11c57.3-11.1 96-31.7 96-55.4v-42.7c-23.2 16.4-57.3 27.6-96 34.5v63.6zM192 160C86 160 0 195.8 0 240s86 80 192 80 192-35.8 192-80-86-80-192-80zm219.3 56.3c60-10.8 100.7-32 100.7-56.3v-42.7c-35.5 25.1-96.5 38.6-160.7 41.8 29.5 14.3 51.2 33.5 60 57.2z" />
-    </svg>
-  );
-}
 
 function MaleAvatar() {
   return (
@@ -158,9 +142,6 @@ export function GenderPreferencesModal({ open, onClose }: GenderPreferencesModal
           <h2 className="text-lg font-semibold tracking-tight text-[hsl(var(--cc-foreground))]">
             Gender Preferences
           </h2>
-          <p className="text-xs text-[hsl(var(--cc-muted-foreground))]">
-            <b>15 Coins</b> are used whenever you match with the gender filter on.
-          </p>
         </div>
 
         {/* Options */}
@@ -173,20 +154,12 @@ export function GenderPreferencesModal({ open, onClose }: GenderPreferencesModal
                   className={`rounded p-0.5 ${selected === "m" ? "bg-gradient-to-r from-blue-400 to-blue-400" : ""}`}
                 >
                   <label
-                    className={`text-sm font-medium w-full min-w-20 sm:w-24 relative flex select-none flex-col text-blue-300 items-center justify-between rounded-sm border-2 p-2 cursor-pointer transition-colors ${
-                      selected === "m"
-                        ? "border-[hsl(var(--cc-primary))] bg-[hsl(var(--cc-muted))]"
-                        : "border-[hsl(var(--cc-muted))] bg-[hsl(var(--cc-accent,265_8%_25%))] hover:bg-[hsl(var(--cc-muted))]"
-                    }`}
+                    className={`text-sm font-medium w-full min-w-20 sm:w-24 relative flex select-none flex-col text-blue-300 items-center justify-between rounded-sm border-2 p-2 cursor-pointer transition-colors ${selected === "m"
+                      ? "border-[hsl(var(--cc-primary))] bg-[hsl(var(--cc-muted))]"
+                      : "border-[hsl(var(--cc-muted))] bg-[hsl(var(--cc-accent,265_8%_25%))] hover:bg-[hsl(var(--cc-muted))]"
+                      }`}
                     onClick={() => setSelected("m")}
                   >
-                    {/* Coin badge */}
-                    <div className="absolute z-20 top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 items-center justify-center flex bg-neutral-600 text-amber-300 px-2 py-0.5 rounded-3xl">
-                      <span className="flex flex-row items-center gap-1 text-xs">
-                        15
-                        <CoinIcon />
-                      </span>
-                    </div>
                     <MaleAvatar />
                     Male
                   </label>
@@ -199,11 +172,10 @@ export function GenderPreferencesModal({ open, onClose }: GenderPreferencesModal
                   className={`rounded p-0.5 ${selected === "all" ? "bg-gradient-to-r from-blue-400 to-pink-400" : ""}`}
                 >
                   <label
-                    className={`text-sm font-medium w-full min-w-20 sm:w-24 relative select-none flex flex-col items-center justify-between rounded-sm border-2 p-2 cursor-pointer transition-colors ${
-                      selected === "all"
-                        ? "border-[hsl(var(--cc-primary))] bg-[hsl(var(--cc-muted))]"
-                        : "border-[hsl(var(--cc-muted))] bg-[hsl(var(--cc-accent,265_8%_25%))] hover:bg-[hsl(var(--cc-muted))]"
-                    }`}
+                    className={`text-sm font-medium w-full min-w-20 sm:w-24 relative select-none flex flex-col items-center justify-between rounded-sm border-2 p-2 cursor-pointer transition-colors ${selected === "all"
+                      ? "border-[hsl(var(--cc-primary))] bg-[hsl(var(--cc-muted))]"
+                      : "border-[hsl(var(--cc-muted))] bg-[hsl(var(--cc-accent,265_8%_25%))] hover:bg-[hsl(var(--cc-muted))]"
+                      }`}
                     onClick={() => setSelected("all")}
                   >
                     <BothAvatar />
@@ -218,20 +190,12 @@ export function GenderPreferencesModal({ open, onClose }: GenderPreferencesModal
                   className={`rounded p-0.5 ${selected === "f" ? "bg-gradient-to-r from-pink-400 to-pink-400" : ""}`}
                 >
                   <label
-                    className={`text-sm font-medium relative w-full min-w-20 sm:w-24 flex select-none flex-col text-pink-300 items-center justify-between rounded-sm border-2 p-2 cursor-pointer transition-colors ${
-                      selected === "f"
-                        ? "border-[hsl(var(--cc-primary))] bg-[hsl(var(--cc-muted))]"
-                        : "border-[hsl(var(--cc-muted))] bg-[hsl(var(--cc-accent,265_8%_25%))] hover:bg-[hsl(var(--cc-muted))]"
-                    }`}
+                    className={`text-sm font-medium relative w-full min-w-20 sm:w-24 flex select-none flex-col text-pink-300 items-center justify-between rounded-sm border-2 p-2 cursor-pointer transition-colors ${selected === "f"
+                      ? "border-[hsl(var(--cc-primary))] bg-[hsl(var(--cc-muted))]"
+                      : "border-[hsl(var(--cc-muted))] bg-[hsl(var(--cc-accent,265_8%_25%))] hover:bg-[hsl(var(--cc-muted))]"
+                      }`}
                     onClick={() => setSelected("f")}
                   >
-                    {/* Coin badge */}
-                    <div className="absolute z-20 top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 items-center justify-center flex bg-neutral-600 text-amber-300 px-2 py-0.5 rounded-3xl">
-                      <span className="flex flex-row items-center gap-1 text-xs">
-                        15
-                        <CoinIcon />
-                      </span>
-                    </div>
                     <FemaleAvatar />
                     Female
                   </label>

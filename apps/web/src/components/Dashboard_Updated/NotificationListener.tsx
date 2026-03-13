@@ -9,7 +9,7 @@ const NotificationListener: React.FC = () => {
 
     useEffect(() => {
         // Listen for friend request acceptance
-        onFriendRequest((action, from, username, avatarSeed) => {
+        onFriendRequest((action, from, username, avatarSeed, avatarUrl) => {
             if (action === 'accept') {
                 const newNotif = {
                     id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
@@ -17,6 +17,7 @@ const NotificationListener: React.FC = () => {
                     fromId: from,
                     fromUsername: username || 'Someone',
                     fromAvatarSeed: avatarSeed || from,
+                    fromAvatarUrl: avatarUrl || null,
                     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     content: 'accepted your friend request.',
                 };

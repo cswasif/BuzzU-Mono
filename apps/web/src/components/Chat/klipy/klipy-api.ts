@@ -52,6 +52,21 @@ function transformResult(result: KlipyResult): GifImage {
 
 const FETCH_TIMEOUT = 15000; // 15 seconds timeout
 
+function redactSensitiveQuery(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.has('key')) {
+      parsed.searchParams.set('key', '[redacted]');
+    }
+    if (parsed.searchParams.has('client_key')) {
+      parsed.searchParams.set('client_key', '[redacted]');
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 async function fetchWithTimeout(url: string, timeout = FETCH_TIMEOUT): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -120,7 +135,7 @@ export class KlipyApi {
       media_filter: 'gif,tinygif',
     });
 
-    console.log('[Klipy API] Searching for:', query, 'URL:', url);
+    console.log('[Klipy API] Searching for:', query, 'URL:', redactSensitiveQuery(url));
 
     const response = await fetchWithTimeout(url);
     if (!response.ok) {
@@ -146,7 +161,7 @@ export class KlipyApi {
       media_filter: 'gif,tinygif',
     });
 
-    console.log('[Klipy API] Fetching trending, URL:', url);
+    console.log('[Klipy API] Fetching trending, URL:', redactSensitiveQuery(url));
 
     const response = await fetchWithTimeout(url);
     if (!response.ok) {

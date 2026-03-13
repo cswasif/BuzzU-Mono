@@ -28,14 +28,14 @@ interface MessageInputProps {
   onCancelReply: () => void;
   onCancelEdit: () => void;
   connectionState:
-    | "idle"
-    | "setup"
-    | "searching"
-    | "connecting"
-    | "connected"
-    | "partner_skipped"
-    | "self_skipped"
-    | "waiting";
+  | "idle"
+  | "setup"
+  | "searching"
+  | "connecting"
+  | "connected"
+  | "partner_skipped"
+  | "self_skipped"
+  | "waiting";
   onStart: () => void;
   onStop: () => void;
   onSkip: () => void;
@@ -119,7 +119,7 @@ export function MessageInput({
       const len = input.value.length;
       try {
         input.setSelectionRange(len, len);
-      } catch {}
+      } catch { }
     };
     const frame = requestAnimationFrame(() => focusInput());
     const timer = setTimeout(() => focusInput(), 50);
@@ -298,24 +298,23 @@ export function MessageInput({
               <button
                 onClick={
                   connectionState === "idle" ||
-                  connectionState === "partner_skipped" ||
-                  connectionState === "self_skipped"
+                    connectionState === "partner_skipped" ||
+                    connectionState === "self_skipped"
                     ? onStart
                     : connectionState === "searching"
                       ? onStop
                       : handleSkipClick
                 }
-                className={`inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-11 px-2 rounded-md lg:rounded-l-none ${
-                  connectionState === "connected" ||
-                  connectionState === "partner_skipped" ||
-                  connectionState === "self_skipped"
+                className={`inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-11 px-2 rounded-md lg:rounded-l-none ${connectionState === "connected" ||
+                    connectionState === "partner_skipped" ||
+                    connectionState === "self_skipped"
                     ? "bg-warning text-warning-foreground hover:bg-warning/90 shadow"
                     : "bg-primary text-primary-foreground hover:bg-primary/90 shadow"
-                }`}
+                  }`}
               >
                 {connectionState === "idle" ||
-                connectionState === "partner_skipped" ||
-                connectionState === "self_skipped"
+                  connectionState === "partner_skipped" ||
+                  connectionState === "self_skipped"
                   ? "START"
                   : connectionState === "searching"
                     ? "STOP"
@@ -449,7 +448,7 @@ export function MessageInput({
         {!editingMessage && isGifPickerOpen && (
           <GifPicker
             isOpen={isGifPickerOpen}
-            onClose={onCloseGifPicker || (() => {})}
+            onClose={onCloseGifPicker || (() => { })}
             onGifSelect={handleGifSelect}
             variant="floating"
             anchorRef={gifButtonRef}

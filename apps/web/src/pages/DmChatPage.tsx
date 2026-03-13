@@ -17,24 +17,75 @@ import { useSessionStore } from '../stores/sessionStore';
 export const DmChatPage: React.FC = () => {
     const { friendId } = useParams<{ friendId: string }>();
     const navigate = useNavigate();
-    const { friendList, setDmFriend } = useSessionStore();
-
+    const {
+        friendList,
+        setDmFriend,
+        activeDmFriend,
+        matchHistory,
+        partnerId,
+        partnerName,
+        partnerAvatarSeed,
+        partnerAvatarUrl,
+        dmMessages,
+    } = useSessionStore();
     // Resolve friendId from URL → store
     useEffect(() => {
         if (!friendId) return;
 
-        const friend = friendList.find(f => f.id === friendId);
+        const friendFromList = friendList.find(f => f.id === friendId);
+        const friendFromActive = activeDmFriend?.id === friendId ? activeDmFriend : null;
+        const match = matchHistory.find(m => m.id === friendId);
+        const friendFromMatch = match
+            ? {
+                id: match.id,
+                username: match.username || 'Friend',
+                avatarSeed: match.avatarSeed || match.id,
+                avatarUrl: match.avatarUrl || null,
+            }
+            : null;
+        const friendFromPartner = partnerId === friendId
+            ? {
+                id: partnerId,
+                username: partnerName || 'Partner',
+                avatarSeed: partnerAvatarSeed || partnerId,
+                avatarUrl: partnerAvatarUrl || null,
+            }
+            : null;
+        const friendFromMessages = (dmMessages[friendId] && dmMessages[friendId].length > 0)
+            ? {
+                id: friendId,
+                username: activeDmFriend?.id === friendId ? activeDmFriend.username : 'Friend',
+                avatarSeed: activeDmFriend?.id === friendId ? activeDmFriend.avatarSeed : friendId,
+                avatarUrl: activeDmFriend?.id === friendId ? (activeDmFriend.avatarUrl || null) : null,
+            }
+            : null;
+        const friendFromRoute = {
+            id: friendId,
+            username: 'Friend',
+            avatarSeed: friendId,
+            avatarUrl: null,
+        };
+
+        const friend = friendFromList || friendFromActive || friendFromMatch || friendFromPartner || friendFromMessages || friendFromRoute;
         if (friend) {
             // Read current value from store directly to avoid dep cycle
             const current = useSessionStore.getState().activeDmFriend;
             if (current?.id !== friend.id) {
                 setDmFriend(friend);
             }
-        } else {
-            // Friend not found — go back to dashboard
-            navigate('/chat/new', { replace: true });
         }
-    }, [friendId, friendList, setDmFriend, navigate]);
+    }, [
+        friendId,
+        friendList,
+        activeDmFriend,
+        matchHistory,
+        partnerId,
+        partnerName,
+        partnerAvatarSeed,
+        partnerAvatarUrl,
+        dmMessages,
+        setDmFriend,
+    ]);
 
     // "New Chat" from sidebar → back to dashboard
     useEffect(() => {

@@ -83,11 +83,12 @@ export function useFileTransfer(options: FileTransferOptions = {}) {
 
                     dataChannel.send(chunk);
                     offset += chunk.length;
-                    const currentProgress = (offset / file.size) * 100;
+                    const currentProgress = file.size > 0 ? (offset / file.size) * 100 : 100;
+                    const clampedProgress = Math.min(100, currentProgress);
 
-                    setProgress(currentProgress);
-                    localProgress?.(currentProgress);
-                    optionsRef.current.onProgress?.(currentProgress);
+                    setProgress(clampedProgress);
+                    localProgress?.(clampedProgress);
+                    optionsRef.current.onProgress?.(clampedProgress);
                 }
             }
 
@@ -114,6 +115,10 @@ export function useFileTransfer(options: FileTransferOptions = {}) {
                 const message = JSON.parse(data);
                 if (message.type === 'metadata') {
                     console.log('[useFileTransfer] Receiving file metadata:', message.name, message.size, message.mime);
+                    if (isTransferringRef.current && !completionTriggeredRef.current) {
+                        console.warn('[useFileTransfer] Duplicate metadata received while transfer in progress, ignoring');
+                        return;
+                    }
                     expectedSizeRef.current = message.size;
                     receivedSizeRef.current = 0;
                     chunksRef.current = [];
@@ -124,6 +129,9 @@ export function useFileTransfer(options: FileTransferOptions = {}) {
                     setIsTransferring(true);
                     setProgress(0);
                 } else if (message.type === 'done') {
+                    if (!isTransferringRef.current) {
+                        return;
+                    }
                     if (completionTriggeredRef.current) {
                         console.warn('[useFileTransfer] Duplicate done message detected, ignoring');
                         return;
@@ -152,13 +160,24 @@ export function useFileTransfer(options: FileTransferOptions = {}) {
 
         try {
             const chunk = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
-            chunksRef.current.push(chunk);
-            receivedSizeRef.current += chunk.byteLength || chunk.length || 0;
+            let chunkData = chunk;
+            let chunkSize = chunkData.byteLength || chunkData.length || 0;
+            if (expectedSizeRef.current > 0 && receivedSizeRef.current + chunkSize > expectedSizeRef.current) {
+                const remaining = expectedSizeRef.current - receivedSizeRef.current;
+                if (remaining <= 0) {
+                    return;
+                }
+                chunkData = chunkData.subarray(0, remaining);
+                chunkSize = remaining;
+            }
+            chunksRef.current.push(chunkData);
+            receivedSizeRef.current += chunkSize;
 
             if (expectedSizeRef.current > 0) {
                 const currentProgress = (receivedSizeRef.current / expectedSizeRef.current) * 100;
-                setProgress(currentProgress);
-                optionsRef.current.onProgress?.(currentProgress);
+                const clampedProgress = Math.min(100, currentProgress);
+                setProgress(clampedProgress);
+                optionsRef.current.onProgress?.(clampedProgress);
             }
         } catch (err) {
             console.error('[useFileTransfer] Failed to process binary chunk:', err);

@@ -119,6 +119,61 @@ This prevents two operations (e.g., stop screenshare + switch mic device) from r
 
 ### Pattern: LiveKit — Mutex locks everywhere
 
+---
+
+## 3. Cleanup + Memory Management Patterns (GitHub MCP Findings)
+
+### LiveKit — aggressive listener detachment + stop old tracks on replace
+
+```typescript
+// LocalTrack.ts
+if (this._mediaStreamTrack) {
+  detachTrack(this._mediaStreamTrack, el);
+  this._mediaStreamTrack.removeEventListener('ended', this.handleEnded);
+  this._mediaStreamTrack.removeEventListener('mute', this.handleTrackMuteEvent);
+  this._mediaStreamTrack.removeEventListener('unmute', this.handleTrackUnmuteEvent);
+}
+if (!this.providedByUser && this._mediaStreamTrack !== newTrack) {
+  this._mediaStreamTrack.stop();
+}
+```
+
+**Pattern**: when replacing a track, LiveKit detaches from elements, removes listeners, and stops the old track to avoid phantom callbacks and leaked capture sources.
+
+### Jitsi — explicit dispose path for local tracks
+
+```typescript
+// actions.any.ts
+export function destroyLocalTracks(track: any = null) {
+  return (dispatch, getState) =>
+    _cancelGUMProcesses(getState).then(() =>
+      dispatch(_disposeAndRemoveTracks(getState()['features/base/tracks']
+        .filter(t => t.local)
+        .map(t => t.jitsiTrack))));
+}
+```
+
+**Pattern**: centralize cleanup behind a single dispose pipeline so every local track is guaranteed to be removed from the conference, state, and device.
+
+### Matrix — per-stream removeTrack listeners to free feeds
+
+```typescript
+// call.ts
+if (!this.removeTrackListeners.has(stream)) {
+  const onRemoveTrack = (): void => {
+    if (stream.getTracks().length === 0) {
+      this.deleteFeedByStream(stream);
+      stream.removeEventListener("removetrack", onRemoveTrack);
+      this.removeTrackListeners.delete(stream);
+    }
+  };
+  stream.addEventListener("removetrack", onRemoveTrack);
+  this.removeTrackListeners.set(stream, onRemoveTrack);
+}
+```
+
+**Pattern**: track listeners in a map keyed by stream and remove them when the stream is empty to prevent unbounded listener growth.
+
 LiveKit uses `@livekit/mutex` extensively:
 
 ```typescript

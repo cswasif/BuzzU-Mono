@@ -3,8 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './components/ThemeContext';
 import { SignalingProvider } from './src/context/SignalingContext';
-import { useSessionStore } from './src/stores/sessionStore';
+import { MatchingProvider } from './src/context/MatchingContext';
+import { sendMatchmakerDisconnect, useSessionStore } from './src/stores/sessionStore';
 import { useMessageStore } from './src/stores/messageStore';
+import { initPerfMonitor } from './src/utils/perfMonitor';
 
 const SocialLanding = React.lazy(() => import('./components/SocialLanding/SocialLanding'));
 const VerificationPage = React.lazy(() => import('./src/pages/VerificationPage'));
@@ -12,32 +14,40 @@ const MatchPage = React.lazy(() => import('./src/pages/MatchPage'));
 const ChatPage = React.lazy(() => import('./src/pages/ChatPage'));
 const DashboardLayout = React.lazy(() => import('./src/layouts/DashboardLayout'));
 const ChatNewPage = React.lazy(() => import('./src/pages/ChatNewPage'));
+const VideoPage = React.lazy(() => import('./src/pages/VideoPage'));
 const DmChatPage = React.lazy(() => import('./src/pages/DmChatPage'));
 
 const App = () => (
   <SignalingProvider>
-    <ThemeProvider>
-      <BrowserRouter>
-        <React.Suspense fallback={null}>
-          <Routes>
-            <Route path="/" element={<SocialLanding />} />
-            <Route path="/verify" element={<VerificationPage />} />
-            <Route path="/match" element={<MatchPage />} />
+    <MatchingProvider>
+      <ThemeProvider>
+        <BrowserRouter>
+          <React.Suspense fallback={null}>
+            <Routes>
+              <Route path="/" element={<SocialLanding />} />
+              <Route path="/verify" element={<VerificationPage />} />
+              <Route path="/match" element={<MatchPage />} />
 
-            {/* Dashboard layout — sidebar, header, modals defined once */}
-            <Route element={<DashboardLayout />}>
-              <Route path="/chat/new" element={<ChatNewPage />} />
-              <Route path="/chat/new/:roomId" element={<ChatNewPage />} />
-              <Route path="/chat/dm/:friendId" element={<DmChatPage />} />
-            </Route>
+              {/* Dashboard layout — sidebar, header, modals defined once */}
+              <Route element={<DashboardLayout />}>
+                <Route path="/chat/new" element={<ChatNewPage />} />
+                <Route path="/chat/new/:roomId" element={<ChatNewPage />} />
+                <Route path="/chat/text" element={<ChatNewPage />} />
+                <Route path="/chat/text/:roomId" element={<ChatNewPage />} />
+                <Route path="/chat/video" element={<VideoPage />} />
+                <Route path="/chat/dm/:friendId" element={<DmChatPage />} />
+              </Route>
 
-            <Route path="/chat/:roomId" element={<ChatPage />} />
-          </Routes>
-        </React.Suspense>
-      </BrowserRouter>
-    </ThemeProvider>
+              <Route path="/chat/:roomId" element={<ChatPage />} />
+            </Routes>
+          </React.Suspense>
+        </BrowserRouter>
+      </ThemeProvider>
+    </MatchingProvider>
   </SignalingProvider>
 );
+
+initPerfMonitor();
 
 const container = document.getElementById('root');
 if (container) {
@@ -65,7 +75,6 @@ window.addEventListener('beforeunload', () => {
   // Fire-and-forget disconnect — `keepalive: true` ensures the browser
   // sends the request even as the page is being unloaded.
   if (peerId && currentRoomId) {
-    const baseUrl = (import.meta.env.VITE_MATCHMAKER_URL || 'wss://buzzu-matchmaker.md-wasif-faisal.workers.dev').replace(/^ws/, 'http');
-    navigator.sendBeacon(`${baseUrl}/match/disconnect?peer_id=${peerId}`);
+    sendMatchmakerDisconnect(peerId, { useBeacon: true });
   }
 });

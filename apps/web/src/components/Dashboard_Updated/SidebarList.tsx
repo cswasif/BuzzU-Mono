@@ -30,7 +30,7 @@ const SidebarList: React.FC<SidebarListProps> = ({ activeTab, setActiveTab }) =>
     const navigate = useNavigate();
     const location = useLocation();
 
-    const handleOpenDM = (friend: { id: string; username: string; avatarSeed: string }) => {
+    const handleOpenDM = (friend: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null }) => {
         setDmFriend(friend);
         // If we're already on a DM page, navigate to the new friend's DM URL
         // If we're on /chat/new or anywhere else, navigate to the DM URL
@@ -242,7 +242,7 @@ const SidebarList: React.FC<SidebarListProps> = ({ activeTab, setActiveTab }) =>
                                 {/* Friends List or Empty State */}
                                 {filteredFriends.length > 0 ? (
                                     <div className="w-full">
-                                {filteredFriends.map((friend) => (
+                                        {filteredFriends.map((friend) => (
                                             <li key={friend.id}>
                                                 <span className="flex">
                                                     <div

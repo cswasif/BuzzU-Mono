@@ -59,7 +59,7 @@ export function ProfileModal({ isOpen, onClose, username, avatarSeed, avatarUrl,
                 const friend = friendList.find(f => f.username === username);
                 const friendId = friend?.id || useSessionStore.getState().partnerId;
                 if (friendId) {
-                    const friendObj = friend || { id: friendId, username, avatarSeed };
+                    const friendObj = friend || { id: friendId, username, avatarSeed, avatarUrl: avatarUrl || null };
                     setDmFriend(friendObj);
                     navigate(`/chat/dm/${friendId}`);
                 }
@@ -139,8 +139,8 @@ export function ProfileModal({ isOpen, onClose, username, avatarSeed, avatarUrl,
                                         onClick={handleButtonClick}
                                         disabled={isButtonDisabled}
                                         className={`inline-flex items-center justify-center text-sm font-medium h-9 px-4 flex-1 rounded-l-md transition-colors ${isButtonDisabled
-                                                ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                                                : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                                            ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                                            : 'bg-primary text-primary-foreground hover:bg-primary/90'
                                             }`}
                                     >
                                         {getButtonText()}

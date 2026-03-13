@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import '../dashboard_updated.css';
 import Sidebar from '../components/Dashboard_Updated/Sidebar';
 import Header from '../components/Dashboard_Updated/Header';
@@ -10,8 +10,10 @@ import FriendRequestsModal from '../components/Dashboard_Updated/FriendRequestsM
 import InboxModal from '../components/Dashboard_Updated/InboxModal';
 import NotificationListener from '../components/Dashboard_Updated/NotificationListener';
 import { ProfileModal } from '../components/Chat/ProfileModal';
+import { ChatArea } from '../components/Chat/ChatArea';
 import { DmSignalingProvider } from '../context/DmSignalingContext';
 import { useSessionStore } from '../stores/sessionStore';
+import { usePWA } from '../hooks/usePWA';
 
 /**
  * DashboardLayout — Shared shell for /chat/new and /chat/dm/:friendId
@@ -24,7 +26,9 @@ import { useSessionStore } from '../stores/sessionStore';
  *   /chat/dm/:friendId → DmChatArea (DM with specific friend)
  */
 export default function DashboardLayout() {
-    const { initSession, theme, setTheme } = useSessionStore();
+    const { initSession, theme, setTheme, isInChat, currentRoomId, chatMode } = useSessionStore();
+    const location = useLocation();
+    const { isInstallable, installApp, needRefresh, updateApp, closeUpdateTrigger, offlineReady } = usePWA();
 
     useEffect(() => {
         initSession();
@@ -36,6 +40,9 @@ export default function DashboardLayout() {
     const [showFriendRequestsModal, setShowFriendRequestsModal] = useState(false);
     const [showInboxModal, setShowInboxModal] = useState(false);
     const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
+    const [dismissedInstallPrompt, setDismissedInstallPrompt] = useState(false);
+    const [dismissedUpdatePrompt, setDismissedUpdatePrompt] = useState(false);
+    const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
 
     // Default open on desktop, closed on mobile
     const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(() => {
@@ -49,6 +56,12 @@ export default function DashboardLayout() {
     const [profileModal, setProfileModal] = useState<{
         isOpen: boolean; username: string; avatarSeed: string; peerId: string;
     } | null>(null);
+
+    const shouldKeepChatAlive =
+        chatMode === 'text' &&
+        isInChat &&
+        !!currentRoomId &&
+        location.pathname.startsWith('/chat/dm/');
 
     const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
@@ -95,6 +108,25 @@ export default function DashboardLayout() {
         };
     }, []);
 
+    useEffect(() => {
+        if (isInstallable) {
+            setDismissedInstallPrompt(false);
+        }
+    }, [isInstallable]);
+
+    useEffect(() => {
+        if (needRefresh) {
+            setDismissedUpdatePrompt(false);
+        }
+    }, [needRefresh]);
+
+    useEffect(() => {
+        if (!offlineReady) return;
+        setOfflineNoticeVisible(true);
+        const timer = window.setTimeout(() => setOfflineNoticeVisible(false), 4500);
+        return () => window.clearTimeout(timer);
+    }, [offlineReady]);
+
     return (
         <DmSignalingProvider>
             <div className={`chitchat-dashboard-theme ${theme === 'dark' ? 'theme-dark' : ''} min-h-[100dvh] bg-background text-foreground`}>
@@ -129,6 +161,11 @@ export default function DashboardLayout() {
 
                         {/* Route content — this is where child pages render */}
                         <Outlet context={{ setHideChrome, setShowInterestsModal }} />
+                        {shouldKeepChatAlive && (
+                            <div className="hidden">
+                                <ChatArea roomId={currentRoomId ?? undefined} />
+                            </div>
+                        )}
 
                         {/* Right sidebar */}
                         {!hideChrome && (
@@ -169,6 +206,69 @@ export default function DashboardLayout() {
                         requestStatus="friends"
                         onAddFriend={() => { }}
                     />
+                )}
+
+                {offlineNoticeVisible && (
+                    <div
+                        className="fixed bottom-4 left-1/2 z-[70] -translate-x-1/2 rounded-lg border border-emerald-500/40 bg-emerald-900/85 px-4 py-2 text-xs text-emerald-100 shadow-xl"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        Offline mode is ready
+                    </div>
+                )}
+
+                {isInstallable && !dismissedInstallPrompt && (
+                    <div className="fixed bottom-4 right-4 z-[70] max-w-[min(94vw,24rem)] rounded-xl border border-border/70 bg-panel/95 p-3 shadow-2xl backdrop-blur">
+                        <p className="text-sm font-semibold text-panel-foreground">Install BuzzU app</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Get faster launch and a full-screen mobile experience.</p>
+                        <div className="mt-3 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setDismissedInstallPrompt(true)}
+                                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/20"
+                                aria-label="Dismiss install prompt"
+                            >
+                                Not now
+                            </button>
+                            <button
+                                type="button"
+                                onClick={installApp}
+                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90"
+                                aria-label="Install BuzzU app"
+                            >
+                                Install
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {needRefresh && !dismissedUpdatePrompt && (
+                    <div className="fixed bottom-4 left-4 z-[70] max-w-[min(94vw,24rem)] rounded-xl border border-border/70 bg-panel/95 p-3 shadow-2xl backdrop-blur">
+                        <p className="text-sm font-semibold text-panel-foreground">Update available</p>
+                        <p className="mt-1 text-xs text-muted-foreground">A newer version is ready. Reload to apply improvements.</p>
+                        <div className="mt-3 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setDismissedUpdatePrompt(true);
+                                    closeUpdateTrigger();
+                                }}
+                                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/20"
+                                aria-label="Dismiss update prompt"
+                            >
+                                Later
+                            </button>
+                            <button
+                                type="button"
+                                onClick={updateApp}
+                                className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black hover:opacity-90"
+                                aria-label="Reload to update app"
+                            >
+                                Reload
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
         </DmSignalingProvider>

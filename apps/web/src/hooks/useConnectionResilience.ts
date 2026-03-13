@@ -24,7 +24,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useSignalingContext } from '../context/SignalingContext';
-import { useSessionStore } from '../stores/sessionStore';
+import { sendMatchmakerDisconnect, useSessionStore } from '../stores/sessionStore';
 import { useScreenShareStore } from '../stores/screenShareStore';
 
 interface UseConnectionResilienceOptions {
@@ -34,6 +34,8 @@ interface UseConnectionResilienceOptions {
   applyTurnFallback: (peerId: string) => void;
   /** Check if a TURN fallback is in progress for a peer */
   isFallbackActive: (peerId: string) => boolean;
+  /** Get the current rich connection state for a peer */
+  getConnectionState: (peerId: string) => any;
   /** Whether the user is currently in an active chat */
   isInChat: boolean;
 }
@@ -42,6 +44,7 @@ export function useConnectionResilience({
   getPeerConnections,
   applyTurnFallback,
   isFallbackActive,
+  getConnectionState,
   isInChat,
 }: UseConnectionResilienceOptions) {
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -129,17 +132,18 @@ export function useConnectionResilience({
 
       const pcs = getPeerConnections();
       for (const [pid, pc] of pcs) {
+        const richState = getConnectionState(pid);
         const iceState = pc.iceConnectionState;
         const connState = pc.connectionState;
 
-        if (iceState === 'failed' || connState === 'failed') {
+        if (richState.type === 'failed' || iceState === 'failed' || connState === 'failed') {
           if (isFallbackActive(pid)) {
             console.log(`[Resilience] Peer ${pid} failed but fallback already active — skipping`);
             continue;
           }
-          console.warn(`[Resilience] Peer ${pid} stuck in failed (${source}) — restarting ICE`);
+          console.warn(`[Resilience] Peer ${pid} stuck in failed (${source}, richState: ${richState.type}) — restarting ICE`);
           applyTurnFallback(pid);
-        } else if (iceState === 'disconnected') {
+        } else if (richState.type === 'disconnected' || iceState === 'disconnected') {
           if (isFallbackActive(pid)) continue;
           console.warn(`[Resilience] Peer ${pid} still disconnected (${source}) — restarting ICE`);
           applyTurnFallback(pid);
@@ -322,36 +326,48 @@ export function useConnectionResilience({
       return;
     }
 
+    let init: () => void = () => { };
     try {
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      let initialized = false;
+      init = () => {
+        if (initialized || !isInChat) return;
+        initialized = true;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
 
-      osc.frequency.value = 1; // 1 Hz — inaudible
-      gain.gain.value = 0;     // Completely silent
+        osc.frequency.value = 1;
+        gain.gain.value = 0;
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
 
-      silentAudioRef.current = { ctx, osc, gain };
-      console.log('[Resilience] Silent audio keepalive started');
+        silentAudioRef.current = { ctx, osc, gain };
+        console.log('[Resilience] Silent audio keepalive started');
 
-      // Handle AudioContext suspension (iOS Safari requires user gesture)
-      if (ctx.state === 'suspended') {
-        const resumeOnInteraction = () => {
+        if (ctx.state === 'suspended') {
           ctx.resume().catch(() => { });
-          document.removeEventListener('touchstart', resumeOnInteraction);
-          document.removeEventListener('click', resumeOnInteraction);
-        };
-        document.addEventListener('touchstart', resumeOnInteraction, { once: true });
-        document.addEventListener('click', resumeOnInteraction, { once: true });
+        }
+      };
+
+      const hasActivation = typeof navigator !== 'undefined'
+        && typeof (navigator as any).userActivation !== 'undefined'
+        && (navigator as any).userActivation?.hasBeenActive;
+
+      if (hasActivation) {
+        init();
+      } else {
+        document.addEventListener('touchstart', init, { once: true });
+        document.addEventListener('click', init, { once: true });
       }
     } catch (err) {
       console.warn('[Resilience] Failed to create silent audio keepalive:', err);
     }
 
     return () => {
+      document.removeEventListener('touchstart', init);
+      document.removeEventListener('click', init);
       if (silentAudioRef.current) {
         try {
           silentAudioRef.current.osc.stop();
@@ -497,12 +513,7 @@ export function useConnectionResilience({
       if (!e.persisted) {
         const { currentRoomId, peerId: storePeerId } = useSessionStore.getState();
         if (currentRoomId && storePeerId) {
-          // Use sendBeacon for reliability — fetch may be cancelled during unload
-          const matchmakerUrl = import.meta.env.VITE_MATCHMAKER_URL || 'https://buzzu-matchmaker.md-wasif-faisal.workers.dev';
-          navigator.sendBeacon(
-            `${matchmakerUrl}/match/disconnect?peer_id=${storePeerId}`,
-          );
-          console.log('[Resilience] Sent graceful disconnect via sendBeacon');
+          sendMatchmakerDisconnect(storePeerId, { useBeacon: true });
         }
       }
     };

@@ -7,7 +7,7 @@ interface ReportReason {
   label: string;
 }
 
-const REPORT_REASONS: ReportReason[] = [
+export const REPORT_REASONS: ReportReason[] = [
   { id: "1", emoji: "\uD83D\uDD1E", label: "Nudity" },
   { id: "4", emoji: "\uD83E\uDD2C", label: "Inappropriate Language" },
   { id: "3", emoji: "\uD83E\uDDD2", label: "Underage" },

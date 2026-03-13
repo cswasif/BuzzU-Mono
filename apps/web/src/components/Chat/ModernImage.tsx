@@ -51,6 +51,9 @@ export const ModernImage: React.FC<ModernImageProps> = ({
             <motion.img
                 src={src}
                 alt={alt}
+                onLoad={() => {
+                    window.dispatchEvent(new CustomEvent('chat-media-loaded'));
+                }}
                 initial={false}
                 animate={{
                     filter: isRevealed ? 'blur(0px)' : 'blur(40px)',

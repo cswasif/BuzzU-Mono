@@ -12,6 +12,8 @@ import { useMatching } from "../hooks/useMatching";
 import { useSignaling } from "../hooks/useSignaling";
 import { useWebRTC } from "../hooks/useWebRTC";
 import { useSessionStore } from "../stores/sessionStore";
+import { reportUser } from "../utils/reputationUtils";
+import { REPORT_REASONS } from "./components/report-user-modal";
 import { useUserMedia } from "./hooks/use-user-media";
 import { UserMediaProvider } from "../context/UserMediaContext";
 
@@ -24,25 +26,46 @@ function VideoMatchContent({ onBack }: { onBack?: () => void }) {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [moreModalOpen, setMoreModalOpen] = useState(false);
 
-  const { peerId, isBracuUser, setIsBracuUser, selectedInstitution, setSelectedInstitution, currentRoomId, partnerId, leaveRoom } = useSessionStore();
+  const { peerId, isBracuUser, setIsBracuUser, selectedInstitution, setSelectedInstitution, currentRoomId, partnerId, leaveRoom, setChatMode } = useSessionStore();
+
+  // Lock this session to video mode so the matchmaker only pairs us with other
+  // video-mode users. Reset to 'text' on unmount to avoid polluting text chat.
+  useEffect(() => {
+    setChatMode('video');
+    return () => setChatMode('text');
+  }, [setChatMode]);
+
 
   const { isMatching, startMatching, stopMatching, matchData, setMatchData, error: matchingError } = useMatching();
-  const { onPeerLeave, connect, disconnect, isConnected: signalingConnected } = useSignaling();
+  const { onPeerLeave, onPeerSkip, onPeerJoin, sendSkip, connect, disconnect, isConnected: signalingConnected } = useSignaling();
   const { initiateCall, setLocalStream, closeAllPeerConnections } = useWebRTC();
   const { stream: localMediaStream } = useUserMedia();
 
   const [viewerState, setViewerState] = useState<AppViewerState>("idle");
+  const partnerLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingLeavePeerRef = useRef<string | null>(null);
+  const partnerSkipIntentRef = useRef<Set<string>>(new Set());
+  const partnerSkipHandledRef = useRef(false);
 
-  const handleSkip = useCallback(() => {
+  const handlePartnerSkip = useCallback(() => {
+    if (partnerSkipHandledRef.current) return;
+    partnerSkipHandledRef.current = true;
     disconnect();
     closeAllPeerConnections();
     setMatchData(null);
     setViewerState("idle");
     leaveRoom();
     setTimeout(() => {
-      startMatching();
+      startMatching(true);
     }, 200);
-  }, [startMatching, closeAllPeerConnections, disconnect, leaveRoom]);
+  }, [startMatching, closeAllPeerConnections, disconnect, leaveRoom, setMatchData]);
+
+  const handleSkip = useCallback(() => {
+    if (partnerId && signalingConnected) {
+      sendSkip(partnerId, "skip");
+    }
+    handlePartnerSkip();
+  }, [partnerId, signalingConnected, sendSkip, handlePartnerSkip]);
 
   const handleEndChat = () => {
     stopMatching(true);
@@ -99,23 +122,67 @@ function VideoMatchContent({ onBack }: { onBack?: () => void }) {
 
   // Handle partner leaving
   useEffect(() => {
-    onPeerLeave((leftPeerId: string) => {
-      if (leftPeerId === partnerId) {
-        console.log("[VideoMatchPage] Partner left:", leftPeerId);
-        // Automatically skip to find a new partner
-        handleSkip();
+    partnerSkipHandledRef.current = false;
+    if (partnerId) {
+      partnerSkipIntentRef.current.delete(partnerId);
+    }
+
+    onPeerSkip((from) => {
+      if (from === partnerId) {
+        partnerSkipIntentRef.current.add(from);
+        handlePartnerSkip();
       }
     });
-    return () => onPeerLeave(null);
-  }, [onPeerLeave, partnerId, handleSkip]);
+
+    onPeerLeave((leftPeerId: string) => {
+      if (leftPeerId === partnerId) {
+        if (partnerSkipIntentRef.current.has(leftPeerId)) {
+          handlePartnerSkip();
+          return;
+        }
+        pendingLeavePeerRef.current = leftPeerId;
+        if (partnerLeaveTimerRef.current) {
+          clearTimeout(partnerLeaveTimerRef.current);
+        }
+        partnerLeaveTimerRef.current = setTimeout(() => {
+          if (pendingLeavePeerRef.current !== leftPeerId) return;
+          handlePartnerSkip();
+        }, 5000);
+      }
+    });
+
+    onPeerJoin((joinedPeerId) => {
+      if (joinedPeerId !== partnerId) return;
+      if (pendingLeavePeerRef.current === joinedPeerId) {
+        pendingLeavePeerRef.current = null;
+        if (partnerLeaveTimerRef.current) {
+          clearTimeout(partnerLeaveTimerRef.current);
+          partnerLeaveTimerRef.current = null;
+        }
+      }
+      partnerSkipIntentRef.current.delete(joinedPeerId);
+      partnerSkipHandledRef.current = false;
+    });
+
+    return () => {
+      onPeerLeave(null);
+      onPeerSkip(null);
+      onPeerJoin(null);
+    };
+  }, [onPeerLeave, onPeerSkip, onPeerJoin, partnerId, handlePartnerSkip]);
 
   const handleComplete = () => {
     setProfileModalOpen(false);
-    startMatching();
+    startMatching(true);
   };
 
   const handleStartChat = () => {
-    setProfileModalOpen(true);
+    const genderChoice = useSessionStore.getState().gender;
+    if (genderChoice && genderChoice !== 'U') {
+      startMatching(true);
+    } else {
+      setProfileModalOpen(true);
+    }
   };
 
   return (
@@ -189,8 +256,12 @@ function VideoMatchContent({ onBack }: { onBack?: () => void }) {
       <ReportUserModal
         open={reportModalOpen}
         onClose={() => setReportModalOpen(false)}
-        onSubmit={(reasonId) => {
-          console.log("Reported with reason:", reasonId);
+        onSubmit={async (reasonId) => {
+          if (peerId && partnerId) {
+            const reasonLabel = REPORT_REASONS.find(r => r.id === reasonId)?.label || reasonId;
+            console.log(`[BuzzU] Reporting partner ${partnerId} for: ${reasonLabel}`);
+            await reportUser(peerId, partnerId, reasonLabel, `Reported from video match with reason ID: ${reasonId}`);
+          }
           setReportModalOpen(false);
           handleSkip();
         }}

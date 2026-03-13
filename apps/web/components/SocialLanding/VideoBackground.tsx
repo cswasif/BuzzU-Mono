@@ -50,6 +50,7 @@ interface VideoBackgroundProps {
   fallbackImage?: string;
   cropBlackBars?: boolean;
   filterSide?: 'left' | 'right' | 'full' | 'none';
+  forceFallback?: boolean;
 }
 
 export const VideoBackground = memo(({
@@ -61,7 +62,8 @@ export const VideoBackground = memo(({
   mirrored = false,
   fallbackImage = '/assets/buzzu_fallback_background.png',
   cropBlackBars = true,
-  filterSide = 'none'
+  filterSide = 'none',
+  forceFallback = false
 }: VideoBackgroundProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasAppliedMuteRef = useRef(false);
@@ -196,7 +198,7 @@ export const VideoBackground = memo(({
   return (
     <div className={`video-background-wrapper ${mirrored ? 'mirrored' : ''} filter-${filterSide}`}>
       <div className="video-background-overlay"></div>
-      {playbackFailed ? (
+      {(playbackFailed || forceFallback) ? (
         <div
           className="video-fallback-image"
           style={{

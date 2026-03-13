@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { MessageItem } from './MessageItem';
 import { ImageGrid } from './ImageGrid';
 import { Message } from './types';
@@ -63,6 +63,45 @@ function groupMessages(messages: Message[]): GroupedItem[] {
   return result;
 }
 
+function hashToHue(input: string) {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 31 + input.charCodeAt(i)) % 360;
+  }
+  return Math.abs(hash) % 360;
+}
+
+function buildFallbackAvatar(seed: string, label: string) {
+  const initial = (label || seed || '?').trim().charAt(0).toUpperCase() || '?';
+  const hue = hashToHue(seed || label || '');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="100%" height="100%" fill="hsl(${hue},65%,55%)"/><text x="50%" y="50%" font-size="40" font-family="Arial, sans-serif" fill="#fff" text-anchor="middle" dominant-baseline="middle">${initial}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+const AvatarImage: React.FC<{ src: string; label: string; seed: string }> = ({ src, label, seed }) => {
+  const [currentSrc, setCurrentSrc] = useState(src);
+  const fallback = useMemo(() => buildFallbackAvatar(seed, label), [seed, label]);
+
+  useEffect(() => {
+    setCurrentSrc(src);
+  }, [src]);
+
+  return (
+    <img
+      className="aspect-square h-full w-full"
+      alt={label}
+      src={currentSrc}
+      loading="lazy"
+      decoding="async"
+      onError={() => {
+        if (currentSrc !== fallback) {
+          setCurrentSrc(fallback);
+        }
+      }}
+    />
+  );
+};
+
 export function MessageList({
   messages,
   partnerName,
@@ -95,6 +134,21 @@ export function MessageList({
       });
     }
   }, [messages]);
+
+  useEffect(() => {
+    const handleMediaLoaded = () => {
+      if (!containerRef.current) return;
+      const el = containerRef.current;
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    };
+
+    window.addEventListener('chat-media-loaded', handleMediaLoaded);
+    return () => {
+      window.removeEventListener('chat-media-loaded', handleMediaLoaded);
+    };
+  }, []);
 
   const grouped = useMemo(() => groupMessages(messages), [messages]);
 
@@ -173,10 +227,10 @@ export function MessageList({
                     onClick={() => onProfileClick?.(item.username, resolvedAvatarSeed, resolvedAvatarUrl, item.isVerified)}
                   >
                     <span className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full">
-                      <img
-                        className="aspect-square h-full w-full"
-                        alt={item.username}
+                      <AvatarImage
                         src={resolvedAvatarUrl || `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${resolvedAvatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`}
+                        label={item.username}
+                        seed={resolvedAvatarSeed}
                       />
                     </span>
                   </div>

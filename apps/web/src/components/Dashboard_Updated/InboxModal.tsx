@@ -11,8 +11,8 @@ const InboxModal: React.FC<InboxModalProps> = ({ onClose }) => {
   const { notifications, removeNotification, setDmFriend } = useSessionStore();
   const navigate = useNavigate();
 
-  const handleChat = (id: string, fromId: string, fromUsername: string, fromAvatarSeed: string) => {
-    setDmFriend({ id: fromId, username: fromUsername, avatarSeed: fromAvatarSeed });
+  const handleChat = (id: string, fromId: string, fromUsername: string, fromAvatarSeed: string, fromAvatarUrl?: string | null) => {
+    setDmFriend({ id: fromId, username: fromUsername, avatarSeed: fromAvatarSeed, avatarUrl: fromAvatarUrl });
     onClose();
     navigate(`/chat/dm/${fromId}`);
   };
@@ -52,7 +52,7 @@ const InboxModal: React.FC<InboxModalProps> = ({ onClose }) => {
                         <img
                           className="aspect-square h-full w-full"
                           alt={notif.fromUsername}
-                          src={`https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${notif.fromAvatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`}
+                          src={notif.fromAvatarUrl || `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${notif.fromAvatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`}
                         />
                       </span>
                       <div className="flex flex-col justify-center text-sm">
@@ -61,7 +61,7 @@ const InboxModal: React.FC<InboxModalProps> = ({ onClose }) => {
                         </span>
                         <div className="mt-2 flex gap-3">
                           <button
-                            onClick={() => handleChat(notif.id, notif.fromId, notif.fromUsername, notif.fromAvatarSeed)}
+                            onClick={() => handleChat(notif.id, notif.fromId, notif.fromUsername, notif.fromAvatarSeed, notif.fromAvatarUrl)}
                             className="inline-flex disabled:select-none items-center justify-center text-xs font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-6 rounded-md px-3 cursor-pointer transition-all active:scale-95"
                           >
                             Chat

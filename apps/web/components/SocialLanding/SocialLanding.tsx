@@ -3,7 +3,6 @@ import { AuthColumn } from './AuthColumn';
 import { Footer } from './Footer';
 import { SplashScreen } from './SplashScreen';
 import { useTheme } from '../ThemeContext';
-import { PWAInstallPill } from './PWAInstallPill';
 import '../../styles.css';
 
 const DESKTOP_IMAGES = ['/desktop1.png', '/desktop3.png'];
@@ -149,8 +148,6 @@ export default function SocialLanding() {
                     <AuthColumn onVideoReady={() => setIsVideoReady(true)} />
 
                     <Footer />
-
-                    <PWAInstallPill />
 
                   </div>
                 </div>

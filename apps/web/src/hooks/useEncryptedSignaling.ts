@@ -32,7 +32,7 @@ const E2E_STORAGE_KEY = 'buzzu_e2e_keypair';
 
 // Message types that must NOT be encrypted (server needs to read them)
 const PLAINTEXT_TYPES = new Set<string>([
-  'Join', 'PeerList', 'Leave', 'Error', 'KeyExchange',
+  'Join', 'PeerList', 'Leave', 'Error', 'KeyExchange', 'Skip',
 ]);
 
 // Message types that SHOULD be encrypted end-to-end

@@ -6,10 +6,10 @@ import { createPortal } from 'react-dom';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
 const VIDEOS: VideoSegment[] = [
+  { videoId: "IpFX2vq8HKw", start: 30, end: 110 }, // yung kai - blue
   { videoId: "1FVF-9KQiPo", start: 246, end: 306 }, // Taylor Swift - Opalite (starting at 4:06)
   { videoId: "0Wqr_pa4UlU", start: 199, end: 319 }, // Previous video as second
   { videoId: "1FVF-9KQiPo", start: 200, end: 260 }, // Taylor Swift - Wildest Dreams (Default)
-  { videoId: "IpFX2vq8HKw", start: 30, end: 110 }, // yung kai - blue
   { videoId: "vBHild0PiTE", start: 50, end: 130 }, // Lana Del Rey - Chemtrails
   { videoId: "V9PVRfjEBTI", start: 45, end: 120 }, // Billie Eilish - BIRDS OF A FEATHER
   { videoId: "wycjnCCgUes", start: 75, end: 145 }, // Tame Impala - Feels Like We Only Go Backwards
@@ -26,6 +26,7 @@ const MIRRORED_VIDEOS: VideoSegment[] = VIDEOS.map(v => ({
 export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
   const { colors, theme } = useTheme();
   const [currentIndex, setCurrentIndex] = useState(() => 0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -61,13 +62,19 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
   }, []);
 
   const handleVideoEnd = useCallback(() => {
-    setCurrentIndex((prevIndex) => {
-      let nextIndex;
-      do {
-        nextIndex = Math.floor(Math.random() * VIDEOS.length);
-      } while (nextIndex === prevIndex && VIDEOS.length > 1);
-      return nextIndex;
-    });
+    // Show the photo transition for 2 seconds
+    setIsTransitioning(true);
+
+    setTimeout(() => {
+      setCurrentIndex((prevIndex) => {
+        let nextIndex;
+        do {
+          nextIndex = Math.floor(Math.random() * VIDEOS.length);
+        } while (nextIndex === prevIndex && VIDEOS.length > 1);
+        return nextIndex;
+      });
+      setIsTransitioning(false);
+    }, 2000);
   }, []);
 
   const toggleMute = () => setIsMuted(!isMuted);
@@ -118,7 +125,8 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
               isMuted={true}
               onVideoEnd={handleVideoEnd}
               mirrored={true}
-              fallbackImage="/assets/buzzu_fallback_right.jpg"
+              fallbackImage="/assets/landing_right.jpg"
+              forceFallback={isTransitioning}
               cropBlackBars={true}
               filterSide="none"
             />
@@ -184,7 +192,8 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
           isMuted={isMuted}
           onVideoEnd={handleVideoEnd}
           onReady={onVideoReady}
-          fallbackImage="/assets/buzzu_fallback_left.png"
+          fallbackImage="/assets/landing_left.jfif"
+          forceFallback={isTransitioning}
           cropBlackBars={true}
           filterSide="none"
         />

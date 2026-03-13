@@ -14,30 +14,33 @@ const SIGNALING_URL =
 
 export interface SignalingMessage {
   type:
-    | "RoomStatus"
-    | "Join"
-    | "Offer"
-    | "Answer"
-    | "IceCandidate"
-    | "PeerList"
-    | "Leave"
-    | "Error"
-    | "Relay"
-    | "RelayRequest"
-    | "RelayResponse"
-    | "Reachability"
-    | "Chat"
-    | "Typing"
-    | "PublishKeys"
-    | "RequestKeys"
-    | "KeysResponse"
-    | "SignalHandshake"
-    | "FriendRequest"
-    | "ScreenShare"
-    | "VoiceChat"
-    | "Encrypted"
-    | "KeyExchange"
-    | "EditMessage";
+  | "RoomStatus"
+  | "Join"
+  | "Offer"
+  | "Answer"
+  | "IceCandidate"
+  | "PeerList"
+  | "Leave"
+  | "Error"
+  | "Relay"
+  | "RelayRequest"
+  | "RelayResponse"
+  | "Reachability"
+  | "Chat"
+  | "Typing"
+  | "PublishKeys"
+  | "RequestKeys"
+  | "KeysResponse"
+  | "SignalHandshake"
+  | "FriendRequest"
+  | "ScreenShare"
+  | "VoiceChat"
+  | "Profile"
+  | "Encrypted"
+  | "KeyExchange"
+  | "EditMessage"
+  | "DeleteMessage"
+  | "Skip";
   from?: string;
   to?: string;
   room_id?: string;
@@ -62,6 +65,9 @@ export interface SignalingMessage {
   max_peers?: number;
   /** EditMessage: the ID of the message being edited */
   editId?: string;
+  /** DeleteMessage: the ID of the message being deleted */
+  deleteId?: string;
+  reason?: string;
 }
 
 export interface ChatMessage {
@@ -252,7 +258,9 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
                 message.type === "PublishKeys" ||
                 message.type === "RequestKeys" ||
                 message.type === "KeysResponse" ||
-                message.type === "SignalHandshake"
+                message.type === "SignalHandshake" ||
+                message.type === "DeleteMessage" ||
+                message.type === "EditMessage"
               ) {
                 console.log(
                   "[SignalingContext] [Signal Debug] Received",
@@ -261,6 +269,7 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
                   message.from,
                   "to:",
                   message.to,
+                  message.type === "DeleteMessage" ? `deleteId=${message.deleteId}` : message.type === "EditMessage" ? `editId=${message.editId}` : '',
                 );
               }
               typeCallbacks.forEach((cb) => cb(message));

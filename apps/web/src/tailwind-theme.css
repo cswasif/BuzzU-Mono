@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* 
+ * Tailwind CSS v4 Theme Configuration 
+ * Note: @theme and @utility are valid directives in Tailwind v4.
+ * IDE warnings for "Unknown at rule" can be safely ignored as they 
+ * are handles by the Tailwind PostCSS/Vite plugin during build.
+ */
 @theme {
     --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
 
@@ -36,4 +42,35 @@
 
     --radius-xl: 0.75rem;
     --radius-md: calc(var(--radius) - 2px);
+}
+
+@layer base {
+    :root {
+        --viewport-height: 100dvh;
+    }
+
+    html,
+    body {
+        height: 100dvh;
+        height: var(--viewport-height);
+        overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    #root {
+        height: 100dvh;
+        height: var(--viewport-height);
+        width: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@utility h-dvh {
+    height: 100dvh;
+}
+
+@utility min-h-dvh {
+    min-height: 100dvh;
 }

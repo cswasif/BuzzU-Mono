@@ -34,6 +34,12 @@ pub enum MatchMessage {
         verified_only: bool,
         #[serde(default = "default_interest_timeout")]
         interest_timeout: u32,
+        #[serde(default = "default_chat_mode")]
+        chat_mode: String,
+        #[serde(default)]
+        device_id: String,
+        #[serde(default)]
+        tab_id: String,
     },
     Match {
         room_id: String,
@@ -52,6 +58,7 @@ pub enum MatchMessage {
 
 fn default_filter() -> String { "both".to_string() }
 fn default_interest_timeout() -> u32 { 10 }
+fn default_chat_mode() -> String { "text".to_string() }
 
 fn normalize_interest(raw: &str) -> String {
     let lower = raw.trim().to_lowercase();
@@ -90,6 +97,13 @@ fn interest_set(interests: &[String]) -> HashSet<String> {
 }
 
 fn now_ms() -> u64 { js_sys::Date::now() as u64 }
+fn with_timing(mut resp: Response, start_ms: f64, request_id: &str) -> Result<Response> {
+    let dur = js_sys::Date::now() - start_ms;
+    let _ = resp.headers_mut().set("Server-Timing", &format!("total;dur={}", dur));
+    let _ = resp.headers_mut().set("X-Response-Time-Ms", &format!("{:.2}", dur));
+    let _ = resp.headers_mut().set("X-Request-Id", request_id);
+    Ok(resp)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WaitingUserData {
@@ -103,9 +117,15 @@ pub struct WaitingUserData {
     pub queued_at: u64,
     #[serde(default = "default_interest_timeout")]
     pub interest_timeout: u32,
+    #[serde(default)]
+    pub device_id: String,
+    #[serde(default)]
+    pub tab_id: String,
     /// Trust score from reputation system (0-100, default 50)
     #[serde(default = "default_trust_score")]
     pub trust_score: f64,
+    #[serde(default = "default_chat_mode")]
+    pub chat_mode: String,
 }
 
 fn default_trust_score() -> f64 { 50.0 }
@@ -295,6 +315,8 @@ impl DurableObject for MatchmakerLobby {
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
+        let start_ms = js_sys::Date::now();
+        let request_id = uuid::Uuid::new_v4().to_string();
         let mut req = req;
         let url = req.url()?;
         let path = url.path().to_string();
@@ -305,10 +327,46 @@ impl DurableObject for MatchmakerLobby {
             if upgrade.map(|u| u == "websocket").unwrap_or(false) {
                 let WebSocketPair { client, server } = WebSocketPair::new()?;
 
-                let peer_id = url.query_pairs()
+                let ws_auth_required = self.env.var("WS_AUTH_REQUIRED")
+                    .ok()
+                    .map(|v| v.to_string())
+                    .unwrap_or_default()
+                    .to_lowercase();
+
+                let query_peer_id = url.query_pairs()
                     .find(|(k, _)| k == "peer_id")
-                    .map(|(_, v)| v.to_string())
-                    .unwrap_or_else(|| format!("peer_{}", uuid::Uuid::new_v4()));
+                    .map(|(_, v)| v.to_string());
+
+                let token_peer_id = if ws_auth_required == "true" {
+                    let jwt_secret = resolve_jwt_secret(&self.env, &url)?;
+                    let token = url.query_pairs()
+                        .find(|(k, _)| k == "token")
+                        .map(|(_, v)| v.to_string())
+                        .unwrap_or_default();
+                    if token.is_empty() {
+                        return Response::error("Missing token", 401);
+                    }
+                    decode_token(&token, &jwt_secret).ok_or_else(|| worker::Error::from("Invalid token"))?
+                } else {
+                    String::new()
+                };
+
+                let peer_id = if !token_peer_id.is_empty() {
+                    if let Some(ref query_id) = query_peer_id {
+                        if query_id != &token_peer_id {
+                            return Response::error("Session mismatch", 403);
+                        }
+                    }
+                    token_peer_id
+                } else if let Some(query_id) = query_peer_id {
+                    query_id
+                } else {
+                    format!("peer_{}", uuid::Uuid::new_v4())
+                };
+
+                if peer_id.len() > 128 {
+                    return Response::error("Invalid peer ID", 400);
+                }
 
                 // Evict duplicate sockets for this peer (prevents ghost connections)
                 for old_ws in self.state.get_websockets_with_tag(&peer_id) {
@@ -337,9 +395,7 @@ impl DurableObject for MatchmakerLobby {
                 .find(|(k, _)| k == "peer_id")
                 .map(|(_, v)| v.to_string());
 
-            let jwt_secret = self.env.secret("JWT_SECRET")
-                .map(|s| s.to_string())
-                .unwrap_or_else(|_| DEFAULT_JWT_SECRET.to_string());
+            let jwt_secret = resolve_jwt_secret(&self.env, &url)?;
 
             let cookie_peer_result = get_peer_id_from_cookie(&req, &jwt_secret);
 
@@ -355,6 +411,9 @@ impl DurableObject for MatchmakerLobby {
 
             if peer_id.is_empty() {
                 return Response::error("Missing authentication", 401);
+            }
+            if peer_id.len() > 128 {
+                return Response::error("Invalid peer ID", 400);
             }
 
             let gender = url.query_pairs()
@@ -411,14 +470,17 @@ impl DurableObject for MatchmakerLobby {
                     interests: normalized_interests.clone(), gender: g, filter: f,
                     is_verified: profile_verified, verified_only: match_preferences.verified_only,
                     queued_at: now_ms(), interest_timeout: match_preferences.interest_timeout,
+                    device_id: String::new(),
+                    tab_id: String::new(),
                     trust_score: default_trust_score(), // TODO: fetch from reputation worker via service binding
+                    chat_mode: "text".to_string(), // Default fallback for raw REST trigger
                 };
                 let _ = storage.put(&wait_key, &waiting_data).await;
                 self.waiting_users.borrow_mut().insert(peer_id.to_string(), waiting_data.clone());
                 self.add_to_index(&peer_id, &waiting_data.interests);
 
                 Response::from_json(&serde_json::json!({"matched": true}))?.with_status(201)
-            } else if method == Method::Patch && path == "/match/disconnect" {
+            } else if (method == Method::Patch || method == Method::Post || method == Method::Get) && path.starts_with("/match/disconnect") {
                 self.handle_patch_match_disconnect(&peer_id).await?
             } else if method == Method::Get && path == "/users/me" {
                 self.handle_get_profile(&peer_id, &gender).await?
@@ -463,10 +525,11 @@ impl DurableObject for MatchmakerLobby {
         }.await;
 
         match response_result {
-            Ok(res) => Ok(res),
+            Ok(res) => with_timing(res, start_ms, &request_id),
             Err(err) => {
                 console_log!("[MatchmakerLobby] Request Error: {:?}", err);
-                Ok(Response::error("Internal Server Error", 500).unwrap_or_else(|_| Response::ok("Error").unwrap()))
+                let resp = Response::error("Internal Server Error", 500).unwrap_or_else(|_| Response::ok("Error").unwrap());
+                with_timing(resp, start_ms, &request_id)
             }
         }
     }
@@ -509,9 +572,9 @@ impl DurableObject for MatchmakerLobby {
 
         if let Ok(msg) = serde_json::from_str::<MatchMessage>(&text) {
             match msg {
-                MatchMessage::Search { interests, gender, filter, is_verified, verified_only, interest_timeout } => {
+                MatchMessage::Search { interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id } => {
                     self.ensure_hydrated().await;
-                    self.handle_search(&peer_id, &ws, interests, gender, filter, is_verified, verified_only, interest_timeout).await?;
+                    self.handle_search(&peer_id, &ws, interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id).await?;
                 }
                 _ => {}
             }
@@ -801,8 +864,15 @@ impl MatchmakerLobby {
         Response::from_json(&serde_json::json!({}))
     }
 
-    async fn handle_search(&self, peer_id: &str, ws: &WebSocket, interests: Vec<String>, gender: String, filter: String, is_verified: bool, verified_only: bool, interest_timeout: u32) -> Result<()> {
+    async fn handle_search(&self, peer_id: &str, ws: &WebSocket, interests: Vec<String>, gender: String, filter: String, is_verified: bool, verified_only: bool, interest_timeout: u32, chat_mode: String, device_id: String, tab_id: String) -> Result<()> {
         let storage = self.state.storage();
+
+        if interests.len() > 20 || interests.iter().any(|i| i.len() > 50) {
+            let _ = ws.send_with_str(&serde_json::to_string(&MatchMessage::Error {
+                message: "Too many interests".to_string(),
+            }).unwrap_or_default());
+            return Ok(());
+        }
 
         if let Ok(Some(active_match)) = storage.get::<ActiveMatch>(&format!("active_match:{}", peer_id)).await {
             if !active_match.closure.closed { return Ok(()); }
@@ -833,6 +903,17 @@ impl MatchmakerLobby {
         let requester_verified_only = eff_verified && match_prefs.verified_only;
         let now = now_ms();
 
+        if !device_id.is_empty() {
+            let waiting = self.waiting_users.borrow();
+            let duplicate_device = waiting.iter().any(|(id, data)| id.as_str() != peer_id && data.device_id == device_id);
+            if duplicate_device {
+                let _ = ws.send_with_str(&serde_json::to_string(&MatchMessage::Error {
+                    message: "Multiple tabs detected. Use a different browser or device.".to_string(),
+                }).unwrap_or_default());
+                return Ok(());
+            }
+        }
+
         // OPTIMIZED MATCHING via interest index
         let sorted_candidates = {
             let waiting = self.waiting_users.borrow();
@@ -857,7 +938,9 @@ impl MatchmakerLobby {
 
             for other_id in limited {
                 if let Some(other_data) = waiting.get(&other_id) {
+                    if other_data.chat_mode != chat_mode { continue; } // STRICT ISOLATION GUARD
                     if !Self::quick_compatibility_check(&eff_gender, &eff_filter, &other_data.gender, &other_data.filter) { continue; }
+                    if !device_id.is_empty() && other_data.device_id == device_id { continue; }
                     if requester_verified_only && !other_data.is_verified { continue; }
                     if other_data.verified_only && !eff_verified { continue; }
 
@@ -939,7 +1022,10 @@ impl MatchmakerLobby {
             interests: eff_interests, gender: eff_gender, filter: eff_filter,
             is_verified: eff_verified, verified_only: match_prefs.verified_only,
             queued_at: existing_queued_at.unwrap_or(now), interest_timeout: match_prefs.interest_timeout,
+            device_id,
+            tab_id,
             trust_score: default_trust_score(), // TODO: fetch from reputation worker via service binding
+            chat_mode: chat_mode.clone(),
         };
         self.waiting_users.borrow_mut().insert(peer_id.to_string(), waiting_data.clone());
         self.add_to_index(peer_id, &waiting_data.interests);
@@ -988,6 +1074,19 @@ fn apply_cors(response: Response, origin: &str) -> Response {
     let _ = headers.set("Access-Control-Allow-Headers", "Content-Type, Cookie, Upgrade, Connection, Authorization, Accept, X-Requested-With");
     let _ = headers.set("Access-Control-Max-Age", "86400");
     response.with_headers(headers)
+}
+
+fn resolve_jwt_secret(env: &Env, url: &Url) -> Result<String> {
+    if let Ok(secret) = env.secret("JWT_SECRET") {
+        return Ok(secret.to_string());
+    }
+    let host = url.host_str().unwrap_or_default().to_string();
+    let local = host.contains("localhost") || host.contains("127.0.0.1") || host.contains("::1");
+    if local {
+        Ok(DEFAULT_JWT_SECRET.to_string())
+    } else {
+        Err(worker::Error::from("JWT_SECRET not configured"))
+    }
 }
 
 fn get_peer_id_from_cookie(req: &Request, secret: &str) -> Result<Option<String>> {

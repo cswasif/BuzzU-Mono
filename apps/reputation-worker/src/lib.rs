@@ -86,6 +86,18 @@ fn now_ms() -> f64 {
     js_sys::Date::now()
 }
 
+const SLOW_SQL_MS: f64 = 25.0;
+
+fn sql_exec_timed(sql: &SqlStorage, label: &str, query: &str) -> Result<SqlResult> {
+    let start = now_ms();
+    let result = sql.exec(query, None);
+    let dur = now_ms() - start;
+    if dur >= SLOW_SQL_MS {
+        console_log!("[Reputation][SlowSQL] {}ms {}", dur, label);
+    }
+    result
+}
+
 /// Hash a peer_id to a hex string for privacy-preserving storage.
 pub fn hash_peer_id(peer_id: &str) -> String {
     let mut hasher = Sha256::new();
@@ -250,7 +262,9 @@ impl ReputationBucket {
 
         let sql = self.state.storage().sql();
 
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "ensure_tables:create_reputation",
             "CREATE TABLE IF NOT EXISTS reputation (
                 peer_hash TEXT PRIMARY KEY,
                 trust_score REAL NOT NULL DEFAULT 50.0,
@@ -260,10 +274,11 @@ impl ReputationBucket {
                 last_active REAL NOT NULL,
                 created_at REAL NOT NULL
             )",
-            None,
         )?;
 
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "ensure_tables:create_reports",
             "CREATE TABLE IF NOT EXISTS reports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 reporter_hash TEXT NOT NULL,
@@ -272,19 +287,20 @@ impl ReputationBucket {
                 details TEXT NOT NULL DEFAULT '',
                 created_at REAL NOT NULL
             )",
-            None,
         )?;
 
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "ensure_tables:index_reports",
             "CREATE INDEX IF NOT EXISTS idx_reports_reporter_time
              ON reports(reporter_hash, created_at)",
-            None,
         )?;
 
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "ensure_tables:index_reputation",
             "CREATE INDEX IF NOT EXISTS idx_reputation_score
              ON reputation(trust_score)",
-            None,
         )?;
 
         // Ensure alarm is armed for periodic decay
@@ -303,13 +319,14 @@ impl ReputationBucket {
         let now = now_ms();
         let safe_hash = sanitize(peer_hash);
 
-        let rows: Vec<ReputationRecord> = sql.exec(
+        let rows: Vec<ReputationRecord> = sql_exec_timed(
+            &sql,
+            "get_or_create_record:select",
             &format!(
                 "SELECT peer_hash, trust_score, reports_received, sessions_completed, flags, last_active, created_at
                  FROM reputation WHERE peer_hash = '{}'",
                 safe_hash
             ),
-            None,
         )?.to_array()?;
 
         if let Some(rec) = rows.into_iter().next() {
@@ -317,13 +334,14 @@ impl ReputationBucket {
         }
 
         // Create new record with BASE_SCORE
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "get_or_create_record:insert",
             &format!(
                 "INSERT INTO reputation (peer_hash, trust_score, reports_received, sessions_completed, flags, last_active, created_at)
                  VALUES ('{}', {}, 0, 0, '[]', {}, {})",
                 safe_hash, BASE_SCORE, now, now
             ),
-            None,
         )?;
 
         Ok(ReputationRecord {
@@ -341,14 +359,15 @@ impl ReputationBucket {
     fn save_record(&self, rec: &ReputationRecord) -> Result<()> {
         let sql = self.state.storage().sql();
 
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "save_record:update",
             &format!(
                 "UPDATE reputation SET trust_score = {}, reports_received = {}, sessions_completed = {}, flags = '{}', last_active = {}
                  WHERE peer_hash = '{}'",
                 rec.trust_score, rec.reports_received as u32, rec.sessions_completed as u32,
                 sanitize(&rec.flags), rec.last_active, sanitize(&rec.peer_hash)
             ),
-            None,
         )?;
 
         Ok(())
@@ -377,12 +396,13 @@ impl ReputationBucket {
         let sql = self.state.storage().sql();
 
         // Rate limit check
-        let count_rows: Vec<CountRow> = sql.exec(
+        let count_rows: Vec<CountRow> = sql_exec_timed(
+            &sql,
+            "handle_report:rate_limit",
             &format!(
                 "SELECT COUNT(*) as cnt FROM reports WHERE reporter_hash = '{}' AND created_at > {}",
                 sanitize(&report.reporter_hash), one_hour_ago
             ),
-            None,
         )?.to_array()?;
 
         if let Some(row) = count_rows.first() {
@@ -392,7 +412,9 @@ impl ReputationBucket {
         }
 
         // Persist report
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "handle_report:insert_report",
             &format!(
                 "INSERT INTO reports (reporter_hash, target_hash, reason, details, created_at)
                  VALUES ('{}', '{}', '{}', '{}', {})",
@@ -402,7 +424,6 @@ impl ReputationBucket {
                 sanitize(&report.details),
                 now
             ),
-            None,
         )?;
 
         // Update target reputation
@@ -468,7 +489,9 @@ impl ReputationBucket {
         let sql = self.state.storage().sql();
 
         // Multiplicative decay for high scores, additive recovery for low scores
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "run_decay:update_scores",
             &format!(
                 "UPDATE reputation SET trust_score =
                     CASE
@@ -479,23 +502,24 @@ impl ReputationBucket {
                 BASE_SCORE, BASE_SCORE, DECAY_FACTOR,
                 BASE_SCORE, BASE_SCORE
             ),
-            None,
         )?;
 
         // Clean old reports (> 30 days)
         let thirty_days_ago = now_ms() - (30.0 * 24.0 * 3_600_000.0);
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "run_decay:delete_reports",
             &format!("DELETE FROM reports WHERE created_at < {}", thirty_days_ago),
-            None,
         )?;
 
         // Clear shadow flags for recovered users
-        sql.exec(
+        sql_exec_timed(
+            &sql,
+            "run_decay:clear_shadow_flags",
             &format!(
                 "UPDATE reputation SET flags = '[]' WHERE trust_score >= {} AND flags LIKE '%shadow_queued%'",
                 SHADOW_THRESHOLD
             ),
-            None,
         )?;
 
         Response::ok("decay complete")

@@ -34,7 +34,7 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
 
   return (
     <main className="w-full flex h-full flex-grow flex-col overflow-hidden">
-      <div className="relative h-screen bg-gradient-to-b from-background to-background flex flex-col overflow-y-auto">
+      <div className="relative h-dvh bg-gradient-to-b from-background to-background flex flex-col overflow-y-auto">
         <div className="flex-1 flex items-center justify-center flex-col md:space-y-2 space-y-3.5 mb-1.5" style={{ opacity: 1, transform: 'none' }}>
 
           {/* Central Logo */}

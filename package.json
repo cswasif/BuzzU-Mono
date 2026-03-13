@@ -25,6 +25,7 @@
         "node": ">=18.0.0"
     },
     "dependencies": {
+        "@modelcontextprotocol/server-github": "^2025.4.8",
         "ws": "^8.19.0"
     }
 }

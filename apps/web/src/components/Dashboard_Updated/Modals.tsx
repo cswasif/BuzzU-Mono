@@ -8,6 +8,7 @@ import {
 import { useSessionStore } from '../../stores/sessionStore';
 import { useWasm } from '../../hooks/useWasm';
 import { AvatarCropModal } from '../AvatarCropModal';
+import { deepCleanAccountData } from '../../utils/accountUtils';
 
 interface ModalProps {
     onClose: () => void;
@@ -506,13 +507,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
         const uint8Array = new Uint8Array(arrayBuffer);
         const compressor = new wasm.ImageCompressor();
         try {
-            const sizes = [512, 384, 256];
+            const sizes = [160, 128, 96];
             let lastBlob: Blob | null = null;
             for (const size of sizes) {
                 const compressed = compressor.compress_to_webp(uint8Array, size, size);
                 const blob = new Blob([compressed], { type: 'image/webp' });
                 lastBlob = blob;
-                if (blob.size <= 512 * 1024) {
+                // Aim for under 30KB for signaling health
+                if (blob.size <= 30 * 1024) {
                     return blob;
                 }
             }
@@ -556,8 +558,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
         setAvatarBusy(true);
         try {
             const processed = await compressAvatar(file);
-            if (processed.size > 1024 * 1024) {
-                setAvatarError('Image is still too large after optimization.');
+            if (processed.size > 100 * 1024) {
+                setAvatarError('Image is still too large after optimization (>100KB).');
                 return;
             }
             const dataUrl = await readBlobAsDataUrl(processed);
@@ -623,32 +625,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
     };
 
     const handleDeleteAccount = async () => {
-        localStorage.clear();
-        sessionStorage.clear();
-        if ('caches' in window) {
-            const cacheKeys = await caches.keys();
-            await Promise.allSettled(cacheKeys.map((key) => caches.delete(key)));
-        }
-        if ('serviceWorker' in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            await Promise.allSettled(registrations.map((registration) => registration.unregister()));
-        }
-        const indexedDbAny = indexedDB as IDBFactory & { databases?: () => Promise<Array<{ name?: string }>> };
-        if (indexedDbAny.databases) {
-            const databases = await indexedDbAny.databases();
-            await Promise.allSettled(
-                databases
-                    .map((db) => db.name)
-                    .filter((name): name is string => Boolean(name))
-                    .map((name) => new Promise<void>((resolve, reject) => {
-                        const request = indexedDB.deleteDatabase(name);
-                        request.onsuccess = () => resolve();
-                        request.onerror = () => reject(request.error);
-                        request.onblocked = () => resolve();
-                    }))
-            );
-        }
-        window.location.reload();
+        await deepCleanAccountData();
     };
 
     const renderSwitch = (checked: boolean, onChange: (val: boolean) => void) => (

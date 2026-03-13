@@ -6,24 +6,30 @@ import { useIceServers } from './useIceServers';
 import { getLocalRankingJson, mergePeerRanking, recordLiveRtt } from './useOptimalStun';
 import { createPeerConnection, getBrowserInfo } from '../utils/browserCompatibility';
 
+export type PeerConnectionState = 
+  | { type: 'new' }
+  | { type: 'connecting'; isOfferer: boolean; startTime: number }
+  | { type: 'connected'; startTime: number; connectionTime: number }
+  | { type: 'disconnected'; lastState: string; timestamp: number }
+  | { type: 'failed'; reason: string; timestamp: number }
+  | { type: 'closed' };
+
 export interface UseWebRTCResult {
   createPeerConnection: (targetPeerId: string, localStream?: MediaStream, isOfferer?: boolean) => Promise<RTCPeerConnection>;
   closePeerConnection: (targetPeerId: string) => void;
   closeAllPeerConnections: () => void;
   initiateCall: (targetPeerId: string, localStream: MediaStream) => Promise<void>;
+  requestRenegotiation: (targetPeerId: string, reason?: string) => Promise<void>;
   onDataChannel: (callback: (channel: RTCDataChannel, from: string) => void) => void;
   getConnectionStats: (targetPeerId: string) => Promise<RTCStatsReport | null>;
   setLocalStream: (stream: MediaStream | null) => void;
   isDataChannelOpen: (targetPeerId: string) => boolean;
   waitForDataChannelOpen: (targetPeerId: string, timeoutMs?: number) => Promise<boolean>;
-  /** Get the raw RTCPeerConnection for a given peer (used by screen share) */
   getPeerConnection: (targetPeerId: string) => RTCPeerConnection | undefined;
-  /** Get all peer connections (used by resilience hook for recovery sweep) */
   getPeerConnections: () => Map<string, RTCPeerConnection>;
-  /** Trigger ICE restart / TURN fallback for a peer (used by resilience hook) */
   applyTurnFallback: (targetPeerId: string) => void;
-  /** Check if a TURN fallback is currently in progress for a peer */
   isFallbackActive: (targetPeerId: string) => boolean;
+  getConnectionState: (targetPeerId: string) => PeerConnectionState;
 }
 
 // Whether the current browser is Firefox (setCodecPreferences is broken on FF answerer).
@@ -140,6 +146,8 @@ export function useWebRTC(): UseWebRTCResult {
   const dataChannelCallbackRef = useRef<((channel: RTCDataChannel, from: string) => void) | null>(null);
   const activeDataChannelsRef = useRef<Map<string, RTCDataChannel[]>>(new Map());
   const candidateBufferRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const candidateDedupRef = useRef<Map<string, Set<string>>>(new Map());
+  const peerStateRef = useRef<Map<string, PeerConnectionState>>(new Map());
   const iceGatheringCompleteRef = useRef<Map<string, boolean>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const dataChannelOpenStatesRef = useRef<Map<string, boolean>>(new Map());
@@ -165,6 +173,21 @@ export function useWebRTC(): UseWebRTCResult {
   // Global flag: set when closeAllPeerConnections is called intentionally
   const intentionalLeaveAllRef = useRef(false);
 
+  // ── Perfect Negotiation State ──────────────────────────────
+  // State for the "Perfect Negotiation" algorithm to prevent glare.
+  const makingOfferRef = useRef<Map<string, boolean>>(new Map());
+  const ignoreOfferRef = useRef<Map<string, boolean>>(new Map());
+  const skipNextNegotiationRef = useRef<Map<string, boolean>>(new Map());
+  const negotiationQueuedRef = useRef<Map<string, boolean>>(new Map());
+
+  // ── Adaptive Bitrate (ABR) State ──────────────────────────────
+  const lastAbrStatsRef = useRef<Map<string, {
+    packetsLost: number;
+    timestamp: number;
+    currentBitrate: number;
+    stableSince: number;
+  }>>(new Map());
+
   // ── Per-peer negotiation lock ───────────────────────────────
   // Serializes offer/answer/TURN-fallback processing per peer so that
   // concurrent signaling messages don't stomp on each other's state.
@@ -176,97 +199,171 @@ export function useWebRTC(): UseWebRTCResult {
     return next;
   }, []);
 
+  const logEvent = useCallback((level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown>) => {
+    const payload = { level, event, ts: Date.now(), ...data };
+    if (level === 'error') {
+      console.error(JSON.stringify(payload));
+    } else if (level === 'warn') {
+      console.warn(JSON.stringify(payload));
+    } else {
+      console.log(JSON.stringify(payload));
+    }
+  }, []);
+
+  const getCandidateKey = useCallback((candidate: RTCIceCandidateInit) => {
+    return `${candidate.candidate ?? ''}|${candidate.sdpMid ?? ''}|${candidate.sdpMLineIndex ?? ''}`;
+  }, []);
+
+  const registerCandidate = useCallback((peerId: string, candidate: RTCIceCandidateInit) => {
+    if (!candidate.candidate) {
+      return false;
+    }
+    const key = getCandidateKey(candidate);
+    let seen = candidateDedupRef.current.get(peerId);
+    if (!seen) {
+      seen = new Set();
+      candidateDedupRef.current.set(peerId, seen);
+    }
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  }, [getCandidateKey]);
+
+  const requestRenegotiation = useCallback(async (targetPeerId: string, reason?: string) => {
+    await withNegotiationLock(targetPeerId, async () => {
+      const pc = peerConnectionsRef.current.get(targetPeerId);
+      if (!pc || pc.signalingState === 'closed') return;
+
+      if (makingOfferRef.current.get(targetPeerId) || pc.signalingState !== 'stable') {
+        negotiationQueuedRef.current.set(targetPeerId, true);
+        if (reason) {
+          console.log('[useWebRTC] Queued renegotiation for', targetPeerId, 'reason:', reason);
+        }
+        return;
+      }
+
+      negotiationQueuedRef.current.delete(targetPeerId);
+      makingOfferRef.current.set(targetPeerId, true);
+      try {
+        const offerOptions = await preferH264Codec(pc);
+        const offer = await pc.createOffer(offerOptions);
+        if (pc.signalingState !== 'stable') {
+          negotiationQueuedRef.current.set(targetPeerId, true);
+          return;
+        }
+        await pc.setLocalDescription(offer);
+        sendMessage({
+          type: 'Offer',
+          from: peerId,
+          to: targetPeerId,
+          payload: JSON.stringify(pc.localDescription),
+        });
+        if (reason) {
+          console.log('[useWebRTC] Renegotiation offer sent to', targetPeerId, 'reason:', reason);
+        }
+      } catch (err) {
+        console.error('[useWebRTC] Renegotiation failed for:', targetPeerId, err);
+      } finally {
+        makingOfferRef.current.set(targetPeerId, false);
+      }
+    });
+  }, [peerId, sendMessage, withNegotiationLock]);
+
   // Ref to break the circular dependency: applyTurnFallback ↔ createPeerConnectionWrapper
-  const createPcRef = useRef<(id: string, s?: MediaStream, o?: boolean) => Promise<RTCPeerConnection>>(null!);
+  const createPcRef = useRef<(id: string, s?: MediaStream, o?: boolean, t?: boolean) => Promise<RTCPeerConnection>>(null!);
 
   const applyTurnFallback = useCallback(async (targetPeerId: string) => {
-    const oldPc = peerConnectionsRef.current.get(targetPeerId);
-    if (!oldPc) return;
+    await withNegotiationLock(targetPeerId, async () => {
+      const oldPc = peerConnectionsRef.current.get(targetPeerId);
+      if (!oldPc) return;
 
-    // Check if already connected — no need to fallback
-    if (oldPc.iceConnectionState === 'connected' || oldPc.iceConnectionState === 'completed') return;
-    if (oldPc.signalingState === 'closed') return;
+      // Check if already connected — no need to fallback
+      if (oldPc.iceConnectionState === 'connected' || oldPc.iceConnectionState === 'completed') return;
+      if (oldPc.signalingState === 'closed') return;
 
-    // ── Skip if a fallback is already in progress for this peer ──
-    if (fallbackActiveRef.current.has(targetPeerId)) {
-      console.log(`[useWebRTC] Fallback already active for ${targetPeerId} — skipping`);
-      return;
-    }
-
-    // ── Enforce attempt limit — stop infinite TURN fallback loops ──
-    const attempts = iceRestartAttemptsRef.current.get(targetPeerId) ?? 0;
-    if (attempts >= MAX_ICE_RESTARTS) {
-      console.log(`[useWebRTC] Max TURN fallback attempts (${MAX_ICE_RESTARTS}) reached for ${targetPeerId} — giving up`);
-      iceRestartAttemptsRef.current.delete(targetPeerId);
-      try { if ((oldPc.signalingState as string) !== 'closed') oldPc.close(); } catch (_) { }
-      peerConnectionsRef.current.delete(targetPeerId);
-      return;
-    }
-    iceRestartAttemptsRef.current.set(targetPeerId, attempts + 1);
-    fallbackActiveRef.current.add(targetPeerId);
-
-    // ── Clear old timers to prevent stale timers firing ────────────
-    const oldTimer = fallbackTimersRef.current.get(targetPeerId);
-    if (oldTimer) { clearTimeout(oldTimer); fallbackTimersRef.current.delete(targetPeerId); }
-    const oldTimeout = connectionTimeoutRef.current.get(targetPeerId);
-    if (oldTimeout) { clearTimeout(oldTimeout); connectionTimeoutRef.current.delete(targetPeerId); }
-    const oldIceTimer = iceRestartTimersRef.current.get(targetPeerId);
-    if (oldIceTimer) { clearTimeout(oldIceTimer); iceRestartTimersRef.current.delete(targetPeerId); }
-
-    console.log(`[useWebRTC] Falling back to TURN for ${targetPeerId} (attempt ${attempts + 1}/${MAX_ICE_RESTARTS}) — recreating PeerConnection with TURN servers`);
-
-    try {
-      // ── Close old PC & clean up associated state ─────────────────
-      // Close old data channels
-      const oldChannels = activeDataChannelsRef.current.get(targetPeerId) || [];
-      for (const ch of oldChannels) {
-        try { ch.close(); } catch (_) { }
+      // ── Skip if a fallback is already in progress for this peer ──
+      if (fallbackActiveRef.current.has(targetPeerId)) {
+        console.log(`[useWebRTC] Fallback already active for ${targetPeerId} — skipping`);
+        return;
       }
-      activeDataChannelsRef.current.delete(targetPeerId);
-      dataChannelOpenStatesRef.current.delete(targetPeerId);
-      candidateBufferRef.current.delete(targetPeerId);
-      iceGatheringCompleteRef.current.delete(targetPeerId);
-      stunRankingSentRef.current.delete(targetPeerId);
 
-      // Close old PC
-      try { if ((oldPc.signalingState as string) !== 'closed') oldPc.close(); } catch (_) { }
-      peerConnectionsRef.current.delete(targetPeerId);
+      // ── Enforce attempt limit — stop infinite TURN fallback loops ──
+      const attempts = iceRestartAttemptsRef.current.get(targetPeerId) ?? 0;
+      if (attempts >= MAX_ICE_RESTARTS) {
+        console.log(`[useWebRTC] Max TURN fallback attempts (${MAX_ICE_RESTARTS}) reached for ${targetPeerId} — giving up`);
+        iceRestartAttemptsRef.current.delete(targetPeerId);
+        try { if ((oldPc.signalingState as string) !== 'closed') oldPc.close(); } catch (_) { }
+        peerConnectionsRef.current.delete(targetPeerId);
+        return;
+      }
+      iceRestartAttemptsRef.current.set(targetPeerId, attempts + 1);
+      fallbackActiveRef.current.add(targetPeerId);
 
-      // ── Create fresh PC (with TURN included from the start) ─────
-      const newPc = await createPcRef.current(targetPeerId, localStreamRef.current ?? undefined, true);
+      // ── Clear old timers to prevent stale timers firing ────────────
+      const oldTimer = fallbackTimersRef.current.get(targetPeerId);
+      if (oldTimer) { clearTimeout(oldTimer); fallbackTimersRef.current.delete(targetPeerId); }
+      const oldTimeout = connectionTimeoutRef.current.get(targetPeerId);
+      if (oldTimeout) { clearTimeout(oldTimeout); connectionTimeoutRef.current.delete(targetPeerId); }
+      const oldIceTimer = iceRestartTimersRef.current.get(targetPeerId);
+      if (oldIceTimer) { clearTimeout(oldIceTimer); iceRestartTimersRef.current.delete(targetPeerId); }
 
-      // ── Send fresh offer ────────────────────────────────────────
-      const offer = await newPc.createOffer();
-      await newPc.setLocalDescription(offer);
-      sendMessage({
-        type: 'Offer',
-        from: peerId,
-        to: targetPeerId,
-        payload: JSON.stringify(offer)
-      });
-      console.log('[useWebRTC] TURN fallback: new offer sent to', targetPeerId);
+      console.log(`[useWebRTC] Falling back to TURN for ${targetPeerId} (attempt ${attempts + 1}/${MAX_ICE_RESTARTS}) — recreating PeerConnection with TURN servers`);
 
-      // ── Set a retry timer for this attempt ──────────────────────
-      const retryDelay = Math.min(
-        ICE_RESTART_BASE_DELAY_MS * Math.pow(1.5, attempts),
-        ICE_RESTART_MAX_DELAY_MS
-      );
-      const retryTimer = setTimeout(() => {
-        fallbackActiveRef.current.delete(targetPeerId);
-        const currentPc = peerConnectionsRef.current.get(targetPeerId);
-        if (!currentPc || currentPc !== newPc) return; // stale
-        if (currentPc.iceConnectionState === 'connected' || currentPc.iceConnectionState === 'completed') return;
-        applyTurnFallback(targetPeerId);
-      }, retryDelay);
-      fallbackTimersRef.current.set(targetPeerId, retryTimer);
+      try {
+        // ── Close old PC & clean up associated state ─────────────────
+        // Close old data channels
+        const oldChannels = activeDataChannelsRef.current.get(targetPeerId) || [];
+        for (const ch of oldChannels) {
+          try { ch.close(); } catch (_) { }
+        }
+        activeDataChannelsRef.current.delete(targetPeerId);
+        dataChannelOpenStatesRef.current.delete(targetPeerId);
+        candidateBufferRef.current.delete(targetPeerId);
+        iceGatheringCompleteRef.current.delete(targetPeerId);
+        stunRankingSentRef.current.delete(targetPeerId);
 
-    } catch (err) {
-      console.error('[useWebRTC] TURN fallback failed:', err);
-    } finally {
-      // Release lock after a short delay so immediate re-triggers are blocked
-      setTimeout(() => fallbackActiveRef.current.delete(targetPeerId), 1000);
-    }
-  }, [sendMessage, peerId]);
+        // Close old PC
+        try { if ((oldPc.signalingState as string) !== 'closed') oldPc.close(); } catch (_) { }
+        peerConnectionsRef.current.delete(targetPeerId);
+
+        // ── Create fresh PC (with TURN included from the start) ─────
+        const newPc = await createPcRef.current(targetPeerId, localStreamRef.current ?? undefined, true, true);
+
+        // ── Send fresh offer ────────────────────────────────────────
+        const offer = await newPc.createOffer();
+        await newPc.setLocalDescription(offer);
+        sendMessage({
+          type: 'Offer',
+          from: peerId,
+          to: targetPeerId,
+          payload: JSON.stringify(offer)
+        });
+        console.log('[useWebRTC] TURN fallback: new offer sent to', targetPeerId);
+
+        // ── Set a retry timer for this attempt ──────────────────────
+        const retryDelay = Math.min(
+          ICE_RESTART_BASE_DELAY_MS * Math.pow(1.5, attempts),
+          ICE_RESTART_MAX_DELAY_MS
+        );
+        const retryTimer = setTimeout(() => {
+          fallbackActiveRef.current.delete(targetPeerId);
+          const currentPc = peerConnectionsRef.current.get(targetPeerId);
+          if (!currentPc || currentPc !== newPc) return; // stale
+          if (currentPc.iceConnectionState === 'connected' || currentPc.iceConnectionState === 'completed') return;
+          applyTurnFallback(targetPeerId);
+        }, retryDelay);
+        fallbackTimersRef.current.set(targetPeerId, retryTimer);
+
+      } catch (err) {
+        console.error('[useWebRTC] TURN fallback failed:', err);
+      } finally {
+        // Release lock after a short delay so immediate re-triggers are blocked
+        setTimeout(() => fallbackActiveRef.current.delete(targetPeerId), 1000);
+      }
+    });
+  }, [sendMessage, peerId, withNegotiationLock]);
 
   const browser = getBrowserInfo();
 
@@ -317,11 +414,34 @@ export function useWebRTC(): UseWebRTCResult {
     intentionalLeaveAllRef.current = false;
     intentionalLeaveRef.current.delete(targetPeerId);
 
+    // Initial state
+    peerStateRef.current.set(targetPeerId, { type: 'connecting', isOfferer, startTime: Date.now() });
+
+    // Parallel ICE: Always provide both STUN and TURN servers to let the browser race them.
+    // This eliminates the 5-second wait for users on restrictive networks.
+    const allServers = [...stunServers, ...turnServers];
+
     const pc = createPeerConnection({
-      iceServers: [...stunServers, ...turnServers],
+      iceServers: allServers,
       bundlePolicy: 'max-bundle',         // Multiplex all media over one transport → 1 ICE gather instead of 3
       iceCandidatePoolSize: 1,             // Pre-gather 1 candidate → saves ~50-100ms on connection setup
     }, browser);
+
+    console.log(`[useWebRTC] Initializing parallel ICE (STUN+TURN) for ${targetPeerId}`);
+
+    if (isOfferer) {
+      skipNextNegotiationRef.current.set(targetPeerId, true);
+    }
+
+    pc.onnegotiationneeded = async () => {
+      if (skipNextNegotiationRef.current.get(targetPeerId)) {
+        skipNextNegotiationRef.current.delete(targetPeerId);
+        console.log('[useWebRTC] Skipping initial negotiationneeded for:', targetPeerId);
+        return;
+      }
+      console.log('[useWebRTC] Negotiation needed for:', targetPeerId);
+      requestRenegotiation(targetPeerId, 'negotiationneeded');
+    };
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -338,11 +458,22 @@ export function useWebRTC(): UseWebRTCResult {
       }
     };
 
-    pc.oniceconnectionstatechange = () => {
+    pc.oniceconnectionstatechange = async () => {
       const state = pc.iceConnectionState;
       console.log('[useWebRTC] ICE state for', targetPeerId, ':', state);
 
       if (state === 'connected' || state === 'completed') {
+        const currentState = peerStateRef.current.get(targetPeerId);
+        if (currentState?.type === 'connecting') {
+          const connectionTime = Date.now() - currentState.startTime;
+          peerStateRef.current.set(targetPeerId, { 
+            type: 'connected', 
+            startTime: currentState.startTime, 
+            connectionTime 
+          });
+          console.log(`[useWebRTC] Connection established for ${targetPeerId} in ${connectionTime}ms`);
+        }
+
         const timer = fallbackTimersRef.current.get(targetPeerId);
         if (timer) {
           clearTimeout(timer);
@@ -398,6 +529,12 @@ export function useWebRTC(): UseWebRTCResult {
           } catch (_) { /* stats unavailable — non-critical */ }
         }, 3000); // wait 3s for connection to stabilise
       } else if (state === 'failed') {
+        peerStateRef.current.set(targetPeerId, { 
+          type: 'failed', 
+          reason: 'ICE gathering or connection failed',
+          timestamp: Date.now() 
+        });
+
         // While tab is hidden, browsers deprioritize WebRTC — ICE failures
         // are transient and self-heal on tab focus. Don't tear down.
         if (document.hidden) {
@@ -409,22 +546,90 @@ export function useWebRTC(): UseWebRTCResult {
           console.log('[useWebRTC] ICE failed for', targetPeerId, 'but leave was intentional — not recovering');
           return;
         }
-        console.log('[useWebRTC] ICE connection failed for:', targetPeerId);
+
+        // ── Soft ICE Restart Strategy (Inspired by Daily.co) ──────────
+        // Triggered by 'failed' state. We use a 'Restart Master' logic:
+        // the peer with the lexicographically smaller ID initiates.
+        const canInitiate = peerId < targetPeerId;
+        if (!canInitiate) {
+          console.log(`[useWebRTC] ICE failed for ${targetPeerId}. We are RESTART SLAVE — waiting for offer.`);
+          return;
+        }
+
+        const attempts = iceRestartAttemptsRef.current.get(targetPeerId) ?? 0;
+        if (attempts < 2) { // Try 2 soft restarts before hard fallback
+          console.log(`[useWebRTC] ICE failed for ${targetPeerId}. We are RESTART MASTER — attempting soft ICE restart (attempt ${attempts + 1})`);
+          iceRestartAttemptsRef.current.set(targetPeerId, attempts + 1);
+          try {
+            pc.restartIce();
+            const offer = await pc.createOffer({ iceRestart: true });
+            await pc.setLocalDescription(offer);
+            sendMessage({
+              type: 'Offer',
+              from: peerId,
+              to: targetPeerId,
+              payload: JSON.stringify(offer)
+            });
+            return; // Soft restart initiated
+          } catch (err) {
+            console.error('[useWebRTC] Soft ICE restart failed:', err);
+          }
+        }
+
+        console.log('[useWebRTC] ICE connection failed for:', targetPeerId, '— triggering hard recovery');
         applyTurnFallback(targetPeerId);
       } else if (state === 'disconnected') {
+        const lastState = peerStateRef.current.get(targetPeerId);
+        peerStateRef.current.set(targetPeerId, { 
+          type: 'disconnected', 
+          lastState: lastState?.type || 'unknown',
+          timestamp: Date.now() 
+        });
+
         if (document.hidden) {
           console.log('[useWebRTC] ICE disconnected for', targetPeerId, 'while tab hidden — deferring');
           return;
         }
         if (intentionalLeaveRef.current.has(targetPeerId) || intentionalLeaveAllRef.current) return;
-        console.log('[useWebRTC] ICE connection disconnected for:', targetPeerId, '- attempting to recover...');
-        const timer = setTimeout(() => {
-          if (pc && pc.iceConnectionState === 'disconnected') {
-            console.log('[useWebRTC] ICE still disconnected, applying TURN fallback for:', targetPeerId);
-            applyTurnFallback(targetPeerId);
-          }
-        }, 3000);
-        fallbackTimersRef.current.set(targetPeerId, timer);
+
+        console.log('[useWebRTC] ICE disconnected for:', targetPeerId, '- attempting proactive recovery...');
+
+        // ── Proactive Recovery (Restart Master logic) ────────────────
+        // If we are the Master, don't wait for 'failed' (30s). Try a 
+        // Soft Restart after 3s of 'disconnected'.
+        const canInitiate = peerId < targetPeerId;
+        if (canInitiate) {
+          const timeout = setTimeout(async () => {
+            if (pc && pc.iceConnectionState === 'disconnected') {
+              console.log(`[useWebRTC] ICE still disconnected after 3s for ${targetPeerId}. We are MASTER — initiating proactive soft restart.`);
+              try {
+                pc.restartIce();
+                const offer = await pc.createOffer({ iceRestart: true });
+                await pc.setLocalDescription(offer);
+                sendMessage({
+                  type: 'Offer',
+                  from: peerId,
+                  to: targetPeerId,
+                  payload: JSON.stringify(offer)
+                });
+              } catch (err) {
+                console.error('[useWebRTC] Proactive soft restart failed:', err);
+                applyTurnFallback(targetPeerId); // Fallback to TURN if restart fails
+              }
+            }
+          }, 3000);
+          fallbackTimersRef.current.set(targetPeerId, timeout);
+        } else {
+          // If we are Slave, still set a safety timer to catch cases
+          // where Master is dead/offline.
+          const timer = setTimeout(() => {
+            if (pc && pc.iceConnectionState === 'disconnected') {
+              console.log('[useWebRTC] ICE still disconnected (Slave), applying safety TURN fallback for:', targetPeerId);
+              applyTurnFallback(targetPeerId);
+            }
+          }, 5000); // Wait longer as Slave (give Master time)
+          fallbackTimersRef.current.set(targetPeerId, timer);
+        }
       }
     };
 
@@ -474,6 +679,15 @@ export function useWebRTC(): UseWebRTCResult {
                   params.encodings[0].priority = 'high';
                   params.encodings[0].networkPriority = 'high';
                   params.degradationPreference = 'maintain-framerate';
+                } else {
+                  // Advanced Differentiated Profile for Screen Share
+                  params.encodings[0].maxBitrate = 4_000_000; // 4 Mbps for text clarity
+                  params.encodings[0].priority = 'high';
+                  params.encodings[0].networkPriority = 'high';
+                  params.degradationPreference = 'maintain-resolution';
+                  if ('scaleResolutionDownBy' in params.encodings[0]) {
+                    params.encodings[0].scaleResolutionDownBy = 1.0;
+                  }
                 }
               } else if (sender.track.kind === 'audio') {
                 const isScreenShareAudio = sender.track.contentHint === 'music';
@@ -564,7 +778,15 @@ export function useWebRTC(): UseWebRTCResult {
           closePeerConnection(targetPeerId);
         }
       } else if (state === 'closed') {
+        peerStateRef.current.set(targetPeerId, { type: 'closed' });
         closePeerConnection(targetPeerId);
+      }
+    };
+
+    pc.onsignalingstatechange = () => {
+      if (pc.signalingState === 'stable' && negotiationQueuedRef.current.get(targetPeerId)) {
+        negotiationQueuedRef.current.delete(targetPeerId);
+        requestRenegotiation(targetPeerId, 'queued');
       }
     };
 
@@ -653,7 +875,17 @@ export function useWebRTC(): UseWebRTCResult {
         const existingVideoReceivers = pc.getReceivers()
           .filter(r => r.track && r.track.kind === 'video' && r.track.id !== event.track.id && r.track.readyState === 'live');
 
-        const isScreenShareTrack = screenShareState.isRemoteSharing || existingVideoReceivers.length > 0;
+        const label = (event.track.label || '').toLowerCase();
+        const looksLikeScreenShare =
+          label.includes('screen') ||
+          label.includes('window') ||
+          label.includes('display') ||
+          label.includes('tab');
+
+        const isScreenShareTrack =
+          screenShareState.isRemoteSharing ||
+          existingVideoReceivers.length > 0 ||
+          looksLikeScreenShare;
 
         if (isScreenShareTrack) {
           console.log('[useWebRTC] Detected remote SCREEN SHARE video track from', targetPeerId,
@@ -727,13 +959,13 @@ export function useWebRTC(): UseWebRTCResult {
 
         if (isScreenShareAudio) {
           console.log('[useWebRTC] Detected remote SCREEN SHARE audio track from', targetPeerId);
-          
+
           // Ensure the audio track is enabled
           if (event.track.readyState === 'live' && !event.track.enabled) {
             console.log('[useWebRTC] Enabling disabled screen share audio track from', targetPeerId);
             event.track.enabled = true;
           }
-          
+
           // Update the screen share stream so the ScreenShareViewer
           // <video> element picks up the audio track for playback.
           useScreenShareStore.getState().setRemoteSharing(stream);
@@ -749,6 +981,9 @@ export function useWebRTC(): UseWebRTCResult {
       // Ensure binaryType is set for file-transfer
       if (event.channel.label === 'file-transfer') {
         event.channel.binaryType = 'arraybuffer';
+        const channelMap = (pc as any).dataChannels || new Map<string, RTCDataChannel>();
+        channelMap.set(targetPeerId, event.channel);
+        (pc as any).dataChannels = channelMap;
 
         // Track open state for file-transfer channels
         dataChannelOpenStatesRef.current.set(targetPeerId, false);
@@ -788,6 +1023,9 @@ export function useWebRTC(): UseWebRTCResult {
       console.log('[useWebRTC] Creating local data channel "file-transfer" for:', targetPeerId);
       const channel = pc.createDataChannel('file-transfer');
       channel.binaryType = 'arraybuffer';
+      const channelMap = (pc as any).dataChannels || new Map<string, RTCDataChannel>();
+      channelMap.set(targetPeerId, channel);
+      (pc as any).dataChannels = channelMap;
 
       // Track open state for local data channels
       dataChannelOpenStatesRef.current.set(targetPeerId, false);
@@ -822,33 +1060,41 @@ export function useWebRTC(): UseWebRTCResult {
     }
 
     peerConnectionsRef.current.set(targetPeerId, pc);
-    
+
     // Make peer connections globally accessible for connection type monitoring
     if (typeof window !== 'undefined') {
-      window.__peerConnections = peerConnectionsRef.current;
+      const globalConnections = (window as any).__peerConnections as Map<string, RTCPeerConnection> | undefined;
+      if (globalConnections) {
+        peerConnectionsRef.current.forEach((connection, id) => {
+          globalConnections.set(id, connection);
+        });
+      } else {
+        window.__peerConnections = peerConnectionsRef.current;
+      }
     }
 
-    // ── PC-scoped fallback timers ─────────────────────────────────
-    // Capture `pc` so stale timers from a destroyed PC don't fire
-    // on a replacement PC that took its place in the map.
-    const timer = setTimeout(() => {
-      if (peerConnectionsRef.current.get(targetPeerId) !== pc) return; // stale timer
-      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') return;
-      applyTurnFallback(targetPeerId);
-    }, 5000);
-    fallbackTimersRef.current.set(targetPeerId, timer);
-
+    // A connection timeout is still useful to detect terminal failures
     const connectionTimer = setTimeout(() => {
       if (peerConnectionsRef.current.get(targetPeerId) !== pc) return; // stale timer
       if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
-        console.log('[useWebRTC] Connection timeout for', targetPeerId, '- forcing TURN fallback');
-        applyTurnFallback(targetPeerId);
+        console.warn(`[useWebRTC] Connection timeout for ${targetPeerId} after 20s — forcing ICE restart`);
+        // We triggere an ICE restart instead of applyTurnFallback since both are already included
+        pc.restartIce();
+        pc.createOffer({ iceRestart: true }).then(offer => {
+          pc.setLocalDescription(offer);
+          sendMessage({
+            type: 'Offer',
+            from: peerId,
+            to: targetPeerId,
+            payload: JSON.stringify(offer)
+          });
+        }).catch(err => console.error('[useWebRTC] ICE restart failed during timeout:', err));
       }
-    }, 15000);
+    }, 20000);
     connectionTimeoutRef.current.set(targetPeerId, connectionTimer);
 
     return pc;
-  }, [stunServers, turnServers, applyTurnFallback, sendMessage, peerId]);
+  }, [stunServers, turnServers, sendMessage, peerId, browser]);
 
   // Wire up the ref so applyTurnFallback can call createPeerConnectionWrapper
   // without a circular useCallback dependency.
@@ -946,6 +1192,9 @@ export function useWebRTC(): UseWebRTCResult {
       }
       activeDataChannelsRef.current.delete(targetPeerId);
       candidateBufferRef.current.delete(targetPeerId);
+      candidateDedupRef.current.delete(targetPeerId);
+      makingOfferRef.current.delete(targetPeerId);
+      ignoreOfferRef.current.delete(targetPeerId);
       iceGatheringCompleteRef.current.delete(targetPeerId);
       dataChannelOpenStatesRef.current.delete(targetPeerId);
       stunRankingSentRef.current.delete(targetPeerId);
@@ -1104,19 +1353,20 @@ export function useWebRTC(): UseWebRTCResult {
             return;
           }
 
-          // ── Offer glare handling ──────────────────────────────────
-          // If we already have a pending local offer, both peers sent offers
-          // simultaneously (glare). Use polite/impolite peer pattern:
-          // the peer with the lower peerId is "polite" and rolls back.
-          if (pc.signalingState === 'have-local-offer') {
-            const isPolite = peerId < from;
-            if (isPolite) {
-              console.log('[useWebRTC] Offer glare — we are polite peer, rolling back our offer for:', from);
-              await pc.setLocalDescription({ type: 'rollback' } as RTCSessionDescriptionInit);
-            } else {
-              console.log('[useWebRTC] Offer glare — we are impolite peer, ignoring remote offer from:', from);
-              return;
-            }
+          // ── Perfect Negotiation: Offer glare handling ──────────────────
+          const isPolite = peerId < from;
+          const makingOffer = makingOfferRef.current.get(from) || false;
+          const offerCollision = makingOffer || pc.signalingState !== 'stable';
+
+          ignoreOfferRef.current.set(from, !isPolite && offerCollision);
+          if (ignoreOfferRef.current.get(from)) {
+            console.log('[useWebRTC] Impolite peer ignoring offer glare from:', from);
+            return;
+          }
+
+          if (offerCollision) {
+            console.log('[useWebRTC] Polite peer rolling back offer glare for:', from);
+            await pc.setLocalDescription({ type: 'rollback' });
           }
 
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -1185,6 +1435,14 @@ export function useWebRTC(): UseWebRTCResult {
 
     const handleIceCandidateInternal = async (candidate: RTCIceCandidateInit, from: string) => {
       try {
+        if (!candidate?.candidate) {
+          logEvent('warn', 'ice_candidate_empty', { peerId: from });
+          return;
+        }
+        if (!registerCandidate(from, candidate)) {
+          logEvent('info', 'ice_candidate_duplicate', { peerId: from });
+          return;
+        }
         const pc = peerConnectionsRef.current.get(from);
         if (pc && pc.remoteDescription) {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -1197,6 +1455,10 @@ export function useWebRTC(): UseWebRTCResult {
         }
       } catch (err) {
         console.error('[useWebRTC] Failed to handle ICE candidate:', err);
+        logEvent('error', 'ice_candidate_add_failed', {
+          peerId: from,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     };
 
@@ -1233,6 +1495,104 @@ export function useWebRTC(): UseWebRTCResult {
     };
   }, [createPeerConnectionWrapper, sendMessage, onMessage, peerId, withNegotiationLock]);
 
+  // ── Adaptive Bitrate (ABR) Looping Logic ───────────────────────
+  useEffect(() => {
+    const abrInterval = setInterval(async () => {
+      // Skip ABR calculations if tab is hidden to save CPU
+      if (typeof document !== 'undefined' && document.hidden) return;
+
+      for (const [targetPeerId, pc] of peerConnectionsRef.current.entries()) {
+        if (pc.connectionState !== 'connected') continue;
+
+        try {
+          const stats = await pc.getStats();
+          let currentStats = lastAbrStatsRef.current.get(targetPeerId) || {
+            packetsLost: 0,
+            timestamp: Date.now(),
+            currentBitrate: 1500000,
+            stableSince: Date.now()
+          };
+
+          stats.forEach(async (report) => {
+            // Monitor Inbound Video for packet loss detection
+            if (report.type === 'inbound-rtp' && report.kind === 'video') {
+              const now = Date.now();
+              const deltaMs = now - currentStats.timestamp;
+              if (deltaMs < 1500) return; // Need at least 1.5s of data
+
+              const deltaLoss = report.packetsLost - currentStats.packetsLost;
+              const lossRate = (deltaLoss / (report.packetsReceived + report.packetsLost)) * 100;
+
+              // Heuristic: If loss > 2%, downshift bitrate aggressively
+              if (lossRate > 2) {
+                console.log(`[useWebRTC] High packet loss (${lossRate.toFixed(1)}%) detected for ${targetPeerId}. Downshifting bitrate.`);
+                currentStats.currentBitrate = Math.max(300000, currentStats.currentBitrate * 0.7);
+                currentStats.stableSince = now;
+                applyBitrateLimit(pc, currentStats.currentBitrate);
+              } else if (now - currentStats.stableSince > 10000) {
+                // Monitor available bandwidth estimate from the candidate-pair
+                const pairReport = Array.from(stats.values()).find(r => r.type === 'candidate-pair' && r.state === 'succeeded');
+                const bwe = pairReport?.availableOutgoingBitrate;
+                
+                // If stable for 10s and BWE allows it, attempt a small upshift (100kbps)
+                let limit = browser.isMobile ? 1500000 : 2500000;
+                const videoSenders = pc.getSenders().filter(s => s.track?.kind === 'video' && s.track.readyState === 'live');
+                const hasScreenShare = videoSenders.some(s => s.track?.contentHint === 'detail');
+                if (hasScreenShare) limit = 4000000;
+
+                // Upshift if current bitrate is below limit AND below 80% of estimated available bandwidth
+                const canUpshift = bwe ? (currentStats.currentBitrate < bwe * 0.8) : true;
+
+                if (currentStats.currentBitrate < limit && canUpshift) {
+                  currentStats.currentBitrate = Math.min(limit, currentStats.currentBitrate + 100000);
+                  console.log(`[useWebRTC] Connection stable (BWE: ${bwe ? (bwe/1000).toFixed(0) : 'N/A'}kbps). Upshifting bitrate for ${targetPeerId} to ${(currentStats.currentBitrate / 1000).toFixed(0)}kbps`);
+                  applyBitrateLimit(pc, currentStats.currentBitrate);
+                }
+                currentStats.stableSince = now;
+              }
+
+              currentStats.packetsLost = report.packetsLost;
+              currentStats.timestamp = now;
+              lastAbrStatsRef.current.set(targetPeerId, currentStats);
+            }
+          });
+        } catch (err) {
+          console.warn(`[useWebRTC] ABR stats failed for ${targetPeerId}:`, err);
+        }
+      }
+    }, 2000);
+
+    return () => clearInterval(abrInterval);
+  }, [browser.isMobile]);
+
+  const applyBitrateLimit = async (pc: RTCPeerConnection, bitrate: number) => {
+    try {
+      const senders = pc.getSenders();
+      for (const sender of senders) {
+        if (sender.track?.kind === 'video') {
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) continue;
+
+          // ── Content-Aware Bitrate Shaping ──────────────────────────
+          // During congestion, we maintain high bitrate for 'detail' (Screen Share)
+          // and aggressively drop bitrate for 'motion' (Camera).
+          const isDetail = sender.track.contentHint === 'detail';
+          if (isDetail) {
+            // Never drop screen share below 800kbps (unreadable)
+            params.encodings[0].maxBitrate = Math.max(800000, bitrate);
+          } else {
+            // Camera can go as low as 150kbps (still visible)
+            params.encodings[0].maxBitrate = Math.max(150000, bitrate * 0.5);
+          }
+
+          await sender.setParameters(params);
+        }
+      }
+    } catch (err) {
+      console.warn('[useWebRTC] Failed to apply bitrate limit:', err);
+    }
+  };
+
   useEffect(() => {
     return () => {
       // Only close peer connections if the user has explicitly left the room.
@@ -1261,6 +1621,7 @@ export function useWebRTC(): UseWebRTCResult {
     closePeerConnection,
     closeAllPeerConnections,
     initiateCall,
+    requestRenegotiation,
     onDataChannel,
     getConnectionStats,
     setLocalStream,
@@ -1270,5 +1631,6 @@ export function useWebRTC(): UseWebRTCResult {
     getPeerConnections,
     applyTurnFallback,
     isFallbackActive: (targetPeerId: string) => fallbackActiveRef.current.has(targetPeerId),
+    getConnectionState: (targetPeerId: string) => peerStateRef.current.get(targetPeerId) ?? { type: 'new' },
   };
 }

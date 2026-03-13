@@ -7,6 +7,7 @@ import {
 } from './Icons';
 import { AvatarCropModal } from '../AvatarCropModal';
 import { useSessionStore } from '../../stores/sessionStore';
+import { deepCleanAccountData } from '../../utils/accountUtils';
 
 interface ModalProps {
     onClose: () => void;
@@ -436,6 +437,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
     const [bannerColor, setBannerColor] = useState('#5B21B6');
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+    const handleDeleteAccount = async () => {
+        await deepCleanAccountData();
+    };
 
     // Preferences State
     const [convertEmoticons, setConvertEmoticons] = useState(true);
@@ -1018,8 +1023,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                     isOpen={showDeleteModal}
                     onClose={() => setShowDeleteModal(false)}
                     onDelete={() => {
-                        setShowDeleteModal(false);
-                        onClose();
+                        handleDeleteAccount();
                     }}
                 />
                 <AvatarCropModal

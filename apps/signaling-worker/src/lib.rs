@@ -78,6 +78,12 @@ pub enum SignalingMessage {
         to: String,
         typing: bool,
     },
+    Skip {
+        from: String,
+        to: String,
+        #[serde(default)]
+        reason: Option<String>,
+    },
     PublishKeys {
         from: String,
         bundle: String,
@@ -117,12 +123,35 @@ pub enum SignalingMessage {
         to: String,
         sharing: bool,
     },
+    Profile {
+        from: String,
+        to: String,
+        #[serde(default)]
+        username: Option<String>,
+        #[serde(rename = "avatarSeed", default)]
+        avatar_seed: Option<String>,
+        #[serde(rename = "avatarUrl", default)]
+        avatar_url: Option<String>,
+    },
     /// E2E encrypted envelope — server treats as opaque relay.
     /// Payload is base64 XChaCha20-Poly1305 ciphertext.
     Encrypted {
         from: String,
         to: String,
         payload: String,
+    },
+    EditMessage {
+        from: String,
+        to: String,
+        #[serde(rename = "editId")]
+        edit_id: String,
+        payload: String,
+    },
+    DeleteMessage {
+        from: String,
+        to: String,
+        #[serde(rename = "deleteId")]
+        delete_id: String,
     },
     /// X25519 public key exchange for E2E signaling encryption.
     /// The payload is the sender's base64 public key.
@@ -178,6 +207,9 @@ impl DurableObject for RoomDurableObject {
                 .find(|(k, _)| k == "peer_id")
                 .map(|(_, v)| v.to_string())
                 .unwrap_or_else(|| format!("peer_{}", uuid::Uuid::new_v4()));
+            if peer_id.len() > 128 {
+                return Response::error("Invalid peer ID", 400);
+            }
             let room_type = url
                 .query_pairs()
                 .find(|(k, _)| k == "room_type")
@@ -188,6 +220,11 @@ impl DurableObject for RoomDurableObject {
                 .find(|(k, _)| k == "room_key")
                 .map(|(_, v)| v.to_string())
                 .filter(|v| !v.is_empty());
+            if let Some(ref key) = room_key {
+                if key.len() > 128 {
+                    return Response::error("Invalid room key", 400);
+                }
+            }
             let access_key = url
                 .query_pairs()
                 .find(|(k, _)| k == "access_key")
@@ -539,6 +576,18 @@ impl DurableObject for RoomDurableObject {
                     );
                 }
             }
+            SignalingMessage::Skip { to, reason, .. } => {
+                if !to.is_empty() {
+                    self.forward_to_peer(
+                        &to,
+                        SignalingMessage::Skip {
+                            from: from_peer,
+                            to: to.clone(),
+                            reason,
+                        },
+                    );
+                }
+            }
             SignalingMessage::PublishKeys { bundle, .. } => {
                 // Broadcast key publication to all other peers in the room
                 let msg = SignalingMessage::PublishKeys {
@@ -626,6 +675,37 @@ impl DurableObject for RoomDurableObject {
                     },
                 );
             }
+            SignalingMessage::Profile {
+                to,
+                username,
+                avatar_seed,
+                avatar_url,
+                ..
+            } => {
+                if to.is_empty() || to == "all" {
+                    self.broadcast_except(
+                        &from_peer,
+                        SignalingMessage::Profile {
+                            from: from_peer.clone(),
+                            to: String::new(),
+                            username,
+                            avatar_seed,
+                            avatar_url,
+                        },
+                    );
+                } else {
+                    self.forward_to_peer(
+                        &to,
+                        SignalingMessage::Profile {
+                            from: from_peer,
+                            to: to.clone(),
+                            username,
+                            avatar_seed,
+                            avatar_url,
+                        },
+                    );
+                }
+            }
             // E2E encrypted envelope — opaque relay, server cannot inspect.
             SignalingMessage::Encrypted { to, payload, .. } => {
                 self.forward_to_peer(
@@ -634,6 +714,27 @@ impl DurableObject for RoomDurableObject {
                         from: from_peer,
                         to: to.clone(),
                         payload,
+                    },
+                );
+            }
+            SignalingMessage::EditMessage { to, edit_id, payload, .. } => {
+                self.forward_to_peer(
+                    &to,
+                    SignalingMessage::EditMessage {
+                        from: from_peer,
+                        to: to.clone(),
+                        edit_id,
+                        payload,
+                    },
+                );
+            }
+            SignalingMessage::DeleteMessage { to, delete_id, .. } => {
+                self.forward_to_peer(
+                    &to,
+                    SignalingMessage::DeleteMessage {
+                        from: from_peer,
+                        to: to.clone(),
+                        delete_id,
                     },
                 );
             }
@@ -904,6 +1005,14 @@ fn now_ms() -> u64 {
     js_sys::Date::now() as u64
 }
 
+fn with_timing(mut resp: Response, start_ms: f64, request_id: &str) -> Result<Response> {
+    let dur = js_sys::Date::now() - start_ms;
+    let _ = resp.headers_mut().set("Server-Timing", &format!("total;dur={}", dur));
+    let _ = resp.headers_mut().set("X-Response-Time-Ms", &format!("{:.2}", dur));
+    let _ = resp.headers_mut().set("X-Request-Id", request_id);
+    Ok(resp)
+}
+
 fn default_room_type() -> String {
     "match".to_string()
 }
@@ -919,6 +1028,8 @@ fn max_peers_for_type(room_type: &str) -> usize {
 
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    let start_ms = js_sys::Date::now();
+    let request_id = uuid::Uuid::new_v4().to_string();
     let path = req.path();
     let method = req.method();
 
@@ -947,6 +1058,12 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 // Validate room_id format (prevent DO namespace pollution)
                 if room_id.len() > 128 || room_id.is_empty() {
                     return Response::error("Invalid room ID", 400);
+                }
+
+                let origin = req.headers().get("Origin")?.unwrap_or_default();
+                let referer = req.headers().get("Referer")?.unwrap_or_default();
+                if !origin_allowed(&origin, &referer) || origin == "null" {
+                    return Response::error("Forbidden", 403);
                 }
 
                 let namespace = env.durable_object("ROOMS")?;
@@ -981,7 +1098,8 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .with_allowed_headers(vec!["Content-Type", "Upgrade", "Connection"])
         .with_max_age(86400);
 
-    response.with_cors(&cors)
+    let response = response.with_cors(&cors)?;
+    with_timing(response, start_ms, &request_id)
 }
 
 fn cors_preflight() -> Result<Response> {
@@ -1006,15 +1124,7 @@ async fn handle_ice_servers(req: &Request, env: Env) -> Result<Response> {
     // -- Origin Check: reject unknown origins --
     let origin = req.headers().get("Origin")?.unwrap_or_default();
     let referer = req.headers().get("Referer")?.unwrap_or_default();
-    // Empty origin is allowed for same-origin requests (browser omits it),
-    // but "null" origin must be rejected (opaque origins from sandboxed iframes).
-    let is_allowed = origin.is_empty()
-        || origin.contains("buzzu")
-        || origin.contains("localhost")
-        || origin.contains("127.0.0.1")
-        || referer.contains("buzzu");
-
-    if !is_allowed || origin == "null" {
+    if !origin_allowed(&origin, &referer) || origin == "null" {
         return Response::error("Forbidden", 403);
     }
 
@@ -1061,4 +1171,12 @@ async fn handle_ice_servers(req: &Request, env: Env) -> Result<Response> {
 
     let body = res.text().await?;
     Response::ok(body)
+}
+
+fn origin_allowed(origin: &str, referer: &str) -> bool {
+    origin.is_empty()
+        || origin.contains("buzzu")
+        || origin.contains("localhost")
+        || origin.contains("127.0.0.1")
+        || referer.contains("buzzu")
 }

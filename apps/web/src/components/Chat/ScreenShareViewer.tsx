@@ -24,7 +24,15 @@ interface ScreenShareViewerProps {
   isLocal?: boolean;
   /** Optional RTCPeerConnection for receiver-side debug stats */
   pc?: RTCPeerConnection | null;
+  isMobile?: boolean;
   layout?: 'overlay' | 'theater';
+  adaptiveBitrateEnabled?: boolean;
+  onToggleAdaptiveBitrate?: () => void;
+  adaptiveBitrateStats?: {
+    targetBitrate: number | null;
+    lossRate: number | null;
+    rttMs: number | null;
+  };
 }
 
 export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
@@ -33,7 +41,11 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
   onClose,
   isLocal = false,
   pc = null,
+  isMobile = false,
   layout = 'overlay',
+  adaptiveBitrateEnabled,
+  onToggleAdaptiveBitrate,
+  adaptiveBitrateStats,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
@@ -85,11 +97,20 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
 
       video.play()
         .then(() => {
-          console.log('[ScreenShareViewer] play() succeeded');
+          if (import.meta.env.DEV) {
+            console.log('[ScreenShareViewer] play() succeeded');
+          }
           setNeedsAudioUnlock(false);
           bgVideoRef.current?.play().catch(() => { });
         })
         .catch(err => {
+          if (err.name === 'AbortError') {
+            if (attempt < maxAttempts - 1) {
+              const delay = 120;
+              playRetryTimerRef.current = setTimeout(() => attemptPlay(attempt + 1, maxAttempts), delay);
+            }
+            return;
+          }
           console.warn(`[ScreenShareViewer] play() failed (attempt ${attempt + 1}):`, err.name, err.message);
           if (err.name === 'NotAllowedError') {
             // Autoplay policy blocked — show "click to play" overlay
@@ -110,7 +131,9 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
     const audioTrack = stream.getAudioTracks()[0];
 
     const handleUnmute = () => {
-      console.log('[ScreenShareViewer] Track unmuted (ICE recovered) — retrying play()');
+      if (import.meta.env.DEV) {
+        console.log('[ScreenShareViewer] Track unmuted (ICE recovered) — retrying play()');
+      }
       attemptPlay(0, 2);
     };
 
@@ -194,41 +217,43 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
           buffered: video.buffered.length > 0 ? video.buffered.end(0).toFixed(2) + 's' : '0s',
         } : null;
 
-        console.log(
-          '%c[ScreenShare RECEIVER Stats]',
-          'color: #ff8800; font-weight: bold',
-          {
-            decoded: inboundVideo ? `${inboundVideo.frameWidth ?? '?'}x${inboundVideo.frameHeight ?? '?'}` : 'N/A',
-            codec: codec ? `${codec.mimeType} (${codec.clockRate}Hz)` : 'unknown',
-            bitrate: `${bitrateKbps.toFixed(0)} kbps`,
-            fpsReceived: fpsReceived.toFixed(1),
-            fpsDecoded: inboundVideo?.framesPerSecond?.toFixed(1) ?? 'N/A',
-            framesDecoded: inboundVideo?.framesDecoded,
-            framesDropped: inboundVideo?.framesDropped,
-            framesReceived: inboundVideo?.framesReceived,
-            keyFramesDecoded: inboundVideo?.keyFramesDecoded,
-            totalDecodeTime: inboundVideo?.totalDecodeTime?.toFixed(2) + 's',
-            avgDecodeMs: inboundVideo?.framesDecoded
-              ? ((inboundVideo.totalDecodeTime / inboundVideo.framesDecoded) * 1000).toFixed(1) + 'ms'
-              : 'N/A',
-            totalProcessingDelay: inboundVideo?.totalProcessingDelay?.toFixed(2) + 's',
-            jitterBufferDelay: inboundVideo?.jitterBufferDelay?.toFixed(2) + 's',
-            jitterBufferEmitted: inboundVideo?.jitterBufferEmittedCount,
-            avgJitterMs: inboundVideo?.jitterBufferEmittedCount
-              ? ((inboundVideo.jitterBufferDelay / inboundVideo.jitterBufferEmittedCount) * 1000).toFixed(1) + 'ms'
-              : 'N/A',
-            packetsLost: inboundVideo?.packetsLost,
-            packetsReceived: inboundVideo?.packetsReceived,
-            nackCount: inboundVideo?.nackCount,
-            pliCount: inboundVideo?.pliCount,
-            firCount: inboundVideo?.firCount,
-            rtt: candidatePair ? `${(candidatePair.currentRoundTripTime * 1000).toFixed(0)}ms` : 'N/A',
-            transport: localCandidate
-              ? `${localCandidate.candidateType}(${localCandidate.protocol}) → ${remoteCandidate?.candidateType}(${remoteCandidate?.protocol})`
-              : 'N/A',
-            videoElement: videoElStats,
-          }
-        );
+        if (import.meta.env.DEV) {
+          console.log(
+            '%c[ScreenShare RECEIVER Stats]',
+            'color: #ff8800; font-weight: bold',
+            {
+              decoded: inboundVideo ? `${inboundVideo.frameWidth ?? '?'}x${inboundVideo.frameHeight ?? '?'}` : 'N/A',
+              codec: codec ? `${codec.mimeType} (${codec.clockRate}Hz)` : 'unknown',
+              bitrate: `${bitrateKbps.toFixed(0)} kbps`,
+              fpsReceived: fpsReceived.toFixed(1),
+              fpsDecoded: inboundVideo?.framesPerSecond?.toFixed(1) ?? 'N/A',
+              framesDecoded: inboundVideo?.framesDecoded,
+              framesDropped: inboundVideo?.framesDropped,
+              framesReceived: inboundVideo?.framesReceived,
+              keyFramesDecoded: inboundVideo?.keyFramesDecoded,
+              totalDecodeTime: inboundVideo?.totalDecodeTime?.toFixed(2) + 's',
+              avgDecodeMs: inboundVideo?.framesDecoded
+                ? ((inboundVideo.totalDecodeTime / inboundVideo.framesDecoded) * 1000).toFixed(1) + 'ms'
+                : 'N/A',
+              totalProcessingDelay: inboundVideo?.totalProcessingDelay?.toFixed(2) + 's',
+              jitterBufferDelay: inboundVideo?.jitterBufferDelay?.toFixed(2) + 's',
+              jitterBufferEmitted: inboundVideo?.jitterBufferEmittedCount,
+              avgJitterMs: inboundVideo?.jitterBufferEmittedCount
+                ? ((inboundVideo.jitterBufferDelay / inboundVideo.jitterBufferEmittedCount) * 1000).toFixed(1) + 'ms'
+                : 'N/A',
+              packetsLost: inboundVideo?.packetsLost,
+              packetsReceived: inboundVideo?.packetsReceived,
+              nackCount: inboundVideo?.nackCount,
+              pliCount: inboundVideo?.pliCount,
+              firCount: inboundVideo?.firCount,
+              rtt: candidatePair ? `${(candidatePair.currentRoundTripTime * 1000).toFixed(0)}ms` : 'N/A',
+              transport: localCandidate
+                ? `${localCandidate.candidateType}(${localCandidate.protocol}) → ${remoteCandidate?.candidateType}(${remoteCandidate?.protocol})`
+                : 'N/A',
+              videoElement: videoElStats,
+            }
+          );
+        }
       } catch (e) {
         console.warn('[ScreenShare RECEIVER Stats] Error:', e);
       }
@@ -290,6 +315,28 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
     }
   }, []);
 
+  const formatBitrate = (bps: number | null) => {
+    if (!bps || !Number.isFinite(bps)) return 'N/A';
+    if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(2)} Mbps`;
+    return `${Math.round(bps / 1000)} kbps`;
+  };
+
+  const formatLoss = (loss: number | null) => {
+    if (loss === null || !Number.isFinite(loss)) return 'N/A';
+    return `${(loss * 100).toFixed(2)}%`;
+  };
+
+  const formatRtt = (ms: number | null) => {
+    if (ms === null || !Number.isFinite(ms)) return 'N/A';
+    return `${Math.round(ms)}ms`;
+  };
+
+  const showAdaptiveStats =
+    adaptiveBitrateStats &&
+    (adaptiveBitrateStats.targetBitrate !== null ||
+      adaptiveBitrateStats.lossRate !== null ||
+      adaptiveBitrateStats.rttMs !== null);
+
   // ── LOCAL PREVIEW — small floating card in bottom-right ──
   if (isLocal) {
     return (
@@ -308,19 +355,56 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-white text-[11px] font-medium">Your screen</span>
             </div>
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="p-1 rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors"
-                title="Stop sharing"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {onToggleAdaptiveBitrate && (
+                <div className="flex items-center gap-1.5 text-white/80">
+                  <span className="text-[10px] font-medium">Adaptive</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={!!adaptiveBitrateEnabled}
+                    data-state={adaptiveBitrateEnabled ? "checked" : "unchecked"}
+                    className="inline-flex h-[18px] w-[34px] shrink-0 cursor-pointer items-center rounded-full border border-white/10 transition-colors"
+                    style={{
+                      backgroundColor: adaptiveBitrateEnabled
+                        ? "hsl(var(--primary))"
+                        : "rgba(255,255,255,0.2)",
+                    }}
+                    onClick={onToggleAdaptiveBitrate}
+                  >
+                    <span
+                      data-state={adaptiveBitrateEnabled ? "checked" : "unchecked"}
+                      className="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform"
+                      style={{
+                        transform: adaptiveBitrateEnabled
+                          ? "translateX(16px)"
+                          : "translateX(0px)",
+                      }}
+                    />
+                  </button>
+                </div>
+              )}
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="p-1 rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors"
+                  title="Stop sharing"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
+          {showAdaptiveStats && (
+            <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md bg-black/70 text-white text-[10px] font-medium flex items-center gap-2">
+              <span>Target {formatBitrate(adaptiveBitrateStats?.targetBitrate ?? null)}</span>
+              <span>Loss {formatLoss(adaptiveBitrateStats?.lossRate ?? null)}</span>
+              <span>RTT {formatRtt(adaptiveBitrateStats?.rttMs ?? null)}</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -349,6 +433,7 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
   }
 
   const isTheater = layout === 'theater';
+  const useOverlayHeader = isMobile && !isFullscreen;
 
   return (
     <div
@@ -356,24 +441,25 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
       className={`${isFullscreen
         ? 'fixed inset-0 z-[9999] bg-black'
         : isTheater
-          ? 'relative w-full h-full bg-black/95 z-20 shadow-[0_30px_120px_rgba(0,0,0,0.7)] md:rounded-2xl overflow-hidden'
+          ? 'relative w-full h-full bg-black/95 z-20 shadow-[0_30px_120px_rgba(0,0,0,0.7)] overflow-hidden sm:rounded-2xl'
           : 'relative w-full flex-none bg-black z-20 shadow-lg border-b border-border/20'
         } flex flex-col`}
       style={!isFullscreen && !isTheater ? { maxHeight: 'clamp(200px, 45vh, 600px)', aspectRatio: '16/9' } : {}}
     >
       {/* Header bar — always visible */}
-      <div className={`flex items-center justify-between px-3 sm:px-4 ${isTheater ? 'py-1.5 sm:py-2.5 bg-black/70 backdrop-blur border-b border-transparent' : 'py-2.5 bg-gradient-to-b from-black/90 to-black/60 border-b border-border/40'} flex-shrink-0`}>
-        <div className="flex items-center gap-2">
+      <div className={`flex items-center justify-between px-3 sm:px-4 ${useOverlayHeader ? 'absolute inset-x-0 top-0 z-20 py-1.5 bg-gradient-to-b from-black/80 to-transparent' : isTheater ? 'py-1.5 sm:py-2.5 bg-black/70 backdrop-blur border-b border-transparent' : 'py-2.5 bg-gradient-to-b from-black/90 to-black/60 border-b border-border/40'} ${useOverlayHeader ? '' : 'flex-shrink-0'}`}>
+        <div className="flex items-center gap-2 min-w-0">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-white text-xs font-medium">{label}'s screen</span>
+          <span className={`text-white font-medium truncate ${useOverlayHeader ? 'text-[11px] max-w-[52vw]' : 'text-xs'}`}>{label}'s screen</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className={`flex items-center ${useOverlayHeader ? 'gap-0.5' : 'gap-1'}`}>
           {/* PiP button */}
           {document.pictureInPictureEnabled && (
             <button
               onClick={togglePiP}
-              className="p-1.5 rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+              className={`${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors`}
               title="Picture-in-Picture"
+              aria-label="Open picture in picture"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -385,8 +471,9 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
           {/* Minimize */}
           <button
             onClick={() => setIsMinimized(true)}
-            className="p-1.5 rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+            className={`${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors`}
             title="Minimize"
+            aria-label="Minimize screen share"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="4 14 10 14 10 20" />
@@ -399,8 +486,9 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
           {/* Fullscreen */}
           <button
             onClick={toggleFullscreen}
-            className="p-1.5 rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+            className={`${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors`}
             title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
           >
             {isFullscreen ? (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -423,8 +511,9 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1.5 rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors"
+              className={`${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors`}
               title="Stop viewing"
+              aria-label="Stop viewing screen share"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -437,7 +526,7 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
 
       {/* Video element */}
       <div className={`relative flex-grow flex items-center justify-center min-h-0 overflow-hidden ${isTheater ? 'p-0 sm:p-2 lg:p-3' : 'p-1'}`}>
-        {isTheater && (
+        {isTheater && !isMobile && (
           <video
             ref={bgVideoRef}
             autoPlay
@@ -451,7 +540,7 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
           ref={videoRef}
           autoPlay
           playsInline
-          className={`${isTheater ? 'relative z-10 w-full h-full object-contain' : 'max-w-full max-h-full object-contain'} rounded-2xl bg-black`}
+          className={`${isTheater ? 'relative z-10 w-full h-full object-cover' : 'max-w-full max-h-full object-contain'} ${isTheater ? 'rounded-none sm:rounded-2xl' : 'rounded-2xl'} bg-black`}
         />
       </div>
 

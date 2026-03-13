@@ -24,6 +24,8 @@ export interface Message {
   vanishOpened?: boolean;
   /** Vanish-mode image — disappears after first view */
   isVanish?: boolean;
+  isEdited?: boolean;
+  senderId?: string;
 }
 
 export type ChatAction = 'reply' | 'edit' | 'report' | 'delete';

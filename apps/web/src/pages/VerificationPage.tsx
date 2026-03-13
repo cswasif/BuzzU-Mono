@@ -166,23 +166,23 @@ export const VerificationPage: React.FC = () => {
             </button>
 
             <div className="relative overflow-hidden w-full h-[100dvh]">
-                <div className="bg absolute h-screen w-screen bg-[url('https://proxy.extractcss.dev/https://app.chitchat.gg/middle.svg')] bg-center bg-repeat"></div>
+                <div className="bg absolute h-dvh w-screen bg-[url('https://proxy.extractcss.dev/https://app.chitchat.gg/middle.svg')] bg-center bg-repeat"></div>
                 <motion.div
                     initial={{ scaleY: 0 }}
                     animate={{ scaleY: isLoading ? 0 : 1 }}
                     transition={{ duration: 0.5, ease: 'circOut' }}
-                    className="absolute h-screen w-screen bg-[url('https://proxy.extractcss.dev/https://app.chitchat.gg/wave-gd.svg')] bg-contain bg-top bg-no-repeat opacity-80"
+                    className="absolute h-dvh w-screen bg-[url('https://proxy.extractcss.dev/https://app.chitchat.gg/wave-gd.svg')] bg-contain bg-top bg-no-repeat opacity-80"
                     style={{ transformOrigin: 'top' }}
                 ></motion.div>
                 <motion.div
                     initial={{ scaleY: 0 }}
                     animate={{ scaleY: isLoading ? 0 : 1 }}
                     transition={{ duration: 0.5, ease: 'circOut' }}
-                    className="absolute h-screen w-screen bg-[url('https://proxy.extractcss.dev/https://app.chitchat.gg/wave.svg')] bg-contain bg-bottom bg-no-repeat opacity-80"
+                    className="absolute h-dvh w-screen bg-[url('https://proxy.extractcss.dev/https://app.chitchat.gg/wave.svg')] bg-contain bg-bottom bg-no-repeat opacity-80"
                     style={{ transformOrigin: 'bottom' }}
                 ></motion.div>
 
-                <main className="flex items-center !justify-center p-8 min-h-screen relative z-10 w-full">
+                <main className="flex items-center !justify-center p-8 min-h-dvh relative z-10 w-full">
                     <motion.div
                         layout
                         initial={{ opacity: 0, scale: 0.9 }}

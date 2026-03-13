@@ -1,22 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   InstagramIcon, XIcon, TikTokIcon,
   LightningIcon, MaleIcon, FemaleIcon, BothIcon,
   VideoIcon, TextChatIcon
 } from './Icons';
-import VideoMatchPage from '../../video-match/VideoMatchPage';
 import { ChatArea } from '../Chat/ChatArea';
 import type { RoomType } from '../Chat/ChatArea';
 import { JoinRoomModal } from './JoinRoomModal';
-import { usePWA } from '../../hooks/usePWA';
 import { GenderSelectionModal } from './GenderSelectionModal';
 import { useSessionStore } from '../../stores/sessionStore';
 
 interface MainContentProps {
   onManageInterests: () => void;
-  activeArea: 'main' | 'chat' | 'video';
-  setActiveArea: (area: 'main' | 'chat' | 'video') => void;
+  activeArea: 'main' | 'chat';
+  setActiveArea: (area: 'main' | 'chat') => void;
   roomId?: string;
 }
 
@@ -29,14 +28,13 @@ const interestSets = [
 ];
 
 export default function MainContent({ onManageInterests, activeArea, setActiveArea, roomId }: MainContentProps) {
+  const navigate = useNavigate();
   const { gender, genderFilter, setGender, setGenderFilter, interests, avatarSeed, genderModalDismissed, setGenderModalDismissed, adminAccessKey } = useSessionStore();
   const [currentInterestSet, setCurrentInterestSet] = useState(0);
 
   // Modal state
   const [showGenderModal, setShowGenderModal] = useState(false);
   const hasSelectedGender = gender === 'M' || gender === 'F';
-
-  const { isInstallable, installApp, needRefresh, updateApp, closeUpdateTrigger } = usePWA();
 
   // Room type state for direct-connect mode
   const [roomTypeState, setRoomTypeState] = useState<{ type: RoomType; roomCode?: string; roomKey?: string } | null>(null);
@@ -68,7 +66,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
       setShowGenderModal(true);
       return;
     }
-    setActiveArea('chat');
+    navigate('/chat/text');
   };
 
   const handleGenderConfirm = (selectedGender: 'M' | 'F') => {
@@ -111,10 +109,6 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
     return <ChatArea roomId={roomId} />;
   }
 
-  if (activeArea === 'video') {
-    return <VideoMatchPage onBack={() => setActiveArea('main')} />;
-  }
-
   return (
     <>
       <main className="w-full flex h-full flex-grow flex-col overflow-hidden relative">
@@ -140,39 +134,18 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
 
             {/* Social Links */}
             <div className="flex justify-center space-x-3 mb-2">
-              <a href="https://instagram.com/buzzu" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
+              <a href="https://instagram.com/buzzu" aria-label="BuzzU on Instagram" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
                 <InstagramIcon className="text-lg" />
               </a>
-              <a href="https://x.com/buzzu" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
+              <a href="https://x.com/buzzu" aria-label="BuzzU on X" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
                 <XIcon className="text-lg" />
               </a>
-              <a href="https://tiktok.com/@buzzu" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
+              <a href="https://tiktok.com/@buzzu" aria-label="BuzzU on TikTok" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
                 <TikTokIcon className="text-lg" />
               </a>
             </div>
 
-            <AnimatePresence>
-              {isInstallable && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="w-full max-w-sm mt-4 px-4"
-                >
-                  <button
-                    onClick={installApp}
-                    className="w-full flex items-center justify-center bg-zinc-800/80 hover:bg-zinc-700/90 border border-zinc-700 backdrop-blur-sm text-white rounded-xl py-3 px-4 shadow-lg transition-all active:scale-[0.98]"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-[#8d96f6]">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                      <polyline points="7 10 12 15 17 10"></polyline>
-                      <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    <span className="font-semibold text-sm">Install BuzzU App</span>
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+
 
           </div>
 
@@ -195,6 +168,12 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                       role="button"
                       tabIndex={0}
                       onClick={onManageInterests}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onManageInterests();
+                        }
+                      }}
                     >
                       Manage
                     </span>
@@ -205,6 +184,12 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                     tabIndex={0}
                     aria-label="Edit interests"
                     onClick={onManageInterests}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onManageInterests();
+                      }
+                    }}
                   >
                     <div className="border-2 border-dashed border-[hsla(var(--dashed-border)/var(--dashed-border-opacity))] rounded-lg p-3 min-h-[48px] flex items-center">
                       <AnimatePresence mode="wait">
@@ -313,7 +298,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                       setShowGenderModal(true);
                       return;
                     }
-                    setActiveArea('video');
+                    navigate('/chat/video');
                   }}
                   className="group relative overflow-hidden inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 bg-gradient-to-br from-orange-500 to-red-600 text-white rounded-xl transition-all duration-300 ease-in-out shadow-[0_4px_14px_0_rgba(249,115,22,0.39)] hover:shadow-[0_6px_20px_rgba(249,115,22,0.6)] hover:-translate-y-1 hover:brightness-110 active:translate-y-0 active:scale-95 min-h-[52px] min-w-[52px] lg:min-h-[60px] lg:min-w-[60px]"
                 >

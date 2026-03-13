@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Reply, Trash2, MoreVertical, ArrowLeft, CheckCircle, Pencil, Flag, Copy, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Message } from './types';
@@ -22,6 +22,21 @@ interface MessageItemProps {
 interface MenuPosition {
   x: number;
   y: number;
+}
+
+function hashToHue(input: string) {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 31 + input.charCodeAt(i)) % 360;
+  }
+  return Math.abs(hash) % 360;
+}
+
+function buildFallbackAvatar(seed: string, label: string) {
+  const initial = (label || seed || '?').trim().charAt(0).toUpperCase() || '?';
+  const hue = hashToHue(seed || label || '');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="100%" height="100%" fill="hsl(${hue},65%,55%)"/><text x="50%" y="50%" font-size="40" font-family="Arial, sans-serif" fill="#fff" text-anchor="middle" dominant-baseline="middle">${initial}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
 export const MessageItem: React.FC<MessageItemProps> = ({
@@ -52,6 +67,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     : (username === partnerName ? (partnerAvatarUrl || avatarUrl || null) : (avatarUrl || null));
   const dicebearUrl = `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${resolvedAvatarSeed || '699ec54eee0505687ea59468'}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`;
   const avatarSrc = resolvedAvatarUrl || dicebearUrl;
+  const fallbackAvatar = useMemo(() => buildFallbackAvatar(resolvedAvatarSeed || '', username), [resolvedAvatarSeed, username]);
+  const [avatarSrcState, setAvatarSrcState] = useState(avatarSrc);
 
   useEffect(() => {
     if (isEditingInline && editInputRef.current) {
@@ -59,6 +76,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({
       editInputRef.current.setSelectionRange(editInputRef.current.value.length, editInputRef.current.value.length);
     }
   }, [isEditingInline]);
+
+  useEffect(() => {
+    setAvatarSrcState(avatarSrc);
+  }, [avatarSrc]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -350,7 +371,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   <img
                     className="aspect-square h-full w-full"
                     alt={username}
-                    src={avatarSrc}
+                    src={avatarSrcState}
+                    loading="lazy"
+                    decoding="async"
+                    onError={() => {
+                      if (avatarSrcState !== fallbackAvatar) {
+                        setAvatarSrcState(fallbackAvatar);
+                      }
+                    }}
                   />
                 </span>
               </div>
@@ -372,6 +400,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 </span>
                 <time className="text-zinc-500 text-xs leading-snug tracking-tight align-baseline font-medium cursor-default select-none ml-1">
                   {timestamp}
+                  {message.isEdited && <span className="ml-1 opacity-70 italic font-normal text-[10px] block sm:inline-block leading-none">(edited)</span>}
                 </time>
               </h3>
               <div className="leading w-full flex-1">

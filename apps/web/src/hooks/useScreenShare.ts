@@ -21,6 +21,12 @@ import { useCallback, useRef, useState } from "react";
 
 export type ScreenShareQuality = "720p" | "1080p" | "1440p" | "4k";
 
+export interface AdaptiveBitrateStats {
+  targetBitrate: number | null;
+  lossRate: number | null;
+  rttMs: number | null;
+}
+
 interface QualityProfile {
   width: number;
   height: number;
@@ -35,15 +41,15 @@ const QUALITY_PROFILES: Record<ScreenShareQuality, QualityProfile> = {
     width: 1280,
     height: 720,
     frameRate: 30,
-    maxBitrate: 2_500_000,
+    maxBitrate: 2_000_000,
     contentHint: "detail",
-    degradationPreference: "maintain-resolution",
+    degradationPreference: "maintain-framerate",
   },
   "1080p": {
     width: 1920,
     height: 1080,
     frameRate: 30,
-    maxBitrate: 4_500_000,
+    maxBitrate: 4_000_000,
     contentHint: "detail",
     degradationPreference: "maintain-resolution",
   },
@@ -85,16 +91,19 @@ export interface UseScreenShareResult {
   hasAudio: boolean;
   /** Current quality preset */
   quality: ScreenShareQuality;
+  adaptiveBitrateEnabled: boolean;
+  setAdaptiveBitrateEnabled: (enabled: boolean) => void;
+  adaptiveBitrateStats: AdaptiveBitrateStats;
   /** Start screen sharing — adds tracks to the given PC and triggers renegotiation */
   startScreenShare: (
     pc: RTCPeerConnection,
-    sendOffer: (offer: RTCSessionDescriptionInit) => void,
+    requestRenegotiation: () => Promise<void>,
     quality?: ScreenShareQuality,
   ) => Promise<void>;
   /** Stop screen sharing — removes tracks from PC and triggers renegotiation */
   stopScreenShare: (
     pc: RTCPeerConnection,
-    sendOffer: (offer: RTCSessionDescriptionInit) => void,
+    requestRenegotiation: () => Promise<void>,
   ) => void;
   /** Change quality on the fly (without stopping/restarting) */
   setQuality: (quality: ScreenShareQuality) => void;
@@ -120,7 +129,7 @@ export interface UseScreenShareResult {
    */
   reattachToPC: (
     pc: RTCPeerConnection,
-    sendOffer: (offer: RTCSessionDescriptionInit) => void,
+    requestRenegotiation: () => Promise<void>,
   ) => Promise<boolean>;
 }
 
@@ -128,15 +137,35 @@ export function useScreenShare(): UseScreenShareResult {
   const [isSharing, setIsSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
-  const [quality, setQualityState] = useState<ScreenShareQuality>("1080p");
+  const [quality, setQualityState] = useState<ScreenShareQuality>("720p");
+  const [adaptiveBitrateEnabled, setAdaptiveBitrateEnabledState] = useState(true);
+  const [adaptiveBitrateStats, setAdaptiveBitrateStats] = useState<AdaptiveBitrateStats>({
+    targetBitrate: null,
+    lossRate: null,
+    rttMs: null,
+  });
 
   // Refs to track senders so we can remove them later
   const videoSenderRef = useRef<RTCRtpSender | null>(null);
   const audioSenderRef = useRef<RTCRtpSender | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const activePcRef = useRef<RTCPeerConnection | null>(null);
+  const renegotiateRef = useRef<(() => Promise<void>) | null>(null);
+  const healthIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recoveryInFlightRef = useRef(false);
+  const recoveryAttemptsRef = useRef(0);
+  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastVideoActiveAtRef = useRef<number>(Date.now());
+  const lastAudioActiveAtRef = useRef<number>(Date.now());
+  const qualityRef = useRef<ScreenShareQuality>("720p");
+  const healthListenersRef = useRef<{
+    video?: { track: MediaStreamTrack; onMute: () => void; onUnmute: () => void };
+    audio?: { track: MediaStreamTrack; onMute: () => void; onUnmute: () => void };
+  } | null>(null);
 
   // Guard against double-cleanup (browser "Stop sharing" + programmatic stop racing)
   const cleanupInFlightRef = useRef(false);
+  const startInFlightRef = useRef(false);
 
   // Generation counter: incremented on detach/reattach so old `ended`
   // event listeners (which captured a stale PC) become no-ops.
@@ -149,10 +178,19 @@ export function useScreenShare(): UseScreenShareResult {
     ts: number;
     framesSent: number;
   } | null>(null);
+  const prevRemoteStatsRef = useRef<{
+    packetsLost: number;
+    packetsReceived: number;
+    ts: number;
+  } | null>(null);
+  const adaptiveBitrateRef = useRef<number | null>(null);
+  const lastBitrateUpdateRef = useRef<number>(0);
 
-  const startDebugStats = useCallback((pc: RTCPeerConnection) => {
-    if (debugIntervalRef.current) clearInterval(debugIntervalRef.current);
-    prevStatsRef.current = null;
+  const startDebugStats = useCallback(
+    (pc: RTCPeerConnection) => {
+      if (debugIntervalRef.current) clearInterval(debugIntervalRef.current);
+      prevStatsRef.current = null;
+      prevRemoteStatsRef.current = null;
 
     debugIntervalRef.current = setInterval(async () => {
       if (pc.connectionState === "closed") {
@@ -163,7 +201,7 @@ export function useScreenShare(): UseScreenShareResult {
         const stats = await pc.getStats();
         const now = performance.now();
         let outboundVideo: any = null;
-        let outboundAudio: any = null;
+        let remoteInboundVideo: any = null;
         let candidatePair: any = null;
         let codec: any = null;
         let localCandidate: any = null;
@@ -179,8 +217,16 @@ export function useScreenShare(): UseScreenShareResult {
             if (!outboundVideo || report.bytesSent > outboundVideo.bytesSent)
               outboundVideo = report;
           }
-          if (report.type === "outbound-rtp" && report.kind === "audio") {
-            outboundAudio = report;
+          if (
+            report.type === "remote-inbound-rtp" &&
+            report.kind === "video"
+          ) {
+            if (
+              !remoteInboundVideo ||
+              report.packetsReceived > remoteInboundVideo.packetsReceived
+            ) {
+              remoteInboundVideo = report;
+            }
           }
           if (
             report.type === "candidate-pair" &&
@@ -227,53 +273,133 @@ export function useScreenShare(): UseScreenShareResult {
         const videoTrack = streamRef.current?.getVideoTracks()[0];
         const settings = videoTrack?.getSettings();
 
-        console.log(
-          "%c[ScreenShare SENDER Stats]",
-          "color: #00ff88; font-weight: bold",
-          {
-            capture: settings
-              ? `${settings.width}x${settings.height}@${settings.frameRate?.toFixed(1)}fps`
-              : "N/A",
-            encoded: outboundVideo
-              ? `${outboundVideo.frameWidth ?? "?"}x${outboundVideo.frameHeight ?? "?"}`
-              : "N/A",
-            codec: codec
-              ? `${codec.mimeType} (${codec.clockRate}Hz)`
-              : "unknown",
-            bitrate: `${bitrateKbps.toFixed(0)} kbps`,
-            fpsSent: fpsSent.toFixed(1),
-            framesEncoded: outboundVideo?.framesEncoded,
-            keyFrames: outboundVideo?.keyFramesEncoded,
-            qpSum: outboundVideo?.qpSum,
-            totalEncodeTime: outboundVideo?.totalEncodeTime?.toFixed(2) + "s",
-            avgEncodeMs: outboundVideo?.framesEncoded
-              ? (
-                  (outboundVideo.totalEncodeTime /
-                    outboundVideo.framesEncoded) *
-                  1000
-                ).toFixed(1) + "ms"
-              : "N/A",
-            qualityLimit: outboundVideo?.qualityLimitationReason ?? "none",
-            qualityDurations: outboundVideo?.qualityLimitationDurations,
-            nackCount: outboundVideo?.nackCount,
-            pliCount: outboundVideo?.pliCount,
-            firCount: outboundVideo?.firCount,
-            retransmitted: outboundVideo?.retransmittedBytesSent,
-            packetsSent: outboundVideo?.packetsSent,
-            rtt: candidatePair
-              ? `${(candidatePair.currentRoundTripTime * 1000).toFixed(0)}ms`
-              : "N/A",
-            transport: localCandidate
-              ? `${localCandidate.candidateType}(${localCandidate.protocol}) → ${remoteCandidate?.candidateType}(${remoteCandidate?.protocol})`
-              : "N/A",
-            bytesSent: outboundVideo?.bytesSent,
-          },
-        );
+        let lossRateValue: number | null = null;
+        let rttMsValue: number | null = null;
+        if (videoSenderRef.current) {
+          const profile = QUALITY_PROFILES[quality];
+          const minBitrate = Math.max(400_000, Math.floor(profile.maxBitrate * 0.35));
+          const maxBitrate = profile.maxBitrate;
+          const nowTs = performance.now();
+          const prevRemote = prevRemoteStatsRef.current;
+          const currentPacketsLost = remoteInboundVideo?.packetsLost ?? 0;
+          const currentPacketsReceived = remoteInboundVideo?.packetsReceived ?? 0;
+          const rtt = remoteInboundVideo?.roundTripTime ?? candidatePair?.currentRoundTripTime ?? 0;
+          const elapsedRemote = prevRemote ? (nowTs - prevRemote.ts) / 1000 : 0;
+          const lostDelta =
+            prevRemote && elapsedRemote > 0
+              ? Math.max(0, currentPacketsLost - prevRemote.packetsLost)
+              : 0;
+          const recvDelta =
+            prevRemote && elapsedRemote > 0
+              ? Math.max(0, currentPacketsReceived - prevRemote.packetsReceived)
+              : 0;
+          const lossRate = recvDelta > 0 ? lostDelta / recvDelta : 0;
+          lossRateValue = lossRate;
+          rttMsValue = rtt > 0 ? rtt * 1000 : null;
+          prevRemoteStatsRef.current = {
+            packetsLost: currentPacketsLost,
+            packetsReceived: currentPacketsReceived,
+            ts: nowTs,
+          };
+
+          let target = adaptiveBitrateRef.current ?? maxBitrate;
+          if (adaptiveBitrateEnabled) {
+            if (lossRate > 0.03 || rtt > 0.35) {
+              target = Math.max(minBitrate, Math.floor(target * 0.85));
+            } else if (lossRate < 0.01 && rtt > 0 && rtt < 0.2) {
+              target = Math.min(maxBitrate, Math.floor(target * 1.08));
+            }
+          } else {
+            target = maxBitrate;
+          }
+
+          const elapsedSinceUpdate = nowTs - lastBitrateUpdateRef.current;
+          const currentTarget = adaptiveBitrateRef.current ?? maxBitrate;
+          const shouldForce = !adaptiveBitrateEnabled && currentTarget !== maxBitrate;
+          if (
+            elapsedSinceUpdate > 1500 &&
+            (shouldForce || Math.abs(target - currentTarget) > maxBitrate * 0.05)
+          ) {
+            adaptiveBitrateRef.current = target;
+            lastBitrateUpdateRef.current = nowTs;
+            try {
+              const params = videoSenderRef.current.getParameters();
+              if (!params.encodings || params.encodings.length === 0) {
+                params.encodings = [{}];
+              }
+              params.encodings[0].maxBitrate = target;
+              params.encodings[0].maxFramerate = profile.frameRate;
+              params.encodings[0].priority = "high";
+              params.encodings[0].networkPriority = "high";
+              params.degradationPreference =
+                profile.degradationPreference as RTCDegradationPreference;
+              await videoSenderRef.current.setParameters(params);
+            } catch {
+            }
+          }
+        }
+
+        setAdaptiveBitrateStats({
+          targetBitrate: adaptiveBitrateRef.current ?? null,
+          lossRate: lossRateValue,
+          rttMs: rttMsValue,
+        });
+
+        if (import.meta.env.DEV) {
+          console.log(
+            "%c[ScreenShare SENDER Stats]",
+            "color: #00ff88; font-weight: bold",
+            {
+              capture: settings
+                ? `${settings.width}x${settings.height}@${settings.frameRate?.toFixed(1)}fps`
+                : "N/A",
+              encoded: outboundVideo
+                ? `${outboundVideo.frameWidth ?? "?"}x${outboundVideo.frameHeight ?? "?"}`
+                : "N/A",
+              codec: codec
+                ? `${codec.mimeType} (${codec.clockRate}Hz)`
+                : "unknown",
+              bitrate: `${bitrateKbps.toFixed(0)} kbps`,
+              fpsSent: fpsSent.toFixed(1),
+              framesEncoded: outboundVideo?.framesEncoded,
+              keyFrames: outboundVideo?.keyFramesEncoded,
+              qpSum: outboundVideo?.qpSum,
+              totalEncodeTime: outboundVideo?.totalEncodeTime?.toFixed(2) + "s",
+              avgEncodeMs: outboundVideo?.framesEncoded
+                ? (
+                    (outboundVideo.totalEncodeTime /
+                      outboundVideo.framesEncoded) *
+                    1000
+                  ).toFixed(1) + "ms"
+                : "N/A",
+              qualityLimit: outboundVideo?.qualityLimitationReason ?? "none",
+              qualityDurations: outboundVideo?.qualityLimitationDurations,
+              nackCount: outboundVideo?.nackCount,
+              pliCount: outboundVideo?.pliCount,
+              firCount: outboundVideo?.firCount,
+              retransmitted: outboundVideo?.retransmittedBytesSent,
+              packetsSent: outboundVideo?.packetsSent,
+              rtt: candidatePair
+                ? `${(candidatePair.currentRoundTripTime * 1000).toFixed(0)}ms`
+                : "N/A",
+              transport: localCandidate
+                ? `${localCandidate.candidateType}(${localCandidate.protocol}) → ${remoteCandidate?.candidateType}(${remoteCandidate?.protocol})`
+                : "N/A",
+              bytesSent: outboundVideo?.bytesSent,
+              lossRate:
+                lossRateValue !== null
+                  ? `${(lossRateValue * 100).toFixed(2)}%`
+                  : "N/A",
+            },
+          );
+        }
       } catch (e) {
         console.warn("[ScreenShare SENDER Stats] Error:", e);
       }
     }, 2000);
-  }, []);
+  },
+    [quality, adaptiveBitrateEnabled],
+  );
 
   const stopDebugStats = useCallback(() => {
     if (debugIntervalRef.current) {
@@ -281,7 +407,227 @@ export function useScreenShare(): UseScreenShareResult {
       debugIntervalRef.current = null;
     }
     prevStatsRef.current = null;
+    prevRemoteStatsRef.current = null;
+    adaptiveBitrateRef.current = null;
+    lastBitrateUpdateRef.current = 0;
+    setAdaptiveBitrateStats({
+      targetBitrate: null,
+      lossRate: null,
+      rttMs: null,
+    });
   }, []);
+
+  const stopHealthMonitor = useCallback(() => {
+    if (healthIntervalRef.current) {
+      clearInterval(healthIntervalRef.current);
+      healthIntervalRef.current = null;
+    }
+    if (healthListenersRef.current?.video) {
+      const { track, onMute, onUnmute } = healthListenersRef.current.video;
+      track.removeEventListener("mute", onMute);
+      track.removeEventListener("unmute", onUnmute);
+    }
+    if (healthListenersRef.current?.audio) {
+      const { track, onMute, onUnmute } = healthListenersRef.current.audio;
+      track.removeEventListener("mute", onMute);
+      track.removeEventListener("unmute", onUnmute);
+    }
+    healthListenersRef.current = null;
+    if (recoveryTimerRef.current) {
+      clearTimeout(recoveryTimerRef.current);
+      recoveryTimerRef.current = null;
+    }
+    recoveryAttemptsRef.current = 0;
+    recoveryInFlightRef.current = false;
+  }, []);
+
+  const recoverCapture = async (reason: string) => {
+    if (recoveryInFlightRef.current) return;
+    const pc = activePcRef.current;
+    const requestRenegotiation = renegotiateRef.current;
+    if (!pc || !requestRenegotiation) return;
+    recoveryInFlightRef.current = true;
+    try {
+      const profile = QUALITY_PROFILES[qualityRef.current];
+      const newStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: profile.width },
+          height: { ideal: profile.height },
+          frameRate: { ideal: profile.frameRate },
+        },
+        audio: SYSTEM_AUDIO_CONSTRAINTS as any,
+      });
+      const oldStream = streamRef.current;
+      pcGenerationRef.current++;
+      streamRef.current = newStream;
+      setScreenStream(newStream);
+      setQualityState(qualityRef.current);
+
+      const newVideo = newStream.getVideoTracks()[0];
+      const newAudio = newStream.getAudioTracks()[0];
+      if (newVideo) {
+        newVideo.contentHint = profile.contentHint;
+        if (videoSenderRef.current) {
+          await videoSenderRef.current.replaceTrack(newVideo);
+        } else {
+          videoSenderRef.current = pc.addTrack(newVideo, newStream);
+        }
+        requestAnimationFrame(() =>
+          setTimeout(() => {
+            if (videoSenderRef.current) {
+              tuneSender(videoSenderRef.current, profile);
+            }
+          }, 50),
+        );
+      }
+      if (newAudio) {
+        newAudio.contentHint = "music";
+        if (audioSenderRef.current) {
+          await audioSenderRef.current.replaceTrack(newAudio);
+        } else {
+          audioSenderRef.current = pc.addTrack(newAudio, newStream);
+        }
+        try {
+          const params = audioSenderRef.current?.getParameters();
+          if (params) {
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            params.encodings[0].maxBitrate = 128_000;
+            params.encodings[0].priority = "high";
+            params.encodings[0].networkPriority = "high";
+            await audioSenderRef.current?.setParameters(params);
+          }
+        } catch (err) {
+          console.warn("[useScreenShare] Failed to tune audio sender:", err);
+        }
+      }
+      setHasAudio(!!newAudio);
+      attachHealthMonitor(newVideo, newAudio);
+      if (oldStream) {
+        oldStream.getTracks().forEach((t) => t.stop());
+      }
+      await requestRenegotiation();
+      setIsSharing(true);
+      recoveryAttemptsRef.current = 0;
+      console.log("[useScreenShare] Recovery succeeded:", reason);
+    } catch (err: any) {
+      if (err?.name === "NotAllowedError" || err?.name === "AbortError") {
+        console.warn("[useScreenShare] Recovery cancelled by user:", reason);
+      } else {
+        console.warn("[useScreenShare] Recovery failed:", reason, err);
+      }
+    } finally {
+      recoveryInFlightRef.current = false;
+    }
+  };
+
+  const scheduleRecovery = (reason: string) => {
+    if (recoveryInFlightRef.current || recoveryTimerRef.current) return;
+    if (recoveryAttemptsRef.current >= 3) {
+      console.warn("[useScreenShare] Recovery attempts exhausted:", reason);
+      return;
+    }
+    const delay = Math.min(1000 * Math.pow(2, recoveryAttemptsRef.current), 8000);
+    recoveryAttemptsRef.current += 1;
+    recoveryTimerRef.current = setTimeout(() => {
+      recoveryTimerRef.current = null;
+      recoverCapture(reason);
+    }, delay);
+  };
+
+  const attachHealthMonitor = (videoTrack?: MediaStreamTrack, audioTrack?: MediaStreamTrack) => {
+    lastVideoActiveAtRef.current = Date.now();
+    lastAudioActiveAtRef.current = Date.now();
+    if (healthListenersRef.current?.video) {
+      const { track, onMute, onUnmute } = healthListenersRef.current.video;
+      track.removeEventListener("mute", onMute);
+      track.removeEventListener("unmute", onUnmute);
+    }
+    if (healthListenersRef.current?.audio) {
+      const { track, onMute, onUnmute } = healthListenersRef.current.audio;
+      track.removeEventListener("mute", onMute);
+      track.removeEventListener("unmute", onUnmute);
+    }
+    healthListenersRef.current = null;
+    if (videoTrack) {
+      const onUnmute = () => {
+        lastVideoActiveAtRef.current = Date.now();
+      };
+      const onMute = () => {
+        lastVideoActiveAtRef.current = Date.now();
+      };
+      videoTrack.addEventListener("unmute", onUnmute);
+      videoTrack.addEventListener("mute", onMute);
+      healthListenersRef.current = {
+        ...(healthListenersRef.current ?? {}),
+        video: { track: videoTrack, onMute, onUnmute },
+      };
+    }
+    if (audioTrack) {
+      const onUnmute = () => {
+        lastAudioActiveAtRef.current = Date.now();
+      };
+      const onMute = () => {
+        lastAudioActiveAtRef.current = Date.now();
+      };
+      audioTrack.addEventListener("unmute", onUnmute);
+      audioTrack.addEventListener("mute", onMute);
+      healthListenersRef.current = {
+        ...(healthListenersRef.current ?? {}),
+        audio: { track: audioTrack, onMute, onUnmute },
+      };
+    }
+    if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+    healthIntervalRef.current = setInterval(() => {
+      if (!isSharing || cleanupInFlightRef.current) return;
+      const now = Date.now();
+      if (videoTrack) {
+        if (videoTrack.readyState !== "live") {
+          scheduleRecovery("video-track-ended");
+        } else if (videoTrack.muted && now - lastVideoActiveAtRef.current > 2000) {
+          scheduleRecovery("video-track-muted");
+        }
+      }
+      if (audioTrack) {
+        if (audioTrack.readyState !== "live") {
+          scheduleRecovery("audio-track-ended");
+        } else if (audioTrack.muted && now - lastAudioActiveAtRef.current > 2000) {
+          scheduleRecovery("audio-track-muted");
+        }
+      }
+    }, 1500);
+  };
+
+  const setAdaptiveBitrateEnabled = useCallback(
+    (enabled: boolean) => {
+      setAdaptiveBitrateEnabledState(enabled);
+      const profile = QUALITY_PROFILES[quality];
+      if (!enabled) {
+        adaptiveBitrateRef.current = profile.maxBitrate;
+        lastBitrateUpdateRef.current = 0;
+        const sender = videoSenderRef.current;
+        if (sender) {
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+          }
+          params.encodings[0].maxBitrate = profile.maxBitrate;
+          params.encodings[0].maxFramerate = profile.frameRate;
+          params.encodings[0].priority = "high";
+          params.encodings[0].networkPriority = "high";
+          params.degradationPreference =
+            profile.degradationPreference as RTCDegradationPreference;
+          sender.setParameters(params).catch(() => { });
+        }
+        setAdaptiveBitrateStats((prev) => ({
+          ...prev,
+          targetBitrate: profile.maxBitrate,
+        }));
+      }
+    },
+    [quality],
+  );
 
   // Callback for when the browser's native "Stop sharing" button ends capture.
   // ChatArea registers this to send ScreenShare=false to the remote peer.
@@ -363,15 +709,27 @@ export function useScreenShare(): UseScreenShareResult {
   const startScreenShare = useCallback(
     async (
       pc: RTCPeerConnection,
-      sendOffer: (offer: RTCSessionDescriptionInit) => void,
-      qualityPreset: ScreenShareQuality = "1080p",
+      requestRenegotiation: () => Promise<void>,
+      qualityPreset: ScreenShareQuality = "720p",
     ) => {
       if (streamRef.current) {
         console.warn("[useScreenShare] Already sharing — stop first");
         return;
       }
+      if (startInFlightRef.current) {
+        console.warn("[useScreenShare] Start already in flight — skipping");
+        return;
+      }
+      startInFlightRef.current = true;
 
       const profile = QUALITY_PROFILES[qualityPreset];
+      adaptiveBitrateRef.current = profile.maxBitrate;
+      lastBitrateUpdateRef.current = 0;
+      setAdaptiveBitrateStats((prev) => ({
+        ...prev,
+        targetBitrate: profile.maxBitrate,
+      }));
+      qualityRef.current = qualityPreset;
 
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -401,6 +759,10 @@ export function useScreenShare(): UseScreenShareResult {
             "RTCPeerConnection closed during screen share picker",
           );
         }
+
+        activePcRef.current = pc;
+        renegotiateRef.current = requestRenegotiation;
+        recoveryAttemptsRef.current = 0;
 
         // ── Video track ──────────────────────────────────────────────
         const videoTrack = stream.getVideoTracks()[0];
@@ -500,7 +862,7 @@ export function useScreenShare(): UseScreenShareResult {
             const vSender = videoSenderRef.current;
             const aSender = audioSenderRef.current;
             _cleanupStream();
-            _removeTracksFromPC(pc, sendOffer, vSender, aSender);
+            _removeTracksFromPC(pc, requestRenegotiation, vSender, aSender);
             // Notify ChatArea so it can send ScreenShare=false to the remote peer
             // and update the screen-share store.
             if (onStoppedCallbackRef.current) {
@@ -542,18 +904,9 @@ export function useScreenShare(): UseScreenShareResult {
           setHasAudio(false);
         }
 
-        // ── Renegotiate ─────────────────────────────────────────────
-        // Only create an offer if signaling state is stable.
-        if (pc.signalingState === "stable") {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          sendOffer(offer);
-        } else {
-          console.warn(
-            "[useScreenShare] Deferring renegotiation — signalingState:",
-            pc.signalingState,
-          );
-        }
+        attachHealthMonitor(videoTrack, audioTrack);
+
+        await requestRenegotiation();
 
         setIsSharing(true);
         console.log(
@@ -572,9 +925,11 @@ export function useScreenShare(): UseScreenShareResult {
         }
         console.error("[useScreenShare] Failed to start screen share:", err);
         throw err;
+      } finally {
+        startInFlightRef.current = false;
       }
     },
-    [tuneSender],
+    [attachHealthMonitor, tuneSender],
   );
 
   /**
@@ -585,7 +940,7 @@ export function useScreenShare(): UseScreenShareResult {
   const _removeTracksFromPC = useCallback(
     async (
       pc: RTCPeerConnection,
-      sendOffer: (offer: RTCSessionDescriptionInit) => void,
+      requestRenegotiation: () => Promise<void>,
       videoSender: RTCRtpSender | null,
       audioSender: RTCRtpSender | null,
     ) => {
@@ -605,20 +960,7 @@ export function useScreenShare(): UseScreenShareResult {
           }
         }
 
-        // Renegotiate to inform remote peer.
-        // Guard: only create an offer when the signaling state allows it.
-        // If we're in 'have-local-offer' or 'have-remote-offer', a concurrent
-        // renegotiation is already in-flight — skip to avoid InvalidStateError.
-        if (pc.signalingState === "stable") {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          sendOffer(offer);
-        } else if (pc.signalingState !== "closed") {
-          console.warn(
-            "[useScreenShare] Skipping renegotiation — signalingState:",
-            pc.signalingState,
-          );
-        }
+        await requestRenegotiation();
       } catch (err) {
         console.error(
           "[useScreenShare] Failed to remove tracks and renegotiate:",
@@ -630,6 +972,7 @@ export function useScreenShare(): UseScreenShareResult {
   );
 
   const _cleanupStream = useCallback(() => {
+    stopHealthMonitor();
     stopDebugStats();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -640,7 +983,9 @@ export function useScreenShare(): UseScreenShareResult {
     setHasAudio(false);
     videoSenderRef.current = null;
     audioSenderRef.current = null;
-  }, [stopDebugStats]);
+    activePcRef.current = null;
+    renegotiateRef.current = null;
+  }, [stopDebugStats, stopHealthMonitor]);
 
   /**
    * Stop screen sharing — removes tracks from the PC and renegotiates.
@@ -649,9 +994,10 @@ export function useScreenShare(): UseScreenShareResult {
   const stopScreenShare = useCallback(
     (
       pc: RTCPeerConnection,
-      sendOffer: (offer: RTCSessionDescriptionInit) => void,
+      requestRenegotiation: () => Promise<void>,
     ) => {
       console.log("[useScreenShare] Stopping screen share");
+      startInFlightRef.current = false;
       // Guard against double cleanup (browser "Stop sharing" may have already fired)
       if (cleanupInFlightRef.current) {
         console.log(
@@ -664,7 +1010,7 @@ export function useScreenShare(): UseScreenShareResult {
       const vSender = videoSenderRef.current;
       const aSender = audioSenderRef.current;
       _cleanupStream();
-      _removeTracksFromPC(pc, sendOffer, vSender, aSender);
+      _removeTracksFromPC(pc, requestRenegotiation, vSender, aSender);
       // Reset guard after a tick
       setTimeout(() => {
         cleanupInFlightRef.current = false;
@@ -680,7 +1026,14 @@ export function useScreenShare(): UseScreenShareResult {
   const setQuality = useCallback(
     (newQuality: ScreenShareQuality) => {
       setQualityState(newQuality);
+      qualityRef.current = newQuality;
       const profile = QUALITY_PROFILES[newQuality];
+      adaptiveBitrateRef.current = profile.maxBitrate;
+      lastBitrateUpdateRef.current = 0;
+      setAdaptiveBitrateStats((prev) => ({
+        ...prev,
+        targetBitrate: profile.maxBitrate,
+      }));
 
       if (videoSenderRef.current) {
         tuneSender(videoSenderRef.current, profile);
@@ -715,15 +1068,18 @@ export function useScreenShare(): UseScreenShareResult {
    */
   const detachFromPC = useCallback(() => {
     console.log("[useScreenShare] Detaching from PC (keeping capture alive)");
+    stopHealthMonitor();
     stopDebugStats();
     // Bump generation so old `ended` listeners become stale no-ops
     pcGenerationRef.current++;
     videoSenderRef.current = null;
     audioSenderRef.current = null;
+    activePcRef.current = null;
+    renegotiateRef.current = null;
     // Reset the double-cleanup guard — the old PC is gone, so the
     // ended listener closure (which captured the OLD PC) is dead.
     cleanupInFlightRef.current = false;
-  }, [stopDebugStats]);
+  }, [stopDebugStats, stopHealthMonitor]);
 
   /**
    * Force-stop the screen capture entirely (no PC needed).
@@ -744,8 +1100,10 @@ export function useScreenShare(): UseScreenShareResult {
   const reattachToPC = useCallback(
     async (
       pc: RTCPeerConnection,
-      sendOffer: (offer: RTCSessionDescriptionInit) => void,
+      requestRenegotiation: () => Promise<void>,
     ): Promise<boolean> => {
+      activePcRef.current = pc;
+      renegotiateRef.current = requestRenegotiation;
       const stream = streamRef.current;
       if (!stream || !isSharing) {
         console.log(
@@ -804,7 +1162,7 @@ export function useScreenShare(): UseScreenShareResult {
         const vSender = videoSenderRef.current;
         const aSender = audioSenderRef.current;
         _cleanupStream();
-        _removeTracksFromPC(pc, sendOffer, vSender, aSender);
+        _removeTracksFromPC(pc, requestRenegotiation, vSender, aSender);
         if (onStoppedCallbackRef.current) {
           try {
             onStoppedCallbackRef.current();
@@ -843,16 +1201,8 @@ export function useScreenShare(): UseScreenShareResult {
         }
       }
 
-      // ── Renegotiate ─────────────────────────────────────────
-      if (pc.signalingState === "stable") {
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          sendOffer(offer);
-        } catch (err) {
-          console.warn("[useScreenShare] reattach: renegotiation failed:", err);
-        }
-      }
+      attachHealthMonitor(videoTrack, audioTrack);
+      await requestRenegotiation();
 
       // Restart debug stats for the new PC
       startDebugStats(pc);
@@ -863,6 +1213,7 @@ export function useScreenShare(): UseScreenShareResult {
       return true;
     },
     [
+      attachHealthMonitor,
       isSharing,
       quality,
       tuneSender,
@@ -877,6 +1228,9 @@ export function useScreenShare(): UseScreenShareResult {
     screenStream,
     hasAudio,
     quality,
+    adaptiveBitrateEnabled,
+    setAdaptiveBitrateEnabled,
+    adaptiveBitrateStats,
     startScreenShare,
     stopScreenShare,
     setQuality,

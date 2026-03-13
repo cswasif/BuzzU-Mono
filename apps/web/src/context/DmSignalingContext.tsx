@@ -26,6 +26,14 @@ interface DmSignalingContextType {
     sendTyping: (friendId: string, isTyping: boolean) => void;
     /** Subscribe to typing events from any friend. */
     onTyping: (callback: (friendId: string, isTyping: boolean) => void) => () => void;
+    /** Get active data channel for file transfers with a friend. */
+    getDataChannel: (friendId: string) => RTCDataChannel | null;
+    /** Register callback for new data channels. Returns cleanup function. */
+    onDataChannel: (callback: (channel: RTCDataChannel, from: string) => void) => () => void;
+    /** Initialize WebRTC connection for file transfers with a friend. */
+    initWebRTC: (friendId: string) => void;
+    /** Subscribe to profile updates from any friend. */
+    onProfile: (callback: (friendId: string, username: string, avatarSeed: string, avatarUrl: string | null) => void) => () => void;
 }
 
 const DmSignalingContext = createContext<DmSignalingContextType | null>(null);
@@ -49,6 +57,7 @@ function yjsToStoreMessage(yMsg: YjsMessageData, myPeerId: string) {
         timestamp: yMsg.timestamp,
         content: yMsg.content,
         isVerified: yMsg.isVerified,
+        isEdited: yMsg.isEdited,
         replyToMessage: yMsg.replyToId
             ? { id: yMsg.replyToId, content: yMsg.replyToContent || '', username: yMsg.replyToSenderName || '' }
             : null,
@@ -80,7 +89,14 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const connectionsRef = useRef<Map<string, WebSocket>>(new Map());
     const cleanupRef = useRef<Map<string, (() => void)[]>>(new Map());
     const reconnectTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+    const heartbeatTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
     const typingCallbacksRef = useRef<Set<(friendId: string, isTyping: boolean) => void>>(new Set());
+    const profileCallbacksRef = useRef<Set<(friendId: string, username: string, avatarSeed: string, avatarUrl: string | null) => void>>(new Set());
+    const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+    const dataChannelsRef = useRef<Map<string, RTCDataChannel>>(new Map());
+    const dataChannelCallbackRef = useRef<((channel: RTCDataChannel, from: string) => void) | null>(null);
+    const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+    const candidateDedupRef = useRef<Map<string, Set<string>>>(new Map());
 
     const peerIdRef = useRef(peerId);
     peerIdRef.current = peerId;
@@ -105,6 +121,179 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
             }));
         }
     }, []);
+
+    const getCandidateKey = useCallback((candidate: RTCIceCandidateInit) => {
+        return `${candidate.candidate ?? ''}|${candidate.sdpMid ?? ''}|${candidate.sdpMLineIndex ?? ''}`;
+    }, []);
+
+    const registerCandidate = useCallback((friendId: string, candidate: RTCIceCandidateInit) => {
+        if (!candidate.candidate) {
+            return false;
+        }
+        const key = getCandidateKey(candidate);
+        let seen = candidateDedupRef.current.get(friendId);
+        if (!seen) {
+            seen = new Set();
+            candidateDedupRef.current.set(friendId, seen);
+        }
+        if (seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    }, [getCandidateKey]);
+
+    const flushPendingCandidates = useCallback(async (friendId: string, pc: RTCPeerConnection) => {
+        const pending = pendingCandidatesRef.current.get(friendId);
+        if (!pending || pending.length === 0) return;
+        for (const candidate of pending) {
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (err) {
+                console.warn(`[DmWebRTC] Failed to add pending ICE candidate for friend: ${friendId.slice(0, 15)}…`, err);
+            }
+        }
+        pendingCandidatesRef.current.delete(friendId);
+    }, []);
+
+    /** Handle incoming WebRTC offer from friend. */
+    const handleWebRTCOffer = useCallback(async (friendId: string, offer: RTCSessionDescriptionInit) => {
+        const myPeerId = peerIdRef.current;
+        if (!myPeerId) return;
+
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+            ]
+        };
+
+        let pc = peerConnectionsRef.current.get(friendId);
+        if (!pc || pc.signalingState === 'closed') {
+            pc = new RTCPeerConnection(config);
+            peerConnectionsRef.current.set(friendId, pc);
+        }
+        if (typeof window !== 'undefined') {
+            const globalConnections = (window as any).__peerConnections as Map<string, RTCPeerConnection> | undefined;
+            if (globalConnections) {
+                globalConnections.set(friendId, pc);
+            } else {
+                (window as any).__peerConnections = new Map([[friendId, pc]]);
+            }
+        }
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                const ws = connectionsRef.current.get(friendId);
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'IceCandidate',
+                        from: myPeerId,
+                        to: friendId,
+                        payload: JSON.stringify(event.candidate),
+                    }));
+                }
+            }
+        };
+
+        pc.ondatachannel = (event) => {
+            const incomingChannel = event.channel;
+            if (incomingChannel.label === 'file-transfer') {
+                dataChannelsRef.current.set(friendId, incomingChannel);
+                const channelMap = (pc as any).dataChannels || new Map<string, RTCDataChannel>();
+                channelMap.set(friendId, incomingChannel);
+                (pc as any).dataChannels = channelMap;
+                incomingChannel.onopen = () => {
+                    console.log(`[DmWebRTC] Incoming data channel opened for friend: ${friendId.slice(0, 15)}…`);
+                    dataChannelCallbackRef.current?.(incomingChannel, friendId);
+                };
+                incomingChannel.onclose = () => {
+                    console.log(`[DmWebRTC] Incoming data channel closed for friend: ${friendId.slice(0, 15)}…`);
+                    dataChannelsRef.current.delete(friendId);
+                };
+                incomingChannel.onerror = (err) => {
+                    if (incomingChannel.readyState === 'closing' || incomingChannel.readyState === 'closed') {
+                        return;
+                    }
+                    console.error(`[DmWebRTC] Incoming data channel error for friend: ${friendId.slice(0, 15)}…`, err);
+                };
+            }
+        };
+
+        const isPolite = myPeerId < friendId;
+        const offerCollision = pc.signalingState !== 'stable';
+        if (offerCollision && !isPolite) {
+            console.warn(`[DmWebRTC] Ignoring offer collision from ${friendId.slice(0, 15)}… (impolite peer)`);
+            return;
+        }
+        if (offerCollision) {
+            try {
+                await pc.setLocalDescription({ type: 'rollback' });
+            } catch (err) {
+                console.warn(`[DmWebRTC] Failed to rollback offer collision for friend: ${friendId.slice(0, 15)}…`, err);
+                return;
+            }
+        }
+
+        let answer: RTCSessionDescriptionInit;
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            await flushPendingCandidates(friendId, pc);
+            answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+        } catch (err) {
+            console.warn(`[DmWebRTC] Failed to handle offer from friend: ${friendId.slice(0, 15)}…`, err);
+            return;
+        }
+
+        const ws = connectionsRef.current.get(friendId);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'Answer',
+                from: myPeerId,
+                to: friendId,
+                payload: JSON.stringify(answer),
+            }));
+        }
+    }, [flushPendingCandidates]);
+
+    /** Handle incoming WebRTC answer from friend. */
+    const handleWebRTCAnswer = useCallback(async (friendId: string, answer: RTCSessionDescriptionInit) => {
+        const pc = peerConnectionsRef.current.get(friendId);
+        if (!pc || pc.signalingState === 'closed') return;
+        if (pc.signalingState !== 'have-local-offer') {
+            console.warn(`[DmWebRTC] Ignoring stale answer from friend: ${friendId.slice(0, 15)}… (state: ${pc.signalingState})`);
+            return;
+        }
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            await flushPendingCandidates(friendId, pc);
+        } catch (err) {
+            console.warn(`[DmWebRTC] Failed to handle answer from friend: ${friendId.slice(0, 15)}…`, err);
+        }
+    }, [flushPendingCandidates]);
+
+    /** Handle ICE candidate from friend. */
+    const handleIceCandidate = useCallback(async (friendId: string, candidate: RTCIceCandidateInit) => {
+        const pc = peerConnectionsRef.current.get(friendId);
+        if (!candidate?.candidate) {
+            return;
+        }
+        if (!registerCandidate(friendId, candidate)) {
+            return;
+        }
+        if (pc && pc.remoteDescription) {
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (err) {
+                console.warn(`[DmWebRTC] Failed to add ICE candidate for friend: ${friendId.slice(0, 15)}…`, err);
+            }
+            return;
+        }
+        const buffered = pendingCandidatesRef.current.get(friendId) || [];
+        buffered.push(candidate);
+        pendingCandidatesRef.current.set(friendId, buffered);
+    }, [registerCandidate]);
 
     /** Connect to a friend: create Y.Doc, open WS, run Yjs sync protocol. */
     const connectToFriend = useCallback((friendId: string) => {
@@ -144,10 +333,22 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 // Sync step 1: send our state vector to peer
                 const sv = DmYjsManager.getEncodedStateVector(roomId);
                 sendYjsPayload(ws, friendId, { _yjs: 'sv', data: sv });
+
+                const existing = heartbeatTimersRef.current.get(friendId);
+                if (existing) clearInterval(existing);
+                const timer = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send("ping");
+                    }
+                }, 25000);
+                heartbeatTimersRef.current.set(friendId, timer);
             };
 
             ws.onmessage = (event) => {
                 try {
+                    if (event.data === "pong") {
+                        return;
+                    }
                     const msg = JSON.parse(event.data);
 
                     // When friend joins/reconnects: re-send state vector for sync
@@ -159,6 +360,35 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
                     if (msg.type === 'Typing' && msg.from === friendId) {
                         typingCallbacksRef.current.forEach(cb => cb(friendId, !!msg.typing));
+                        return;
+                    }
+
+                    if (msg.type === 'Profile' && msg.from === friendId) {
+                        const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+                        profileCallbacksRef.current.forEach(cb =>
+                            cb(friendId, payload.username, payload.avatarSeed, payload.avatarUrl)
+                        );
+                        return;
+                    }
+
+                    // Handle WebRTC signaling
+                    if (msg.type === 'Offer' && msg.from === friendId) {
+                        console.log(`[DmWebRTC] Received offer from ${friendId.slice(0, 15)}…`);
+                        const offer = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+                        handleWebRTCOffer(friendId, offer);
+                        return;
+                    }
+
+                    if (msg.type === 'Answer' && msg.from === friendId) {
+                        console.log(`[DmWebRTC] Received answer from ${friendId.slice(0, 15)}…`);
+                        const answer = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+                        handleWebRTCAnswer(friendId, answer);
+                        return;
+                    }
+
+                    if (msg.type === 'IceCandidate' && msg.from === friendId) {
+                        const candidate = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+                        handleIceCandidate(friendId, candidate);
                         return;
                     }
 
@@ -185,6 +415,10 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
                         // Notify if new messages arrived and this DM is not active
                         if (countAfter > countBefore) {
+                            try {
+                                new Audio('/sounds/message.mp3').play().catch(() => { });
+                            } catch (e) { }
+
                             const state = useSessionStore.getState();
                             if (state.activeDmFriend?.id !== friendId) {
                                 state.setHasNewDmMessage(true);
@@ -195,6 +429,9 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
                         // Legacy pre-Yjs chat message — migrate into Y.Doc
                         const existingMap = DmYjsManager.getMessagesMap(roomId);
                         if (!existingMap.has(payload.id)) {
+                            try {
+                                new Audio('/sounds/message.mp3').play().catch(() => { });
+                            } catch (e) { }
                             DmYjsManager.addMessage(roomId, {
                                 id: payload.id,
                                 senderId: friendId,
@@ -205,6 +442,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
                                 order: Date.now(),
                                 content: payload.content,
                                 isVerified: payload.isVerified || false,
+                                isEdited: false,
                                 replyToId: payload.replyToMessage?.id || null,
                                 replyToContent: payload.replyToMessage?.content || null,
                                 replyToSenderName: payload.replyToMessage?.username || null,
@@ -224,6 +462,11 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
             ws.onclose = (event) => {
                 console.log(`[DmYjs] Connection closed for friend: ${friendId}`, event.code);
                 connectionsRef.current.delete(friendId);
+                const heartbeatTimer = heartbeatTimersRef.current.get(friendId);
+                if (heartbeatTimer) {
+                    clearInterval(heartbeatTimer);
+                    heartbeatTimersRef.current.delete(friendId);
+                }
 
                 // Auto-reconnect on abnormal closure if friend is still in list
                 if (event.code === 1006 || event.code === 1001) {
@@ -284,6 +527,8 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return () => {
             for (const [, ws] of connectionsRef.current) ws.close();
             connectionsRef.current.clear();
+            for (const [, timer] of heartbeatTimersRef.current) clearInterval(timer);
+            heartbeatTimersRef.current.clear();
             for (const [, cleanups] of cleanupRef.current) cleanups.forEach(fn => fn());
             cleanupRef.current.clear();
             for (const [, timer] of reconnectTimersRef.current) clearTimeout(timer);
@@ -313,6 +558,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
             ...message,
             senderId: myPeerId,
             order: Date.now(),
+            isEdited: false,
             replyToId: message.replyToId ?? null,
             replyToContent: message.replyToContent ?? null,
             replyToSenderName: message.replyToSenderName ?? null,
@@ -356,9 +602,162 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
         };
     }, []);
 
+    /** Subscribe to profile events from any friend. */
+    const onProfile = useCallback((callback: (friendId: string, username: string, avatarSeed: string, avatarUrl: string | null) => void) => {
+        profileCallbacksRef.current.add(callback);
+        return () => {
+            profileCallbacksRef.current.delete(callback);
+        };
+    }, []);
+
+    /** Get active data channel for file transfers with a friend. */
+    const getDataChannel = useCallback((friendId: string) => {
+        return dataChannelsRef.current.get(friendId) || null;
+    }, []);
+
+    /** Register callback for new data channels. */
+    const onDataChannel = useCallback((callback: (channel: RTCDataChannel, from: string) => void) => {
+        dataChannelCallbackRef.current = callback;
+        return () => {
+            dataChannelCallbackRef.current = null;
+        };
+    }, []);
+
+    const waitForWebSocketOpen = useCallback(async (friendId: string, timeoutMs = 20000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            const ws = connectionsRef.current.get(friendId);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                return ws;
+            }
+            if (!ws || ws.readyState === WebSocket.CLOSED) {
+                connectToFriend(friendId);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        return null;
+    }, [connectToFriend]);
+
+    /** Initialize WebRTC connection for file transfers with a friend. */
+    const initWebRTC = useCallback(async (friendId: string) => {
+        const myPeerId = peerIdRef.current;
+        if (!myPeerId) return;
+
+        const existingPc = peerConnectionsRef.current.get(friendId);
+        if (existingPc && existingPc.signalingState !== 'closed') {
+            return;
+        }
+        if (existingPc && existingPc.signalingState === 'closed') {
+            peerConnectionsRef.current.delete(friendId);
+        }
+
+        const ws = await waitForWebSocketOpen(friendId);
+        if (!ws) {
+            console.warn(`[DmWebRTC] WebSocket not ready for friend: ${friendId.slice(0, 15)}…`);
+            return;
+        }
+
+        const preExistingPc = peerConnectionsRef.current.get(friendId);
+        if (preExistingPc && preExistingPc.signalingState !== 'closed') {
+            return;
+        }
+        if (preExistingPc && preExistingPc.signalingState === 'closed') {
+            peerConnectionsRef.current.delete(friendId);
+        }
+
+        console.log(`[DmWebRTC] Initializing WebRTC connection for friend: ${friendId.slice(0, 15)}…`);
+
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+            ]
+        };
+
+        const pc = new RTCPeerConnection(config);
+        peerConnectionsRef.current.set(friendId, pc);
+        if (typeof window !== 'undefined') {
+            const globalConnections = (window as any).__peerConnections as Map<string, RTCPeerConnection> | undefined;
+            if (globalConnections) {
+                globalConnections.set(friendId, pc);
+            } else {
+                (window as any).__peerConnections = new Map([[friendId, pc]]);
+            }
+        }
+
+        const dataChannel = pc.createDataChannel('file-transfer', { ordered: true });
+        dataChannelsRef.current.set(friendId, dataChannel);
+        const channelMap = (pc as any).dataChannels || new Map<string, RTCDataChannel>();
+        channelMap.set(friendId, dataChannel);
+        (pc as any).dataChannels = channelMap;
+
+        dataChannel.onopen = () => {
+            console.log(`[DmWebRTC] Data channel opened for friend: ${friendId.slice(0, 15)}…`);
+            dataChannelCallbackRef.current?.(dataChannel, friendId);
+        };
+
+        dataChannel.onclose = () => {
+            console.log(`[DmWebRTC] Data channel closed for friend: ${friendId.slice(0, 15)}…`);
+            dataChannelsRef.current.delete(friendId);
+        };
+
+        dataChannel.onerror = (err) => {
+            if (dataChannel.readyState === 'closing' || dataChannel.readyState === 'closed') {
+                return;
+            }
+            console.error(`[DmWebRTC] Data channel error for friend: ${friendId.slice(0, 15)}…`, err);
+        };
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'IceCandidate',
+                        from: myPeerId,
+                        to: friendId,
+                        payload: JSON.stringify(event.candidate),
+                    }));
+                }
+            }
+        };
+
+        pc.ondatachannel = (event) => {
+            const incomingChannel = event.channel;
+            if (incomingChannel.label === 'file-transfer') {
+                dataChannelsRef.current.set(friendId, incomingChannel);
+                const channelMap = (pc as any).dataChannels || new Map<string, RTCDataChannel>();
+                channelMap.set(friendId, incomingChannel);
+                (pc as any).dataChannels = channelMap;
+                incomingChannel.onopen = () => {
+                    console.log(`[DmWebRTC] Incoming data channel opened for friend: ${friendId.slice(0, 15)}…`);
+                    dataChannelCallbackRef.current?.(incomingChannel, friendId);
+                };
+                incomingChannel.onclose = () => {
+                    console.log(`[DmWebRTC] Incoming data channel closed for friend: ${friendId.slice(0, 15)}…`);
+                    dataChannelsRef.current.delete(friendId);
+                };
+                incomingChannel.onerror = (err) => {
+                    console.error(`[DmWebRTC] Incoming data channel error for friend: ${friendId.slice(0, 15)}…`, err);
+                };
+            }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'Offer',
+                from: myPeerId,
+                to: friendId,
+                payload: JSON.stringify(offer),
+            }));
+        }
+    }, [waitForWebSocketOpen]);
+
     const value = React.useMemo(
-        () => ({ sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping }),
-        [sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping]
+        () => ({ sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping, onProfile, getDataChannel, onDataChannel, initWebRTC }),
+        [sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping, onProfile, getDataChannel, onDataChannel, initWebRTC]
     );
 
     return (

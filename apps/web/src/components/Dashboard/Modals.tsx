@@ -7,6 +7,7 @@ import {
 } from './Icons';
 import { AvatarCropModal } from '../AvatarCropModal';
 import { useSessionStore } from '../../stores/sessionStore';
+import { deepCleanAccountData } from '../../utils/accountUtils';
 
 interface ModalProps {
     onClose: () => void;
@@ -436,6 +437,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
+    const handleDeleteAccount = async () => {
+        await deepCleanAccountData();
+    };
+
     // Preferences State
     const [convertEmoticons, setConvertEmoticons] = useState(true);
     const [blurImages, setBlurImages] = useState(true);
@@ -799,23 +804,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                 )}
                                             </span>
                                             <div className="flex flex-row gap-1">
-                                                <button 
+                                                <button
                                                     className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
                                                     onClick={() => document.getElementById('_r_av_')?.click()}
                                                 >
                                                     Change
                                                 </button>
-                                                <button 
+                                                <button
                                                     className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3"
                                                     onClick={() => setCroppedAvatarUrl('')}
                                                 >
                                                     Remove
                                                 </button>
                                             </div>
-                                            <input 
-                                                className="hidden" 
-                                                id="_r_av_" 
-                                                type="file" 
+                                            <input
+                                                className="hidden"
+                                                id="_r_av_"
+                                                type="file"
                                                 accept="image/*"
                                                 onChange={handleAvatarInputChange}
                                             />
@@ -1022,8 +1027,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                 isOpen={showDeleteModal}
                 onClose={() => setShowDeleteModal(false)}
                 onDelete={() => {
-                    setShowDeleteModal(false);
-                    onClose();
+                    handleDeleteAccount();
                 }}
             />
             {showAvatarCropModal && (

@@ -136,17 +136,38 @@ export function useCrypto() {
         return session;
     }, [getSignalProtocol]);
 
+    const normalizeBytes = useCallback((input: any): Uint8Array => {
+        if (input instanceof Uint8Array) return input;
+        if (input instanceof ArrayBuffer) return new Uint8Array(input);
+        if (Array.isArray(input)) return Uint8Array.from(input);
+        if (input && typeof input === 'object') {
+            if (input.buffer instanceof ArrayBuffer) {
+                return new Uint8Array(input.buffer, input.byteOffset ?? 0, input.byteLength ?? undefined);
+            }
+            if (Array.isArray((input as any).data)) {
+                return Uint8Array.from((input as any).data);
+            }
+        }
+        throw new Error('Unsupported ciphertext format');
+    }, []);
+
     const encryptMessage = useCallback((peerId: string, plaintext: string) => {
         const session = signalSessionsRef.current[peerId];
         if (!session) throw new Error(`No Signal session for ${peerId}`);
         const data = new TextEncoder().encode(plaintext);
-        return session.encrypt(data);
-    }, []);
+        const raw = session.encrypt(data);
+        return normalizeBytes(raw);
+    }, [normalizeBytes]);
 
     const decryptMessage = useCallback((peerId: string, ciphertext: Uint8Array) => {
         const session = signalSessionsRef.current[peerId];
         if (!session) throw new Error(`No Signal session for ${peerId}`);
-        return session.decrypt(ciphertext);
+        const payload = normalizeBytes(ciphertext);
+        return session.decrypt(payload);
+    }, [normalizeBytes]);
+
+    const hasSignalSession = useCallback((peerId: string) => {
+        return !!signalSessionsRef.current[peerId];
     }, []);
 
     const generateSessionKey = useCallback((): string => {
@@ -184,6 +205,14 @@ export function useCrypto() {
         }
     }, []);
 
+    const clearSignalSession = useCallback((peerId: string) => {
+        if (!signalSessionsRef.current[peerId]) return;
+        const next = { ...signalSessionsRef.current };
+        delete next[peerId];
+        signalSessionsRef.current = next;
+        setSignalSessionVersion(v => v + 1);
+    }, []);
+
     const clearSessionKey = useCallback(() => {
         setSessionKey(null);
         if (typeof window !== 'undefined') {
@@ -207,7 +236,9 @@ export function useCrypto() {
         respondToSignalSession,
         encryptMessage,
         decryptMessage,
+        hasSignalSession,
         clearSignalSessions,
+        clearSignalSession,
         clearSessionKey,
         clearAllCryptoData,
     };

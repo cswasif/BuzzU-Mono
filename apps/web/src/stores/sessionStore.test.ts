@@ -134,7 +134,7 @@ describe('sessionStore', () => {
   describe('friends', () => {
     it('handles friend request flow', () => {
       const store = useSessionStore.getState();
-      store.handleReceivedFriendRequest({ id: 'peer_A', username: 'Alice', avatarSeed: 'seed_a' });
+      store.handleReceivedFriendRequest({ id: 'peer_A', username: 'Alice', avatarSeed: 'seed_a', avatarUrl: null });
       expect(useSessionStore.getState().friendRequestsReceived['peer_A']).toBeDefined();
 
       useSessionStore.getState().acceptFriendRequest('peer_A');
@@ -145,17 +145,17 @@ describe('sessionStore', () => {
     });
 
     it('prevents duplicate friend adds', () => {
-      useSessionStore.getState().handleReceivedFriendRequest({ id: 'peer_A', username: 'Alice', avatarSeed: 'seed_a' });
+      useSessionStore.getState().handleReceivedFriendRequest({ id: 'peer_A', username: 'Alice', avatarSeed: 'seed_a', avatarUrl: null });
       useSessionStore.getState().acceptFriendRequest('peer_A');
 
       // Try to accept again (should not add duplicate)
-      useSessionStore.getState().handleReceivedFriendRequest({ id: 'peer_A', username: 'Alice', avatarSeed: 'seed_a' });
+      useSessionStore.getState().handleReceivedFriendRequest({ id: 'peer_A', username: 'Alice', avatarSeed: 'seed_a', avatarUrl: null });
       useSessionStore.getState().acceptFriendRequest('peer_A');
       expect(useSessionStore.getState().friendList).toHaveLength(1);
     });
 
     it('removeFriend cleans up DMs', () => {
-      useSessionStore.getState().handleReceivedFriendRequest({ id: 'peer_B', username: 'Bob', avatarSeed: 'seed_b' });
+      useSessionStore.getState().handleReceivedFriendRequest({ id: 'peer_B', username: 'Bob', avatarSeed: 'seed_b', avatarUrl: null });
       useSessionStore.getState().acceptFriendRequest('peer_B');
       useSessionStore.getState().addDmMessage('peer_B', {
         id: 'msg_1', username: 'Bob', avatarSeed: 'seed_b', avatarUrl: null,

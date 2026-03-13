@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext, useParams } from 'react-router-dom';
+import { useOutletContext, useParams, useLocation } from 'react-router-dom';
 import MainContent from '../components/Dashboard_Updated/MainContent';
 
 /**
@@ -9,6 +9,8 @@ import MainContent from '../components/Dashboard_Updated/MainContent';
  * Routes:
  *   /chat/new          → Dashboard (search UI)
  *   /chat/new/:roomId  → Active matched chat (reconnects to room)
+ *   /chat/text         → Text chat mode (alias for /chat/new in chat mode)
+ *   /chat/text/:roomId → Active matched chat with room reconnect
  */
 
 interface DashboardOutletContext {
@@ -19,25 +21,27 @@ interface DashboardOutletContext {
 export const ChatNewPage: React.FC = () => {
     const { setHideChrome, setShowInterestsModal } = useOutletContext<DashboardOutletContext>();
     const { roomId } = useParams<{ roomId?: string }>();
+    const location = useLocation();
 
-    // If roomId is in the URL, go straight to chat (reconnect mode)
-    const [activeArea, setActiveArea] = useState<'main' | 'chat' | 'video'>(roomId ? 'chat' : 'main');
+    // Derive activeArea from URL path
+    const getInitialArea = (): 'main' | 'chat' => {
+        const path = location.pathname;
+        if (path.startsWith('/chat/text')) return 'chat';
+        if (roomId) return 'chat';
+        return 'main';
+    };
 
-    // When roomId appears in URL, switch to chat view.
-    // We intentionally do NOT reset to 'main' when roomId disappears,
-    // because ChatArea manages its own connection states (skipped, searching, idle).
-    // The 'main' view is restored by: initial useState, or the sidebar 'new-chat-clicked' event.
+    const [activeArea, setActiveArea] = useState<'main' | 'chat'>(getInitialArea);
+
+    // When URL changes, update activeArea accordingly
     useEffect(() => {
-        if (roomId) {
+        const path = location.pathname;
+        if (path.startsWith('/chat/text')) {
+            setActiveArea('chat');
+        } else if (roomId) {
             setActiveArea('chat');
         }
-    }, [roomId]);
-
-    // Hide the shared layout chrome when in video mode
-    useEffect(() => {
-        setHideChrome(activeArea === 'video');
-        return () => setHideChrome(false);
-    }, [activeArea, setHideChrome]);
+    }, [location.pathname, roomId]);
 
     // "New Chat" from sidebar resets to main dashboard
     useEffect(() => {

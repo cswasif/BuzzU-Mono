@@ -42,10 +42,47 @@ export const UserMediaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     height: { ideal: 720 },
                     facingMode: 'user'
                 },
-                audio: true
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    // goog-prefixed flags for Chromium stability
+                    googEchoCancellation: true,
+                    googAutoGainControl: true,
+                    googNoiseSuppression: true,
+                    googHighpassFilter: true,
+                } as any
             });
 
             console.log("[UserMediaContext] getUserMedia success");
+
+            // ── Safari/iOS Audio Kickstart ──────────────────────────
+            // On iOS/Safari, WebRTC audio often starts silent or routes 
+            // to the earpiece unless a 'user-initiated' audio play occurs.
+            // We prime the audio routing with a 50ms silent buffer.
+            const kickstartAudio = () => {
+                try {
+                    const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+                    if (AudioContext) {
+                        const ctx = new AudioContext();
+                        const oscillator = ctx.createOscillator();
+                        const gainNode = ctx.createGain();
+                        gainNode.gain.value = 0; // Silent
+                        oscillator.connect(gainNode);
+                        gainNode.connect(ctx.destination);
+                        oscillator.start(0);
+                        setTimeout(() => {
+                            oscillator.stop();
+                            ctx.close();
+                        }, 50);
+                        console.log("[UserMediaContext] Safari audio kickstart triggered");
+                    }
+                } catch (e) {
+                    console.warn("[UserMediaContext] Audio kickstart failed:", e);
+                }
+            };
+            kickstartAudio();
+
             streamRef.current = mediaStream;
             setStream(mediaStream);
             setPermissionState('granted');

@@ -28,6 +28,7 @@ export interface YjsMessageData {
     replyToId: string | null;
     replyToContent: string | null;
     replyToSenderName: string | null;
+    isEdited?: boolean;
 }
 
 /** Encode Uint8Array to base64 string for WebSocket transport. */
@@ -113,7 +114,7 @@ class DmYjsManagerClass {
             const map = doc.getMap<YjsMessageData>('messages');
             const existing = map.get(messageId);
             if (existing) {
-                map.set(messageId, { ...existing, content: newContent });
+                map.set(messageId, { ...existing, content: newContent, isEdited: true });
                 console.log(`[DmYjs] ✏️ Message edited | room=${roomId} id=${messageId}`);
             } else {
                 console.warn(`[DmYjs] ⚠️ Edit failed — message not found | room=${roomId} id=${messageId}`);

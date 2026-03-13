@@ -23,7 +23,9 @@ export function usePWA() {
     } = useRegisterSW({
         onRegistered(r) {
             if (isMountedRef.current) {
-                console.log('SW Registered: ', r);
+                if (import.meta.env.DEV) {
+                    console.log('SW Registered: ', r);
+                }
             }
         },
         onRegisterError(error) {
@@ -45,14 +47,18 @@ export function usePWA() {
             // Prevent Chrome 67 and earlier from automatically showing the prompt
             e.preventDefault();
             // Stash the event so it can be triggered later.
-            console.log('App is installable. Stashing prompt.');
+            if (import.meta.env.DEV) {
+                console.log('App is installable. Stashing prompt.');
+            }
             setDeferredPrompt(e as BeforeInstallPromptEvent);
             setIsInstallable(true);
         };
 
         const handleAppInstalled = () => {
             if (!isMountedRef.current) return;
-            console.log('App was installed successfully');
+            if (import.meta.env.DEV) {
+                console.log('App was installed successfully');
+            }
             setIsInstallable(false);
             setDeferredPrompt(null);
         };
@@ -76,9 +82,13 @@ export function usePWA() {
         const { outcome } = await deferredPrompt.userChoice;
 
         if (outcome === 'accepted') {
-            console.log('User accepted the install prompt');
+            if (import.meta.env.DEV) {
+                console.log('User accepted the install prompt');
+            }
         } else {
-            console.log('User dismissed the install prompt');
+            if (import.meta.env.DEV) {
+                console.log('User dismissed the install prompt');
+            }
         }
 
         // Clear the deferred prompt, it can only be used once.

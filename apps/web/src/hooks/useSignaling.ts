@@ -9,6 +9,7 @@ import { useSessionStore } from "../stores/sessionStore";
 export function useSignaling() {
   const context = useSignalingContext();
   const { peerId, avatarSeed } = useSessionStore();
+  const typingStateRef = useRef<Record<string, boolean | undefined>>({});
 
   // Legacy callback refs for backward compatibility
   const offerCallbackRef = useRef<
@@ -37,11 +38,12 @@ export function useSignaling() {
   >(null);
   const friendRequestCallbackRef = useRef<
     | ((
-        action: "send" | "accept" | "decline",
-        from: string,
-        username?: string,
-        avatarSeed?: string,
-      ) => void)
+      action: "send" | "accept" | "decline",
+      from: string,
+      username?: string,
+      avatarSeed?: string,
+      avatarUrl?: string | null,
+    ) => void)
     | null
   >(null);
   const screenShareCallbackRef = useRef<
@@ -50,11 +52,26 @@ export function useSignaling() {
   const voiceChatCallbackRef = useRef<
     ((isMicOn: boolean, from: string) => void) | null
   >(null);
+  const profileCallbackRef = useRef<
+    | ((
+      from: string,
+      username?: string,
+      avatarSeed?: string,
+      avatarUrl?: string | null,
+    ) => void)
+    | null
+  >(null);
   const roomStatusCallbackRef = useRef<
     ((status: string, activePeers?: number, maxPeers?: number) => void) | null
   >(null);
   const editMessageCallbackRef = useRef<
     ((messageId: string, newContent: string, from: string) => void) | null
+  >(null);
+  const deleteMessageCallbackRef = useRef<
+    ((messageId: string, from: string) => void) | null
+  >(null);
+  const peerSkipCallbackRef = useRef<
+    ((from: string, reason?: string) => void) | null
   >(null);
 
   // Subscribe to context messages and trigger legacy callbacks
@@ -78,6 +95,10 @@ export function useSignaling() {
       }),
       context.onMessage("Leave", (msg) => {
         if (msg.peer_id) peerLeaveCallbackRef.current?.(msg.peer_id);
+      }),
+      context.onMessage("Skip", (msg) => {
+        console.log(`[useSignaling] Received skip message from ${msg.from}, reason: ${msg.reason}`);
+        if (msg.from) peerSkipCallbackRef.current?.(msg.from, msg.reason);
       }),
       context.onMessage("Chat", (msg) => {
         if (msg.from && msg.payload)
@@ -105,6 +126,7 @@ export function useSignaling() {
             msg.from,
             msg.username,
             msg.avatarSeed,
+            msg.avatarUrl ?? null,
           );
         }
       }),
@@ -119,6 +141,16 @@ export function useSignaling() {
           voiceChatCallbackRef.current?.(msg.sharing, msg.from);
         }
       }),
+      context.onMessage("Profile", (msg) => {
+        if (msg.from) {
+          profileCallbackRef.current?.(
+            msg.from,
+            msg.username,
+            msg.avatarSeed,
+            msg.avatarUrl ?? null,
+          );
+        }
+      }),
       context.onMessage("RoomStatus", (msg) => {
         if (msg.status) {
           roomStatusCallbackRef.current?.(
@@ -131,6 +163,11 @@ export function useSignaling() {
       context.onMessage("EditMessage", (msg) => {
         if (msg.from && msg.editId && msg.payload) {
           editMessageCallbackRef.current?.(msg.editId, msg.payload, msg.from);
+        }
+      }),
+      context.onMessage("DeleteMessage", (msg) => {
+        if (msg.from && msg.deleteId) {
+          deleteMessageCallbackRef.current?.(msg.deleteId, msg.from);
         }
       }),
     ];
@@ -189,20 +226,56 @@ export function useSignaling() {
 
   const sendTypingState = useCallback(
     (targetPeerId: string, isTyping: boolean) => {
-      console.log(
-        "[useSignaling] sendTypingState called - targetPeerId:",
-        targetPeerId,
-        "isTyping:",
-        isTyping,
-        "peerId:",
-        peerId,
-      );
+      const typingKey = targetPeerId || "__room__";
+      if (typingStateRef.current[typingKey] === isTyping) {
+        return;
+      }
+      typingStateRef.current[typingKey] = isTyping;
+      if (import.meta.env.DEV) {
+        console.log(
+          "[useSignaling] sendTypingState called - targetPeerId:",
+          targetPeerId,
+          "isTyping:",
+          isTyping,
+          "peerId:",
+          peerId,
+        );
+      }
       context.sendMessage({
         type: "Typing",
         from: peerId,
         to: targetPeerId,
         typing: isTyping,
+        avatarUrl: useSessionStore.getState().avatarUrl,
       });
+    },
+    [context, peerId],
+  );
+
+  const sendSkip = useCallback(
+    (targetPeerId: string, reason: string = "skip") => {
+      console.log(`[useSignaling] Sending skip message from ${peerId} to ${targetPeerId}, reason: ${reason}`);
+      context.sendMessage({
+        type: "Skip",
+        from: peerId,
+        to: targetPeerId,
+        reason,
+      });
+      
+      // Add a retry mechanism for skip messages to ensure delivery
+      // This is critical for user experience - partner should get instant notification
+      setTimeout(() => {
+        // Retry once after 500ms if connection is still active
+        if (context.isConnected) {
+          console.log(`[useSignaling] Retrying skip message from ${peerId} to ${targetPeerId}`);
+          context.sendMessage({
+            type: "Skip",
+            from: peerId,
+            to: targetPeerId,
+            reason,
+          });
+        }
+      }, 500);
     },
     [context, peerId],
   );
@@ -296,6 +369,7 @@ export function useSignaling() {
       action: "send" | "accept" | "decline",
       username?: string,
       avatarSeed?: string,
+      avatarUrl?: string | null,
     ) => {
       console.log(
         "[useSignaling] [Friend Request] Sending friend request to:",
@@ -310,6 +384,7 @@ export function useSignaling() {
         action,
         username,
         avatarSeed,
+        avatarUrl: avatarUrl ?? null,
       });
       console.log("[useSignaling] [Friend Request] FriendRequest message sent");
     },
@@ -347,6 +422,20 @@ export function useSignaling() {
     [context, peerId],
   );
 
+  const sendDeleteMessage = useCallback(
+    (targetPeerId: string, messageId: string) => {
+      console.log("[useSignaling] sendDeleteMessage called - targetPeerId:", targetPeerId, "messageId:", messageId, "peerId:", peerId);
+      context.sendMessage({
+        type: "DeleteMessage",
+        from: peerId,
+        to: targetPeerId,
+        deleteId: messageId,
+      });
+      console.log("[useSignaling] DeleteMessage message sent");
+    },
+    [context, peerId],
+  );
+
   const sendVoiceChatState = useCallback(
     (targetPeerId: string, isMicOn: boolean) => {
       console.log(
@@ -360,6 +449,27 @@ export function useSignaling() {
         from: peerId,
         to: targetPeerId,
         sharing: isMicOn,
+      });
+    },
+    [context, peerId],
+  );
+
+  const sendProfileUpdate = useCallback(
+    (
+      targetPeerId: string,
+      profile: {
+        username?: string;
+        avatarSeed?: string;
+        avatarUrl?: string | null;
+      },
+    ) => {
+      context.sendMessage({
+        type: "Profile",
+        from: peerId,
+        to: targetPeerId,
+        username: profile.username,
+        avatarSeed: profile.avatarSeed,
+        avatarUrl: profile.avatarUrl ?? null,
       });
     },
     [context, peerId],
@@ -379,7 +489,10 @@ export function useSignaling() {
     sendFriendRequest,
     sendScreenShareState,
     sendVoiceChatState,
+    sendProfileUpdate,
     sendEditMessage,
+    sendDeleteMessage,
+    sendSkip,
     // Callback setters
     onOffer: (cb: any) => {
       offerCallbackRef.current = cb;
@@ -396,6 +509,9 @@ export function useSignaling() {
     onPeerLeave: (cb: any) => {
       peerLeaveCallbackRef.current = cb;
     },
+    onPeerSkip: (cb: any) => {
+      peerSkipCallbackRef.current = cb;
+    },
     onChatMessage: (cb: any) => {
       chatMessageCallbackRef.current = cb;
     },
@@ -411,7 +527,7 @@ export function useSignaling() {
     onHandshake: (cb: any) => {
       handshakeCallbackRef.current = cb;
     },
-    onFriendRequest: (cb: any) => {
+    onFriendRequest: (cb: (action: "send" | "accept" | "decline", from: string, username?: string, avatarSeed?: string, avatarUrl?: string | null) => void) => {
       friendRequestCallbackRef.current = cb;
     },
     onScreenShare: (cb: (isSharing: boolean, from: string) => void) => {
@@ -419,6 +535,16 @@ export function useSignaling() {
     },
     onVoiceChat: (cb: (isMicOn: boolean, from: string) => void) => {
       voiceChatCallbackRef.current = cb;
+    },
+    onProfile: (
+      cb: (
+        from: string,
+        username?: string,
+        avatarSeed?: string,
+        avatarUrl?: string | null,
+      ) => void,
+    ) => {
+      profileCallbackRef.current = cb;
     },
     onRoomStatus: (
       cb: (status: string, activePeers?: number, maxPeers?: number) => void,
@@ -429,6 +555,11 @@ export function useSignaling() {
       cb: (messageId: string, newContent: string, from: string) => void,
     ) => {
       editMessageCallbackRef.current = cb;
+    },
+    onDeleteMessage: (
+      cb: (messageId: string, from: string) => void,
+    ) => {
+      deleteMessageCallbackRef.current = cb;
     },
     // Media stream methods from context
     onRemoteStream: (callback: (stream: MediaStream) => void) => {

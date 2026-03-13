@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { deepCleanAccountData } from "../../utils/accountUtils";
 
 /* ─── SVG Icons ─── */
 
@@ -218,10 +219,9 @@ export function MoreModal({ open, onClose }: MoreModalProps) {
         <LinkRow
           icon={<TrashIcon />}
           label="Delete Account"
-          onClick={() => {
+          onClick={async () => {
             if (confirm("Are you sure you want to delete your account? This will reset your profile and history.")) {
-              window.localStorage.clear();
-              window.location.reload();
+              await deepCleanAccountData();
             }
           }}
         />

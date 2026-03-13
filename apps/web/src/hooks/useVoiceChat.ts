@@ -11,7 +11,7 @@
  * unlike screen share's raw system audio.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useVoiceChatStore } from '../stores/voiceChatStore';
 
 // ── Voice-optimized audio constraints ───────────────────────────────
@@ -43,11 +43,10 @@ export interface UseVoiceChatResult {
     isMicActive: boolean;
     startMic: (
         pc: RTCPeerConnection,
-        sendOffer: (offer: RTCSessionDescriptionInit) => void,
+        requestRenegotiation: () => Promise<void>,
     ) => Promise<void>;
     stopMic: (
         pc: RTCPeerConnection,
-        sendOffer: (offer: RTCSessionDescriptionInit) => void,
     ) => void;
     /** Detach from PC without killing the mic (for partner skip) */
     detachFromPC: () => void;
@@ -56,7 +55,7 @@ export interface UseVoiceChatResult {
     /** Re-attach existing mic to a new PC and renegotiate */
     reattachToPC: (
         pc: RTCPeerConnection,
-        sendOffer: (offer: RTCSessionDescriptionInit) => void,
+        requestRenegotiation: () => Promise<void>,
     ) => Promise<boolean>;
 }
 
@@ -79,6 +78,40 @@ export function useVoiceChat(): UseVoiceChatResult {
     const inputDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
     const inputAnalyserRef = useRef<AnalyserNode | null>(null);
     const gateRafRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState !== 'visible') return;
+
+            const stream = streamRef.current;
+            if (stream) {
+                const audioTrack = stream.getAudioTracks()[0];
+                if (audioTrack && audioTrack.readyState === 'live' && !audioTrack.enabled) {
+                    audioTrack.enabled = true;
+                }
+            }
+
+            const ctx = inputAudioContextRef.current;
+            if (ctx && ctx.state === 'suspended') {
+                ctx.resume().catch(() => {
+                    const resumeOnInteraction = () => {
+                        ctx.resume().catch(() => { });
+                        document.removeEventListener('click', resumeOnInteraction);
+                        document.removeEventListener('touchstart', resumeOnInteraction);
+                    };
+                    document.addEventListener('click', resumeOnInteraction, { once: true });
+                    document.addEventListener('touchstart', resumeOnInteraction, { once: true });
+                });
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibility);
+        window.addEventListener('focus', handleVisibility);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibility);
+            window.removeEventListener('focus', handleVisibility);
+        };
+    }, []);
 
     // Generation counter to invalidate stale event listeners across PC recreation
     const pcGenerationRef = useRef(0);
@@ -163,7 +196,7 @@ export function useVoiceChat(): UseVoiceChatResult {
 
     const _removeTrackFromPC = useCallback(async (
         pc: RTCPeerConnection,
-        sendOffer: (offer: RTCSessionDescriptionInit) => void,
+        requestRenegotiation: () => Promise<void>,
         sender: RTCRtpSender | null,
     ) => {
         try {
@@ -171,14 +204,7 @@ export function useVoiceChat(): UseVoiceChatResult {
                 try { pc.removeTrack(sender); } catch (_) { /* already removed */ }
             }
 
-            // Renegotiate if signaling state allows
-            if (pc.signalingState === 'stable') {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                sendOffer(offer);
-            } else if (pc.signalingState !== 'closed') {
-                console.warn('[useVoiceChat] Skipping renegotiation — signalingState:', pc.signalingState);
-            }
+            await requestRenegotiation();
         } catch (err) {
             console.error('[useVoiceChat] Failed to remove track and renegotiate:', err);
         }
@@ -187,7 +213,7 @@ export function useVoiceChat(): UseVoiceChatResult {
     // ── Start Mic ─────────────────────────────────────────────────────
     const startMic = useCallback(async (
         pc: RTCPeerConnection,
-        sendOffer: (offer: RTCSessionDescriptionInit) => void,
+        requestRenegotiation: () => Promise<void>,
     ) => {
         if (streamRef.current) {
             console.log('[useVoiceChat] Mic stream already exists, soft unmuting');
@@ -234,13 +260,7 @@ export function useVoiceChat(): UseVoiceChatResult {
                 audioSenderRef.current = sender;
                 await tuneAudioSender(sender);
 
-                if (pc.signalingState === 'stable') {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    sendOffer(offer);
-                } else {
-                    console.warn('[useVoiceChat] Deferring renegotiation — signalingState:', pc.signalingState);
-                }
+                await requestRenegotiation();
             }
 
             return;
@@ -386,18 +406,11 @@ export function useVoiceChat(): UseVoiceChatResult {
                 cleanupInFlightRef.current = true;
                 const senderSnapshot = audioSenderRef.current;
                 _cleanupStream();
-                _removeTrackFromPC(pc, sendOffer, senderSnapshot);
+                _removeTrackFromPC(pc, requestRenegotiation, senderSnapshot);
                 setTimeout(() => { cleanupInFlightRef.current = false; }, 0);
             });
 
-            // Renegotiate
-            if (pc.signalingState === 'stable') {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                sendOffer(offer);
-            } else {
-                console.warn('[useVoiceChat] Deferring renegotiation — signalingState:', pc.signalingState);
-            }
+            await requestRenegotiation();
 
             setIsMicActive(true);
             useVoiceChatStore.getState().setMicOn(stream);
@@ -416,7 +429,6 @@ export function useVoiceChat(): UseVoiceChatResult {
     // ── Stop Mic ──────────────────────────────────────────────────────
     const stopMic = useCallback((
         pc: RTCPeerConnection,
-        sendOffer: (offer: RTCSessionDescriptionInit) => void,
     ) => {
         console.log('[useVoiceChat] Stopping mic (soft mute)');
         if (streamRef.current) {
@@ -443,7 +455,7 @@ export function useVoiceChat(): UseVoiceChatResult {
     // ── Reattach to new PC ────────────────────────────────────────────
     const reattachToPC = useCallback(async (
         pc: RTCPeerConnection,
-        sendOffer: (offer: RTCSessionDescriptionInit) => void,
+        requestRenegotiation: () => Promise<void>,
     ): Promise<boolean> => {
         const stream = streamRef.current;
         if (!stream) {
@@ -479,20 +491,11 @@ export function useVoiceChat(): UseVoiceChatResult {
             cleanupInFlightRef.current = true;
             const senderSnapshot = audioSenderRef.current;
             _cleanupStream();
-            _removeTrackFromPC(pc, sendOffer, senderSnapshot);
+            _removeTrackFromPC(pc, requestRenegotiation, senderSnapshot);
             setTimeout(() => { cleanupInFlightRef.current = false; }, 0);
         });
 
-        // Renegotiate
-        if (pc.signalingState === 'stable') {
-            try {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                sendOffer(offer);
-            } catch (err) {
-                console.warn('[useVoiceChat] reattach: renegotiation failed:', err);
-            }
-        }
+        await requestRenegotiation();
 
         console.log('[useVoiceChat] Successfully re-attached mic to new PC');
         return true;

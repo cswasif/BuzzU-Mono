@@ -51,15 +51,20 @@ export default defineConfig(({ mode }) => {
         injectRegister: "auto",
         includeAssets: ["favicon.ico", "pwa-icon.svg"],
         manifest: {
+          id: "/",
           name: "BuzzU - Anonymous Chat",
           short_name: "BuzzU",
           description: "The premier anonymous chatting platform",
+          start_url: "/",
+          lang: "en-US",
+          dir: "ltr",
           theme_color: "#09090b",
           background_color: "#09090b",
           display: "standalone",
           display_override: ["fullscreen", "standalone"],
           orientation: "any",
           scope: "/",
+          prefer_related_applications: false,
           categories: ["social", "communication"],
           icons: [
             {
@@ -69,10 +74,36 @@ export default defineConfig(({ mode }) => {
               purpose: "any maskable",
             },
           ],
+          shortcuts: [
+            {
+              name: "Start matching",
+              short_name: "Match",
+              description: "Open BuzzU and start matching instantly",
+              url: "/chat/new",
+            },
+          ],
+          screenshots: [
+            {
+              src: "/mobile1.png",
+              sizes: "1080x1920",
+              type: "image/png",
+              form_factor: "narrow",
+              label: "BuzzU mobile chat interface",
+            },
+            {
+              src: "/desktop1.png",
+              sizes: "1920x1080",
+              type: "image/png",
+              form_factor: "wide",
+              label: "BuzzU desktop chat interface",
+            },
+          ],
         },
         workbox: {
           globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          cleanupOutdatedCaches: true,
+          navigateFallback: "/index.html",
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -116,6 +147,35 @@ export default defineConfig(({ mode }) => {
                 },
               },
             },
+            {
+              urlPattern: /^https:\/\/api\.dicebear\.com\/.*/i,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "dicebear-cache",
+                expiration: {
+                  maxEntries: 80,
+                  maxAgeSeconds: 60 * 60 * 24 * 30,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/api\.klipy\.com\/.*/i,
+              handler: "NetworkFirst",
+              options: {
+                cacheName: "klipy-api-cache",
+                networkTimeoutSeconds: 5,
+                expiration: {
+                  maxEntries: 40,
+                  maxAgeSeconds: 60 * 60 * 12,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
           ],
         },
         devOptions: {
@@ -153,6 +213,7 @@ export default defineConfig(({ mode }) => {
       watch: false,
       globals: true,
       environment: "jsdom",
+      setupFiles: ["src/test/setup.ts"],
       exclude: ["**/e2e/**", "**/node_modules/**"],
       passWithNoTests: true,
     },

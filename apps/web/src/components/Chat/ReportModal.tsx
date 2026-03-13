@@ -7,6 +7,7 @@ interface ReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   message: Message | null;
+  onSubmit?: (reason: string) => void;
 }
 
 const REASONS = [
@@ -18,11 +19,19 @@ const REASONS = [
   'Other'
 ];
 
-export function ReportModal({ isOpen, onClose, message }: ReportModalProps) {
+export function ReportModal({ isOpen, onClose, message, onSubmit }: ReportModalProps) {
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   if (!isOpen || !message) return null;
+
+  const handleSubmit = () => {
+    if (selectedReason && onSubmit) {
+      onSubmit(selectedReason);
+    }
+    setSelectedReason(null);
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4">
@@ -135,6 +144,7 @@ export function ReportModal({ isOpen, onClose, message }: ReportModalProps) {
             Cancel
           </button>
           <button
+            onClick={handleSubmit}
             disabled={!selectedReason}
             className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 px-4 py-2"
           >

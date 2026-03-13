@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MessageSquare, Users, Crown, Volume2, Settings, MoreHorizontal, X, UserPlus, Maximize2, Minimize2 } from 'lucide-react';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useSignalingContext } from '../../context/SignalingContext';
 
 const AVATAR_BASE = 'https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80';
 
@@ -10,7 +11,8 @@ function avatarUrl(seed: string) {
 }
 
 export function Sidebar() {
-  const { avatarSeed, displayName, friendList, activeDmFriend, setDmFriend, hasNewDmMessage } = useSessionStore();
+  const { avatarSeed, avatarUrl: myCustomAvatarUrl, displayName, friendList, activeDmFriend, setDmFriend, hasNewDmMessage } = useSessionStore();
+  const { peersInRoom } = useSignalingContext();
   const [activeTab, setActiveTab] = React.useState<'chat' | 'friends'>('chat');
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
   const navigate = useNavigate();
@@ -37,14 +39,14 @@ export function Sidebar() {
   }, []);
 
   // Memoize avatar URLs to avoid Dicebear URL recomputation on every render
-  const myAvatarUrl = useMemo(() => avatarUrl(avatarSeed), [avatarSeed]);
+  const myAvatarUrl = useMemo(() => myCustomAvatarUrl || avatarUrl(avatarSeed), [avatarSeed, myCustomAvatarUrl]);
   const friendAvatarUrls = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const f of friendList) { map[f.id] = avatarUrl(f.avatarSeed); }
+    for (const f of friendList) { map[f.id] = f.avatarUrl || avatarUrl(f.avatarSeed); }
     return map;
   }, [friendList]);
 
-  const handleOpenDM = (friend: { id: string; username: string; avatarSeed: string }) => {
+  const handleOpenDM = (friend: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null }) => {
     setDmFriend(friend);
     navigate(`/chat/dm/${friend.id}`);
   };
@@ -151,10 +153,10 @@ export function Sidebar() {
                                 <img
                                   className="aspect-square h-full w-full"
                                   alt={friend.username}
-                                  src={avatarUrl(friend.avatarSeed)}
+                                  src={friendAvatarUrls[friend.id]}
                                 />
                               </span>
-                              <div className="absolute bg-black rounded-full ring-2 ring-zinc-700 h-2 w-2 bottom-0 right-0 mr-[1px] mb-[1px]"></div>
+                              <div className={`absolute rounded-full ring-2 ring-zinc-700 h-2 w-2 bottom-0 right-0 mr-[1px] mb-[1px] ${peersInRoom.includes(friend.id) ? 'bg-success' : 'bg-black'}`}></div>
                             </div>
                             <div className="w-36 overflow-hidden text-ellipsis whitespace-nowrap pl-2 pr-1 font-normal text-foreground focus:text-placeholder-foreground">{friend.username}</div>
                             <div className="flex-grow"></div>
@@ -197,7 +199,7 @@ export function Sidebar() {
                                     src={friendAvatarUrls[friend.id] || avatarUrl(friend.avatarSeed)}
                                   />
                                 </span>
-                                <div className="absolute bg-black rounded-full ring-2 ring-zinc-700 h-2 w-2 bottom-0 right-0 mr-[1px] mb-[1px]"></div>
+                                <div className={`absolute rounded-full ring-2 ring-zinc-700 h-2 w-2 bottom-0 right-0 mr-[1px] mb-[1px] ${peersInRoom.includes(friend.id) ? 'bg-success' : 'bg-black'}`}></div>
                               </div>
                               <div className="w-24 overflow-hidden text-ellipsis whitespace-nowrap pl-2 pr-1 font-normal text-foreground focus:text-placeholder-foreground">{friend.username}</div>
                               <div className="flex-grow"></div>

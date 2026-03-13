@@ -4,6 +4,42 @@ import { useOptimalStun, FALLBACK_STUN_SERVERS } from './useOptimalStun';
 const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || 'wss://buzzu-signaling.md-wasif-faisal.workers.dev';
 const SIGNAL_BASE_URL = SIGNALING_URL.replace(/^ws(s)?:\/\//, 'http$1://');
 
+const randomFloat = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        const buffer = new Uint32Array(1);
+        crypto.getRandomValues(buffer);
+        return buffer[0] / 0xffffffff;
+    }
+    return Math.random();
+};
+
+const computeBackoffMs = (attempt: number, maxMs: number) => {
+    const base = Math.min(1000 * Math.pow(2, attempt), maxMs);
+    const jitter = 0.7 + randomFloat() * 0.6;
+    return Math.round(base * jitter);
+};
+
+const logEvent = (level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown>) => {
+    const payload = { level, event, ts: Date.now(), ...data };
+    if (level === 'error') {
+        console.error(JSON.stringify(payload));
+    } else if (level === 'warn') {
+        console.warn(JSON.stringify(payload));
+    } else {
+        console.log(JSON.stringify(payload));
+    }
+};
+
+const fetchWithTimeout = async (url: string, timeoutMs: number) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
 export interface RTCIceServer {
     urls: string | string[];
     username?: string;
@@ -30,16 +66,33 @@ export function useIceServers() {
 
     const fetchTurnServers = useCallback(async () => {
         try {
-            const response = await fetch(`${SIGNAL_BASE_URL}/ice-servers`);
-            if (!response.ok) throw new Error('Failed to fetch TURN servers');
-
-            const data = await response.json();
-            if (data.iceServers) {
-                const cloudflareServers = data.iceServers as RTCIceServer[];
-                setTurnServers(cloudflareServers);
+            const maxAttempts = 4;
+            for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+                try {
+                    const response = await fetchWithTimeout(`${SIGNAL_BASE_URL}/ice-servers`, 4000);
+                    if (!response.ok) throw new Error(`Failed to fetch TURN servers: ${response.status}`);
+                    const data = await response.json();
+                    if (data.iceServers) {
+                        const cloudflareServers = data.iceServers as RTCIceServer[];
+                        setTurnServers(cloudflareServers);
+                    }
+                    return;
+                } catch (err) {
+                    if (attempt === maxAttempts - 1) throw err;
+                    const delayMs = computeBackoffMs(attempt + 1, 8000);
+                    logEvent('warn', 'turn_fetch_retry', {
+                        attempt: attempt + 1,
+                        delayMs,
+                        error: err instanceof Error ? err.message : String(err),
+                    });
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                }
             }
         } catch (err) {
             console.error('[useIceServers] Error fetching TURN servers:', err);
+            logEvent('error', 'turn_fetch_failed', {
+                error: err instanceof Error ? err.message : String(err),
+            });
             setTurnServers([]);
         } finally {
             setLoading(false);

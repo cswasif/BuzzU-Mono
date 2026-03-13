@@ -61,7 +61,7 @@ export function useCamera(): UseCameraResult {
       animationFrameRef.current = null;
     }
     if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current.close().catch(() => { });
       audioContextRef.current = null;
     }
     setAudioLevel(0);
@@ -112,9 +112,13 @@ export function useCamera(): UseCameraResult {
     const lowQualityMode = shouldUseLowQualityMode();
 
     const baseAudioConstraints = {
-      echoCancellation: { ideal: true },
-      noiseSuppression: { ideal: true },
-      autoGainControl: { ideal: true },
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      googEchoCancellation: true,
+      googAutoGainControl: true,
+      googNoiseSuppression: true,
+      googHighpassFilter: true,
       channelCount: { ideal: 1, max: 2 },
       sampleRate: { ideal: 48000, max: 48000 },
     };

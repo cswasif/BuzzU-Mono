@@ -41,3 +41,6 @@ apps/web/x-_-twitter-clone/
 # WASM build tooling installers
 packages/wasm/vs_buildtools.exe
 packages/wasm/vs_community.exe
+
+# Package manager stores
+.pnpm-store/
