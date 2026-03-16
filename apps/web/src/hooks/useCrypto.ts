@@ -227,6 +227,7 @@ export function useCrypto() {
 
     return {
         isReady: !!wasm,
+        signalSessionVersion,
         sessionKey,
         generateSessionKey,
         encrypt,

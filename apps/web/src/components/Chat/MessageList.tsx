@@ -16,7 +16,13 @@ interface MessageListProps {
   editingMessageId?: string | null;
   onSaveEdit?: (id: string, newContent: string) => void;
   onCancelEdit?: () => void;
-  onProfileClick?: (username: string, avatarSeed: string, avatarUrl?: string | null, isVerified?: boolean) => void;
+  onProfileClick?: (
+    username: string,
+    avatarSeed: string,
+    avatarUrl?: string | null,
+    isVerified?: boolean,
+    peerId?: string
+  ) => void;
   partnerIsVerified?: boolean;
   isSignalReady?: boolean;
   isCryptoReady?: boolean;
@@ -117,11 +123,13 @@ export function MessageList({
   partnerIsVerified,
   isSignalReady = false,
   isCryptoReady = false,
+  onVanishOpen,
   hideIntro = false
 }: MessageListProps) {
   const selfAvatarUrl = useSessionStore(state => state.avatarUrl);
   const selfAvatarSeed = useSessionStore(state => state.avatarSeed);
   const storePartnerName = useSessionStore(state => state.partnerName);
+  const storePartnerId = useSessionStore(state => state.partnerId);
   const storePartnerAvatarUrl = useSessionStore(state => state.partnerAvatarUrl);
   const storePartnerAvatarSeed = useSessionStore(state => state.partnerAvatarSeed);
   const containerRef = useRef<HTMLOListElement>(null);
@@ -151,6 +159,20 @@ export function MessageList({
   }, []);
 
   const grouped = useMemo(() => groupMessages(messages), [messages]);
+  const emitProfileClick = (
+    username: string,
+    avatarSeed: string,
+    avatarUrl?: string | null,
+    isVerified?: boolean,
+    peerId?: string,
+  ) => {
+    if (!onProfileClick) return;
+    if (peerId !== undefined) {
+      onProfileClick(username, avatarSeed, avatarUrl, isVerified, peerId);
+      return;
+    }
+    onProfileClick(username, avatarSeed, avatarUrl, isVerified);
+  };
 
   return (
     <ol ref={containerRef} className="overflow-y-auto overflow-x-hidden w-full chat-scrollbar h-full flex-grow flex-1 min-h-0 flex flex-col overscroll-none pb-4 mb-3" style={{ scrollBehavior: 'smooth' }}>
@@ -161,7 +183,13 @@ export function MessageList({
             const effectiveName = partnerName || storePartnerName || 'Partner';
             const effectiveSeed = storePartnerAvatarSeed || effectiveName;
             const effectiveUrl = storePartnerAvatarUrl || null;
-            onProfileClick?.(effectiveName, effectiveSeed, effectiveUrl, partnerIsVerified);
+            emitProfileClick(
+              effectiveName,
+              effectiveSeed,
+              effectiveUrl,
+              partnerIsVerified,
+              storePartnerId || undefined,
+            );
           }}>
             {partnerName}
             {partnerIsVerified && <ShieldCheck className="h-4 w-4 text-blue-500 fill-blue-500/10" />}
@@ -204,7 +232,16 @@ export function MessageList({
               isEditingInline={item.message.id === editingMessageId}
               onSaveEdit={onSaveEdit}
               onCancelEdit={onCancelEdit}
-              onProfileClick={(username, avatarSeed, avatarUrl) => onProfileClick?.(username, avatarSeed, avatarUrl, item.message.isVerified)}
+              onProfileClick={(username, avatarSeed, avatarUrl, peerId) =>
+                emitProfileClick(
+                  username,
+                  avatarSeed,
+                  avatarUrl,
+                  item.message.isVerified,
+                  peerId,
+                )
+              }
+              onVanishOpen={onVanishOpen}
             />
           );
         }
@@ -224,7 +261,15 @@ export function MessageList({
                 <div className="absolute left-0 top-0 flex h-full">
                   <div
                     className="absolute z-0 left-2 w-10 select-none overflow-hidden pt-0.5 hover:cursor-pointer"
-                    onClick={() => onProfileClick?.(item.username, resolvedAvatarSeed, resolvedAvatarUrl, item.isVerified)}
+                    onClick={() =>
+                      emitProfileClick(
+                        item.username,
+                        resolvedAvatarSeed,
+                        resolvedAvatarUrl,
+                        item.isVerified,
+                        firstMsg.senderId,
+                      )
+                    }
                   >
                     <span className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full">
                       <AvatarImage
@@ -244,7 +289,15 @@ export function MessageList({
                         className="relative inline align-baseline text-base leading-none sm:leading-snug font-bold cursor-pointer chat-username break-all break-words max-w-[150px] sm:max-w-xs truncate"
                         role="button"
                         tabIndex={0}
-                        onClick={() => onProfileClick?.(item.username, resolvedAvatarSeed, resolvedAvatarUrl, item.isVerified)}
+                        onClick={() =>
+                          emitProfileClick(
+                            item.username,
+                            resolvedAvatarSeed,
+                            resolvedAvatarUrl,
+                            item.isVerified,
+                            firstMsg.senderId,
+                          )
+                        }
                       >
                         {item.username}
                       </span>
@@ -256,7 +309,7 @@ export function MessageList({
                   </h3>
                   <div className="leading w-full flex-1">
                     <div className="-ml-16 select-text pl-16 leading-snug sm:leading-normal whitespace-pre-wrap break-words break-all max-md:select-none chat-message-text mt-0.5">
-                      <ImageGrid messages={item.messages} />
+                      <ImageGrid messages={item.messages} onVanishOpen={onVanishOpen} />
                     </div>
                   </div>
                 </div>

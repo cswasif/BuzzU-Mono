@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext, useParams, useLocation } from 'react-router-dom';
+import { useOutletContext, useParams, useLocation, useNavigate } from 'react-router-dom';
 import MainContent from '../components/Dashboard_Updated/MainContent';
+import { useSessionStore } from '../stores/sessionStore';
 
 /**
  * ChatNewPage — Matchmaker dashboard content.
@@ -16,12 +17,17 @@ import MainContent from '../components/Dashboard_Updated/MainContent';
 interface DashboardOutletContext {
     setHideChrome: (hide: boolean) => void;
     setShowInterestsModal: (show: boolean) => void;
+    suppressEmbeddedChat?: boolean;
 }
 
 export const ChatNewPage: React.FC = () => {
-    const { setHideChrome, setShowInterestsModal } = useOutletContext<DashboardOutletContext>();
+    const { setHideChrome, setShowInterestsModal, suppressEmbeddedChat } = useOutletContext<DashboardOutletContext>();
     const { roomId } = useParams<{ roomId?: string }>();
     const location = useLocation();
+    const navigate = useNavigate();
+    const currentRoomId = useSessionStore((state) => state.currentRoomId);
+    const isInChat = useSessionStore((state) => state.isInChat);
+    const partnerId = useSessionStore((state) => state.partnerId);
 
     // Derive activeArea from URL path
     const getInitialArea = (): 'main' | 'chat' => {
@@ -50,12 +56,22 @@ export const ChatNewPage: React.FC = () => {
         return () => window.removeEventListener('new-chat-clicked', onNewChat);
     }, []);
 
+    useEffect(() => {
+        const path = location.pathname;
+        const isChatLandingPath = path === '/chat/new' || path === '/chat/text';
+        if (!roomId && isChatLandingPath && isInChat && currentRoomId && partnerId) {
+            navigate(`/chat/new/${currentRoomId}`, { replace: true });
+            setActiveArea('chat');
+        }
+    }, [roomId, location.pathname, isInChat, currentRoomId, partnerId, navigate]);
+
     return (
         <MainContent
             activeArea={activeArea}
             setActiveArea={setActiveArea}
             onManageInterests={() => setShowInterestsModal(true)}
             roomId={roomId}
+            suppressEmbeddedChat={suppressEmbeddedChat}
         />
     );
 };

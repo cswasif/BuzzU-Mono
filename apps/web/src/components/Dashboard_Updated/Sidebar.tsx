@@ -61,12 +61,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
 
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50 
-        h-full w-64 min-w-64 bg-popover border-r border-border/10 flex flex-col
+        h-full w-64 min-w-64 bg-panel lg:bg-popover border-r-0 flex flex-col
         transition-all duration-300 ease-in-out
         ${isOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0 lg:w-0 lg:min-w-0 pointer-events-none'}
       `}>
         {/* Mobile Header in Sidebar */}
-        <div className="flex h-12 w-full items-center justify-between px-4 lg:hidden border-b border-border/10 shrink-0">
+        <div className="flex h-12 w-full items-center justify-between px-4 lg:hidden border-b border-black/20 dark:border-white/10 shrink-0">
           <span className="font-bold text-lg">Menu</span>
           <button onClick={onClose} className="p-1">
             <MenuIcon />

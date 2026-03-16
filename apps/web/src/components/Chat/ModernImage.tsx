@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Maximize2, XCircle } from 'lucide-react';
 
@@ -10,6 +10,9 @@ interface ModernImageProps {
     status?: 'sending' | 'sent' | 'error';
     progress?: number;
     isGif?: boolean;
+    isVanish?: boolean;
+    vanishOpened?: boolean;
+    onVanishOpen?: () => void;
 }
 
 export const ModernImage: React.FC<ModernImageProps> = ({
@@ -19,14 +22,49 @@ export const ModernImage: React.FC<ModernImageProps> = ({
     maxHeight = '300px',
     status = 'sent',
     progress = 0,
-    isGif = false
+    isGif = false,
+    isVanish = false,
+    vanishOpened = false,
+    onVanishOpen
 }) => {
     const [isRevealed, setIsRevealed] = useState(isGif);
     const [isHovered, setIsHovered] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
+    const [hasConsumedVanish, setHasConsumedVanish] = useState(vanishOpened);
+    const [activeSrc, setActiveSrc] = useState(src);
+
+    useEffect(() => {
+        if (vanishOpened) {
+            setHasConsumedVanish(true);
+        }
+    }, [vanishOpened]);
+
+    useEffect(() => {
+        if (!isVanish) {
+            setActiveSrc(src);
+            return;
+        }
+        if (!hasConsumedVanish) {
+            setActiveSrc(src);
+            return;
+        }
+        if (isFullScreen) {
+            return;
+        }
+        setActiveSrc('');
+    }, [src, isVanish, hasConsumedVanish, isFullScreen]);
 
     const toggleReveal = (e: React.MouseEvent) => {
         e.stopPropagation();
+        if (isVanish) {
+            if (hasConsumedVanish) return;
+            setActiveSrc(src);
+            onVanishOpen?.();
+            setHasConsumedVanish(true);
+            setIsRevealed(true);
+            setIsFullScreen(true);
+            return;
+        }
         if (isGif) {
             setIsFullScreen(true);
             return;
@@ -36,8 +74,18 @@ export const ModernImage: React.FC<ModernImageProps> = ({
 
     const handleOpenOriginal = (e: React.MouseEvent) => {
         e.stopPropagation();
+        if (isVanish && hasConsumedVanish) return;
         setIsFullScreen(true);
     };
+
+    const closeFullScreen = () => {
+        setIsFullScreen(false);
+        if (isVanish && hasConsumedVanish) {
+            setIsRevealed(false);
+            setActiveSrc('');
+        }
+    };
+    const imageSrc = isVanish ? activeSrc : src;
 
     return (
         <div
@@ -48,22 +96,26 @@ export const ModernImage: React.FC<ModernImageProps> = ({
             onClick={toggleReveal}
         >
             {/* Blurred Placeholder / Background */}
-            <motion.img
-                src={src}
-                alt={alt}
-                onLoad={() => {
-                    window.dispatchEvent(new CustomEvent('chat-media-loaded'));
-                }}
-                initial={false}
-                animate={{
-                    filter: isRevealed ? 'blur(0px)' : 'blur(40px)',
-                    scale: isRevealed ? 1 : 1.1,
-                    opacity: isRevealed ? 1 : 0.6
-                }}
-                transition={{ duration: 0.5, ease: 'easeOut' }}
-                className="w-full h-full object-contain pointer-events-none"
-                style={{ maxHeight, filter: status === 'sending' ? 'grayscale(0.5) blur(5px)' : undefined }}
-            />
+            {imageSrc ? (
+                <motion.img
+                    src={imageSrc}
+                    alt={alt}
+                    onLoad={() => {
+                        window.dispatchEvent(new CustomEvent('chat-media-loaded'));
+                    }}
+                    initial={false}
+                    animate={{
+                        filter: isRevealed ? 'blur(0px)' : 'blur(40px)',
+                        scale: isRevealed ? 1 : 1.1,
+                        opacity: isRevealed ? 1 : 0.6
+                    }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                    className="w-full h-full object-contain pointer-events-none"
+                    style={{ maxHeight, filter: status === 'sending' ? 'grayscale(0.5) blur(5px)' : undefined }}
+                />
+            ) : (
+                <div className="w-full h-full" style={{ maxHeight }} />
+            )}
 
             {/* Progress Overlay */}
             {status === 'sending' && (
@@ -93,15 +145,29 @@ export const ModernImage: React.FC<ModernImageProps> = ({
                     >
                         <div className="bg-background/80 backdrop-blur-md rounded-full px-4 py-2 flex items-center gap-2 shadow-xl border border-white/10 text-foreground group-hover:scale-105 transition-transform duration-300">
                             <Eye className="w-4 h-4 text-primary" />
-                            <span className="text-xs font-semibold">Click to View</span>
+                            <span className="text-xs font-semibold">{isVanish ? "Open Once" : "Click to View"}</span>
                         </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {isVanish && hasConsumedVanish && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 backdrop-blur-sm z-20 pointer-events-none"
+                    >
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-white/90">Opened</span>
+                        <span className="text-[10px] text-white/60 mt-1">This image can only be viewed once</span>
                     </motion.div>
                 )}
             </AnimatePresence>
 
             {/* Floating Toolbar when revealed */}
             <AnimatePresence>
-                {isRevealed && isHovered && !isGif && (
+                {isRevealed && isHovered && !isGif && !(isVanish && hasConsumedVanish) && (
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -135,14 +201,18 @@ export const ModernImage: React.FC<ModernImageProps> = ({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 md:p-10"
-                        onClick={() => setIsFullScreen(false)}
+                        onClick={closeFullScreen}
                     >
                         {/* Close button */}
                         <motion.button
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             className="absolute top-5 right-5 z-[110] p-2 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-md border border-white/10 transition-colors"
-                            onClick={(e) => { e.stopPropagation(); setIsFullScreen(false); }}
+                            aria-label="Close full screen image"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                closeFullScreen();
+                            }}
                         >
                             <XCircle className="w-6 h-6" />
                         </motion.button>
@@ -159,12 +229,12 @@ export const ModernImage: React.FC<ModernImageProps> = ({
                             dragConstraints={{ top: 0, bottom: 0 }}
                             onDragEnd={(_, info) => {
                                 if (Math.abs(info.offset.y) > 100) {
-                                    setIsFullScreen(false);
+                                    closeFullScreen();
                                 }
                             }}
                         >
                             <img
-                                src={src}
+                                src={imageSrc}
                                 alt={alt}
                                 className="max-w-full max-h-[90vh] object-contain select-none shadow-2xl rounded"
                                 draggable={false}

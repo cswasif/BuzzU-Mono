@@ -9,7 +9,7 @@ import {
   Edit3,
   Image as ImageIcon,
   FileImage,
-  XCircle,
+  EyeOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Message } from "./types";
@@ -71,6 +71,8 @@ export function MessageInput({
   isGifPickerOpen = false,
   onToggleGifPicker,
   onCloseGifPicker,
+  isVanishMode = false,
+  onToggleVanishMode,
   isDmMode = false,
   isDirectConnectMode = false,
   isCompactGifPicker = false,
@@ -262,28 +264,31 @@ export function MessageInput({
         className="dmtextarea px-4 lg:px-7 mx-auto"
         style={{ width: "100%" }}
       >
-        {/* Reply/Edit Banner (Matched to Screenshot) */}
+        {/* Reply/Edit Banner */}
         <AnimatePresence>
           {(replyingTo || editingMessage) && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="absolute bottom-full left-4 lg:left-7 right-4 lg:right-7 bg-muted/95 backdrop-blur-md rounded-t-lg text-[13px] py-2 px-4 flex flex-row items-center justify-between z-20 mb-[1px] border-x border-t border-border/20"
+              exit={{ opacity: 0, y: 6 }}
+              className="bg-card w-full rounded-t-md text-sm py-2.5 px-4 flex flex-row items-center justify-between"
             >
               <div className="flex-1 truncate">
-                <span className="text-muted-foreground mr-1.5 font-medium">
-                  {replyingTo ? "Replying to" : "Editing message for"}
-                </span>
-                <span className="font-bold text-foreground">
-                  {replyingTo?.username || editingMessage?.username}
-                </span>
+                <div className="font-normal">
+                  {replyingTo ? "Replying to " : "Editing message for "}
+                  <span className="font-bold">
+                    {replyingTo?.username || editingMessage?.username}
+                  </span>
+                </div>
               </div>
               <button
                 onClick={replyingTo ? onCancelReply : onCancelEdit}
-                className="ml-2 hover:opacity-80 transition-opacity"
+                className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground ml-2 h-5 w-5 flex-shrink-0"
+                aria-label={replyingTo ? "Cancel reply" : "Cancel edit"}
               >
-                <XCircle className="h-4 w-4 text-muted-foreground/60 hover:text-foreground fill-current" />
+                <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" height="20" width="20" xmlns="http://www.w3.org/2000/svg">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path>
+                </svg>
               </button>
             </motion.div>
           )}
@@ -296,6 +301,7 @@ export function MessageInput({
                 ESC
               </kbd>
               <button
+                type="button"
                 onClick={
                   connectionState === "idle" ||
                     connectionState === "partner_skipped" ||
@@ -311,6 +317,8 @@ export function MessageInput({
                     ? "bg-warning text-warning-foreground hover:bg-warning/90 shadow"
                     : "bg-primary text-primary-foreground hover:bg-primary/90 shadow"
                   }`}
+                aria-label={connectionState === "searching" ? "Stop searching" : connectionState === "connected" ? "Skip current chat" : "Start chat"}
+                aria-busy={connectionState === "searching" || undefined}
               >
                 {connectionState === "idle" ||
                   connectionState === "partner_skipped" ||
@@ -349,6 +357,7 @@ export function MessageInput({
                   type="button"
                   className="self-center text-zinc-600 dark:text-inherit hover:text-zinc-700 dark:hover:text-current p-1 disabled:opacity-50"
                   disabled={connectionState !== "connected"}
+                  aria-label="Attach image"
                   onClick={() =>
                     document.getElementById("image-upload")?.click()
                   }
@@ -367,6 +376,31 @@ export function MessageInput({
                     <path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 2 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2M14 2H4a1 1 0 0 0-1 1h9.002a2 2 0 0 1 2 2v7A1 1 0 0 0 15 11V3a1 1 0 0 0-1-1M2.002 4a1 1 0 0 0-1 1v8l2.646-2.354a.5.5 0 0 1 .63-.062l2.66 1.773 3.71-3.71a.5.5 0 0 1 .577-.094l1.777 1.947V5a1 1 0 0 0-1-1z"></path>
                   </svg>
                 </button>
+
+                {onToggleVanishMode && (
+                  <button
+                    type="button"
+                    className={cn(
+                      "self-center p-1.5 rounded-md transition-colors disabled:opacity-50",
+                      isVanishMode
+                        ? "text-warning bg-warning/15 hover:bg-warning/20"
+                        : "text-zinc-600 dark:text-inherit hover:text-zinc-700 dark:hover:text-current hover:bg-accent/40",
+                    )}
+                    disabled={connectionState !== "connected"}
+                    aria-label={
+                      isVanishMode
+                        ? "Disable one-time image mode"
+                        : "Enable one-time image mode"
+                    }
+                    onClick={onToggleVanishMode}
+                    title={isVanishMode ? "One-time image mode on" : "One-time image mode off"}
+                  >
+                    <span className="flex items-center gap-1">
+                      <EyeOff className="h-4 w-4" />
+                      <span className="text-[10px] font-bold leading-none">1x</span>
+                    </span>
+                  </button>
+                )}
 
                 <textarea
                   ref={textareaRef}
@@ -397,6 +431,7 @@ export function MessageInput({
                     isGifPickerOpen && "text-primary bg-accent",
                   )}
                   title="GIPHY GIFs"
+                  aria-label={isGifPickerOpen ? "Close GIF picker" : "Open GIF picker"}
                   disabled={connectionState !== "connected"}
                 >
                   <svg
@@ -417,6 +452,7 @@ export function MessageInput({
                   type="button"
                   onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
                   className="p-1 disabled:opacity-50"
+                  aria-label={isEmojiPickerOpen ? "Close emoji picker" : "Open emoji picker"}
                   disabled={connectionState !== "connected"}
                 >
                   <svg
@@ -434,6 +470,15 @@ export function MessageInput({
                 </button>
               </div>
             </div>
+            <span className="sr-only" role="status" aria-live="polite">
+              {connectionState === "searching"
+                ? "Searching for a partner"
+                : connectionState === "connecting"
+                  ? "Connecting to partner"
+                  : connectionState === "connected"
+                    ? "Connected"
+                    : "Idle"}
+            </span>
           </form>
         </div>
 

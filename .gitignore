@@ -16,6 +16,9 @@ target/
 build_error.log
 apps/web/build_error.log
 apps/web/page-dump.html
+apps/web/playwright-report/
+apps/web/test-results/
+*.out
 
 # Archives & zips (should not be committed)
 *.7z
@@ -41,6 +44,9 @@ apps/web/x-_-twitter-clone/
 # WASM build tooling installers
 packages/wasm/vs_buildtools.exe
 packages/wasm/vs_community.exe
+
+# Local tooling binaries
+rustup-init.exe
 
 # Package manager stores
 .pnpm-store/

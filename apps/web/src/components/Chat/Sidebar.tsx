@@ -11,12 +11,16 @@ function avatarUrl(seed: string) {
 }
 
 export function Sidebar() {
-  const { avatarSeed, avatarUrl: myCustomAvatarUrl, displayName, friendList, activeDmFriend, setDmFriend, hasNewDmMessage } = useSessionStore();
+  const { avatarSeed, avatarUrl: myCustomAvatarUrl, displayName, friendList, activeDmFriend, setDmFriend, dmUnreadCounts } = useSessionStore();
   const { peersInRoom } = useSignalingContext();
   const [activeTab, setActiveTab] = React.useState<'chat' | 'friends'>('chat');
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
   const navigate = useNavigate();
   const location = useLocation();
+  const totalUnreadDmCount = useMemo(
+    () => Object.values(dmUnreadCounts).reduce((sum, count) => sum + count, 0),
+    [dmUnreadCounts],
+  );
 
   // ── Fullscreen toggle ──────────────────────────────────────────
   const toggleFullscreen = useCallback(async () => {
@@ -95,11 +99,16 @@ export function Sidebar() {
                     aria-selected={activeTab === 'chat'}
                     data-state={activeTab === 'chat' ? 'active' : 'inactive'}
                     onClick={() => setActiveTab('chat')}
-                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm gap-1"
+                    className="relative inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm gap-1"
                     tabIndex={-1}
                     data-orientation="horizontal"
                   >
                     <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" height="16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path></svg> Chat
+                    {totalUnreadDmCount > 0 && (
+                      <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#ef4444] px-1 text-[10px] font-bold leading-none text-white">
+                        {totalUnreadDmCount > 99 ? '99+' : totalUnreadDmCount}
+                      </span>
+                    )}
                   </button>
                   <button
                     type="button"
@@ -160,12 +169,18 @@ export function Sidebar() {
                             </div>
                             <div className="w-36 overflow-hidden text-ellipsis whitespace-nowrap pl-2 pr-1 font-normal text-foreground focus:text-placeholder-foreground">{friend.username}</div>
                             <div className="flex-grow"></div>
-                            <button
-                              onClick={(e) => handleCloseDM(e, friend.id)}
-                              className="disabled:select-none items-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-6 rounded-md px-2 hidden flex-grow justify-end ml-auto focus:flex focus:opacity-100 group-hover:opacity-100 hover:bg-transparent text-card-foreground/70 hover:text-card-foreground md:flex md:opacity-0"
-                            >
-                              <X className="h-[15px] w-[15px]" />
-                            </button>
+                            {(dmUnreadCounts[friend.id] || 0) > 0 ? (
+                              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1.5 text-[11px] font-bold leading-none text-white shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+                                {dmUnreadCounts[friend.id] > 99 ? '99+' : dmUnreadCounts[friend.id]}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) => handleCloseDM(e, friend.id)}
+                                className="disabled:select-none items-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-6 rounded-md px-2 hidden flex-grow justify-end ml-auto focus:flex focus:opacity-100 group-hover:opacity-100 hover:bg-transparent text-card-foreground/70 hover:text-card-foreground md:flex md:opacity-0"
+                              >
+                                <X className="h-[15px] w-[15px]" />
+                              </button>
+                            )}
                           </a>
                         </li>
                       ))

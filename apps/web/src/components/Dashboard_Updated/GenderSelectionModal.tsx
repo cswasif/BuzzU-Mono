@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MaleIcon, FemaleIcon, LoadingSpinner } from './Icons'; // Assuming generic named icons
+import { MaleIcon, FemaleIcon } from './Icons';
 
 // Extracted from the HTML provided by the User
 interface GenderSelectionModalProps {
@@ -10,6 +10,7 @@ interface GenderSelectionModalProps {
 
 export const GenderSelectionModal: React.FC<GenderSelectionModalProps> = ({ isOpen, onConfirm }) => {
     const [selectedGender, setSelectedGender] = useState<'M' | 'F' | null>(null);
+    const genderGroupId = 'gender-selection-radiogroup';
 
     if (!isOpen) return null;
 
@@ -47,7 +48,7 @@ export const GenderSelectionModal: React.FC<GenderSelectionModalProps> = ({ isOp
                             Select your gender so we can match you with the right people.
                         </p>
 
-                        <div className="flex flex-1 justify-start flex-col overflow-hidden overflow-y-auto bg-transparent pb-2 mt-2">
+                        <div className="flex flex-1 justify-start flex-col overflow-hidden overflow-y-auto bg-transparent pb-2">
                             <form
                                 className="gap-3 flex flex-col"
                                 onSubmit={(e) => {
@@ -55,78 +56,58 @@ export const GenderSelectionModal: React.FC<GenderSelectionModalProps> = ({ isOp
                                     if (selectedGender) onConfirm(selectedGender);
                                 }}
                             >
-                                <div className="space-y-4">
-                                    <label className="font-semibold text-lg">I am:</label>
-
-                                    <div role="radiogroup" dir="ltr" className="flex gap-4 w-full" tabIndex={0} style={{ outline: 'none' }}>
-
-                                        {/* Male Option */}
-                                        <div
-                                            role="radio"
-                                            aria-checked={selectedGender === 'M'}
-                                            tabIndex={0}
-                                            onClick={() => setSelectedGender('M')}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
-                                                    setSelectedGender('M');
-                                                }
-                                            }}
-                                            className={`flex-1 flex items-center justify-center gap-2 w-full py-2 px-4 cursor-pointer rounded-md border text-sm font-medium leading-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedGender === 'M'
-                                                ? 'bg-secondary text-white border-primary hover:scale-105 hover:shadow-md'
-                                                : 'bg-popover hover:bg-accent hover:scale-105 hover:shadow-md border-input text-foreground'
-                                                }`}
-                                        >
-                                            <MaleIcon className="w-5 h-5" />
-                                            Male
+                                <div className="space-y-2">
+                                    <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 font-semibold text-xl" htmlFor={genderGroupId}>I am:</label>
+                                    <div role="radiogroup" aria-required={false} dir="ltr" className="flex gap-4" id={genderGroupId} aria-invalid="false" tabIndex={0} style={{ outline: 'none' }}>
+                                        <div className="flex-1">
+                                            <button
+                                                type="button"
+                                                role="radio"
+                                                aria-checked={selectedGender === 'M'}
+                                                onClick={() => setSelectedGender('M')}
+                                                className={`text-sm font-medium leading-none flex items-center justify-center gap-2 w-full py-2 px-4 cursor-pointer rounded-md border ${selectedGender === 'M'
+                                                    ? 'bg-secondary text-white border-[hsl(var(--primary))] border-2 shadow-[0_0_0_1px_hsl(var(--primary)/0.35)]'
+                                                    : 'bg-popover hover:bg-accent border-input text-foreground'
+                                                    }`}
+                                            >
+                                                <MaleIcon className="w-5 h-5" />
+                                                Male
+                                            </button>
                                         </div>
-
-                                        {/* Female Option */}
-                                        <div
-                                            role="radio"
-                                            aria-checked={selectedGender === 'F'}
-                                            tabIndex={0}
-                                            onClick={() => setSelectedGender('F')}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
-                                                    setSelectedGender('F');
-                                                }
-                                            }}
-                                            className={`flex-1 flex items-center justify-center gap-2 w-full py-2 px-4 cursor-pointer rounded-md border text-sm font-medium leading-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedGender === 'F'
-                                                ? 'bg-secondary text-white border-primary hover:scale-105 hover:shadow-md'
-                                                : 'bg-popover hover:bg-accent hover:scale-105 hover:shadow-md border-input text-foreground'
-                                                }`}
-                                        >
-                                            <FemaleIcon className="w-5 h-5" />
-                                            Female
+                                        <div className="flex-1">
+                                            <button
+                                                type="button"
+                                                role="radio"
+                                                aria-checked={selectedGender === 'F'}
+                                                onClick={() => setSelectedGender('F')}
+                                                className={`text-sm font-medium leading-none flex items-center justify-center gap-2 w-full py-2 px-4 cursor-pointer rounded-md border ${selectedGender === 'F'
+                                                    ? 'bg-secondary text-white border-[hsl(var(--primary))] border-2 shadow-[0_0_0_1px_hsl(var(--primary)/0.35)]'
+                                                    : 'bg-popover hover:bg-accent border-input text-foreground'
+                                                    }`}
+                                            >
+                                                <FemaleIcon className="w-5 h-5" />
+                                                Female
+                                            </button>
                                         </div>
-
                                     </div>
                                 </div>
-
-                                <span className="text-xs text-muted-foreground mt-2">
+                                <span className="text-xs text-muted-foreground">
                                     *You cannot change your gender after you register.
                                 </span>
-
-                                <div role="none" className="shrink-0 bg-border h-[1px] w-full my-2"></div>
-
-                                <span className="text-sm text-foreground/80">
-                                    I'm at least <b className="text-warning font-bold">18 years old</b> and have read and agree to the{' '}
-                                    <a href="/terms" target="_blank" className="text-blue-500 hover:underline hover:text-blue-400 transition-colors duration-200">Terms of Service</a>{' '}
-                                    and <a href="/privacy" target="_blank" className="text-blue-500 hover:underline hover:text-blue-400 transition-colors duration-200">Privacy Policy</a>
+                                <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full"></div>
+                                <span className="text-sm text-white">
+                                    I'm at least <b className="text-warning">18 years old</b> and have read and agree to the <a href="https://www.chitchat.gg/terms" target="_blank" rel="noreferrer" className="text-link hover:underline">Terms of Service</a> and <a href="https://www.chitchat.gg/privacy-policy" target="_blank" rel="noreferrer" className="text-link hover:underline">Privacy Policy</a>
                                 </span>
-
                                 <div className="flex-col-reverse max-md:gap-3 sm:flex-row sm:justify-end sm:space-x-2 pt-1.5 grid grid-cols-1 gap-2">
                                     <button
                                         disabled={!selectedGender}
-                                        className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 hover:shadow-lg active:scale-95 h-10 px-4 py-2 w-full"
+                                        className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
                                         type="submit"
                                     >
                                         I AGREE, LET'S GO!
                                     </button>
-                                    <span className="text-xs text-center sm:text-left mt-2 hidden">
-                                        Already have an account? <a href="/login" className="text-blue-500 hover:underline hover:text-blue-400 transition-colors duration-200">Login</a>
+                                    <span className="text-xs">
+                                        Already have an account? <a href="/login" className="link text-link">Login</a>
                                     </span>
                                 </div>
                             </form>

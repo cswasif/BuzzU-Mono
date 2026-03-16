@@ -34,6 +34,7 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const { sendMessage, onMessage } = useSignalingContext();
   const { partnerId, displayName, avatarSeed, peerId } = useSessionStore();
   const { stream, permissionState } = useUserMedia();
@@ -50,6 +51,20 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
       node.play().catch(e => console.warn("Local preview play failed:", e));
     }
   }, [stream]);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+      if (panelRef.current) {
+        await panelRef.current.requestFullscreen();
+      }
+    } catch (e) {
+      console.warn("Fullscreen toggle failed:", e);
+    }
+  }, []);
 
   // Handle incoming messages
   useEffect(() => {
@@ -125,7 +140,7 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
   if (isMatched || isConnecting) {
     return (
       <div className="flex items-center justify-center w-full h-1/2 lg:w-1/2 lg:h-full bg-[hsl(var(--cc-panel))] rounded-sm lg:rounded-lg">
-        <div className="relative w-full h-full bg-linear-to-tr from-black/80 via-black/25 to-[hsl(var(--cc-panel))] rounded-sm md:rounded-xl overflow-hidden">
+        <div ref={panelRef} className="relative w-full h-full bg-linear-to-tr from-black/80 via-black/25 to-[hsl(var(--cc-panel))] rounded-sm md:rounded-xl overflow-hidden">
           {/* Bottom gradient overlay */}
           <div className="absolute bottom-0 inset-x-0 z-20 md:rounded-xl bg-gradient-to-t from-black/55 via-black/30 to-transparent h-[50vh] md:h-[60vh] opacity-0 pointer-events-none" />
 
@@ -141,18 +156,21 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`mb-2.5 flex w-full animate-in fade-in slide-in-from-bottom-2 duration-300 ${msg.sender === "me" ? "justify-end pl-12" : "justify-start pr-12"}`}
+                    className={`mb-2 flex w-full animate-in fade-in slide-in-from-bottom-2 duration-300 ${msg.sender === "me" ? "justify-end pl-10 md:pl-12" : "justify-start pr-10 md:pr-12"}`}
                   >
                     <div className={`flex flex-col ${msg.sender === "me" ? "items-end" : "items-start"}`}>
                       {/* Name header above the bubble */}
-                      <span className={`text-[10px] font-bold uppercase tracking-wider mb-1 drop-shadow-md ${msg.sender === "me" ? "mr-3 text-white/50" : "ml-3 text-white/80"}`}>
+                      <span className={`text-[10px] font-semibold uppercase tracking-[0.08em] mb-0.5 drop-shadow-md ${msg.sender === "me" ? "mr-3 text-white/45" : "ml-3 text-white/70"}`}>
                         {msg.username || (msg.sender === "me" ? "Me" : "Partner")}
                       </span>
 
                       {/* Message body */}
-                      <div className={`backdrop-blur-md px-4 py-2 max-w-full text-[14.5px] shadow-sm font-medium leading-snug w-fit ${msg.sender === "me"
-                          ? "bg-indigo-500/90 text-white rounded-2xl rounded-tr-sm"
-                          : "bg-black/50 border border-white/10 text-white rounded-2xl rounded-tl-sm"
+                      <div className={`backdrop-blur-md px-4 py-2.5 max-w-[85%] md:max-w-[78%] text-[14px] md:text-[14.5px] shadow-md font-medium leading-snug w-fit ${msg.sender === "me"
+                          ? "bg-linear-to-br from-indigo-500/95 to-violet-500/90 text-white rounded-3xl rounded-tr-md"
+                          : "bg-black/65 text-white/95 rounded-3xl rounded-tl-md"
+                        } ${msg.text.length > 72
+                          ? "rounded-2xl"
+                          : ""
                         }`}>
                         {msg.text}
                       </div>
@@ -171,6 +189,10 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
+                maxLength={700}
+                autoCorrect="off"
+                autoCapitalize="sentences"
+                spellCheck={false}
               />
               <button
                 type="submit"
@@ -184,7 +206,11 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
 
           {/* Fullscreen button */}
           <div className="bg-black/30 rounded-full p-0 flex items-center justify-center absolute z-50 top-3.5 left-3.5 lg:left-4">
-            <button className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden hover:text-accent-foreground px-3 rounded-full text-white/95 hover:bg-black/60 size-9">
+            <button
+              onClick={toggleFullscreen}
+              aria-label="Toggle fullscreen"
+              className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden hover:text-accent-foreground px-3 rounded-full text-white/95 hover:bg-black/60 size-9"
+            >
               <FullscreenIcon />
             </button>
           </div>
@@ -261,7 +287,11 @@ export function RemotePanel({ onStartChat, onGenderClick, onWorldwideClick, isSe
 
         {/* Fullscreen button */}
         <div className="bg-black/30 rounded-full p-0 flex items-center justify-center absolute z-50 top-3.5 left-3.5 lg:left-4">
-          <button className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:text-accent-foreground px-3 rounded-full text-white/95 hover:bg-black/60 size-9">
+          <button
+            onClick={toggleFullscreen}
+            aria-label="Toggle fullscreen"
+            className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:text-accent-foreground px-3 rounded-full text-white/95 hover:bg-black/60 size-9"
+          >
             <FullscreenIcon />
           </button>
         </div>

@@ -48,10 +48,10 @@
     /* Semantic variables */
     --dashed-border: 0 0% 0%;
     --dashed-border-opacity: 0.12;
-    --pill-bg: 0 0% 0%;
-    --pill-bg-opacity: 0.7;
-    --pill-text: var(--brightness-foreground);
-    --pill-text-opacity: 0.4;
+    --pill-bg: 235 12% 38%;
+    --pill-bg-opacity: 0.14;
+    --pill-text: 235 10% 24%;
+    --pill-text-opacity: 0.95;
     --gender-male: 221 83% 53%;
     --gender-female: 330 81% 60%;
     --link-color: 226 71% 40%;
@@ -774,104 +774,103 @@ em-emoji-picker {
 
 @layer component {
     /* Fix for modal white border issue */
-    [role="dialog"] {
+    .chitchat-dashboard-theme [role="dialog"] {
         border: none !important;
         border-color: transparent !important;
         border-width: 0 !important;
     }
 
     /* Also target the modal content specifically */
-    [role="dialog"].border,
-    [role="dialog"][class*="border"] {
+    .chitchat-dashboard-theme [role="dialog"].border,
+    .chitchat-dashboard-theme [role="dialog"][class*="border"] {
         border: none !important;
         border-color: transparent !important;
         border-width: 0 !important;
     }
 
     /* Force remove border on all dialogs */
-    [role="dialog"] *,
-    [role="dialog"] *::before,
-    [role="dialog"] *::after {
+    .chitchat-dashboard-theme [role="dialog"].border,
+    .chitchat-dashboard-theme [role="dialog"] [class*="border"] {
         border-color: transparent !important;
     }
 
     /* Specific override for the modal */
-    [role="dialog"][data-state="open"] {
+    .chitchat-dashboard-theme [role="dialog"][data-state="open"] {
         border: none !important;
         border-color: transparent !important;
         border-width: 0 !important;
     }
 
     /* Fix interests modal - make it more compact */
-    .bg-panel.lg\\:mb-4 {
+    .bg-panel.lg\:mb-4 {
         max-height: 90vh;
         overflow-y: auto;
     }
 
-    .bg-panel.lg\\:mb-4 .space-y-6 {
+    .bg-panel.lg\:mb-4 .space-y-6 {
         gap: 1rem !important;
     }
 
-    .bg-panel.lg\\:mb-4 .space-y-3 {
+    .bg-panel.lg\:mb-4 .space-y-3 {
         gap: 0.75rem !important;
     }
 
-    .bg-panel.lg\\:mb-4 .space-y-2\\.5 {
+    .bg-panel.lg\:mb-4 .space-y-2\.5 {
         gap: 0.5rem !important;
     }
 
-    .bg-panel.lg\\:mb-4 .p-4 {
+    .bg-panel.lg\:mb-4 .p-4 {
         padding: 1rem !important;
     }
 
-    .bg-panel.lg\\:mb-4 .md\\:p-6 {
+    .bg-panel.lg\:mb-4 .md\:p-6 {
         padding: 1rem !important;
     }
 
-    .bg-panel.lg\\:mb-4 .mb-4 {
+    .bg-panel.lg\:mb-4 .mb-4 {
         margin-bottom: 0.75rem !important;
     }
 
-    .bg-panel.lg\\:mb-4 .mt-6 {
+    .bg-panel.lg\:mb-4 .mt-6 {
         margin-top: 1rem !important;
     }
 
     /* Make gender filter more compact */
-    .bg-panel.lg\\:mb-4 [role="radiogroup"] {
+    .bg-panel.lg\:mb-4 [role="radiogroup"] {
         gap: 0.5rem !important;
     }
 
-    .bg-panel.lg\\:mb-4 .min-w-16 {
+    .bg-panel.lg\:mb-4 .min-w-16 {
         min-width: 4rem !important;
     }
 
-    .bg-panel.lg\\:mb-4 .sm\\:w-20 {
+    .bg-panel.lg\:mb-4 .sm\:w-20 {
         width: 5rem !important;
     }
 
     /* Compact the gender filter labels */
-    .bg-panel.lg\\:mb-4 .p-3 {
+    .bg-panel.lg\:mb-4 .p-3 {
         padding: 0.5rem !important;
     }
 
     /* Reduce button area spacing */
-    .bg-panel.lg\\:mb-4 .space-x-2\\.5 {
+    .bg-panel.lg\:mb-4 .space-x-2\.5 {
         gap: 0.75rem !important;
     }
 
     /* Compact the footer text area */
-    .bg-panel.lg\\:mb-4 .text-xs {
+    .bg-panel.lg\:mb-4 .text-xs {
         font-size: 0.65rem !important;
     }
 
     /* Make modal content wrapper more compact */
-    .bg-panel.lg\\:mb-4 > .flex > .flex-col {
+    .bg-panel.lg\:mb-4 > .flex > .flex-col {
         max-height: 85vh;
         overflow-y: auto;
     }
 
     /* Compact the manage button area */
-    .bg-panel.lg\\:mb-4 .flex.justify-between {
+    .bg-panel.lg\:mb-4 .flex.justify-between {
         padding: 0.25rem 0 !important;
     }
 
@@ -888,30 +887,30 @@ em-emoji-picker {
     }
 
     /* Fix Start Text Chat button gradient */
-    .bg-panel.lg\\:mb-4 .from-indigo-600 {
+    .bg-panel.lg\:mb-4 .from-indigo-600 {
         --tw-gradient-from: rgb(79, 70, 229) !important;
         background-color: rgb(79, 70, 229) !important;
     }
 
-    .bg-panel.lg\\:mb-4 .to-emerald-700 {
+    .bg-panel.lg\:mb-4 .to-emerald-700 {
         --tw-gradient-to: rgb(4, 120, 87) !important;
     }
 
-    .bg-panel.lg\\:mb-4 .hover\\:from-indigo-700:hover {
+    .bg-panel.lg\:mb-4 .hover\:from-indigo-700:hover {
         --tw-gradient-from: rgb(67, 56, 202) !important;
     }
 
-    .bg-panel.lg\\:mb-4 .hover\\:to-emerald-800:hover {
+    .bg-panel.lg\:mb-4 .hover\:to-emerald-800:hover {
         --tw-gradient-to: rgb(6, 95, 70) !important;
     }
 
     /* Ensure white text on gradient button */
-    .bg-panel.lg\\:mb-4 .from-indigo-600,
-    .bg-panel.lg\\:mb-4 .to-emerald-700 {
+    .bg-panel.lg\:mb-4 .from-indigo-600,
+    .bg-panel.lg\:mb-4 .to-emerald-700 {
         color: #ffffff !important;
     }
 
-    .bg-panel.lg\\:mb-4 button.flex-1 {
+    .bg-panel.lg\:mb-4 button.flex-1 {
         background: linear-gradient(
             to right,
             rgb(79, 70, 229),
@@ -920,7 +919,7 @@ em-emoji-picker {
         color: #ffffff !important;
     }
 
-    .bg-panel.lg\\:mb-4 button.flex-1:hover {
+    .bg-panel.lg\:mb-4 button.flex-1:hover {
         background: linear-gradient(
             to right,
             rgb(67, 56, 202),

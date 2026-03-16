@@ -34,6 +34,7 @@ export function VideoChatArea() {
     const handledMatchId = useRef<string | null>(null);
     const keyExchangeInitiatedRef = useRef<string | null>(null);
     const partnerLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const selfSkipFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingLeavePeerRef = useRef<string | null>(null);
     const partnerSkipIntentRef = useRef<Set<string>>(new Set());
     const partnerSkipHandledRef = useRef(false);
@@ -401,14 +402,21 @@ export function VideoChatArea() {
 
     // Handle Signaling Events
     useEffect(() => {
-        onPeerSkip((from) => {
+        const unsubscribers: Array<() => void> = [];
+        const register = (unsubscribe: void | (() => void)) => {
+            if (typeof unsubscribe === 'function') {
+                unsubscribers.push(unsubscribe);
+            }
+        };
+
+        register(onPeerSkip((from) => {
             if (from === partnerId) {
                 partnerSkipIntentRef.current.add(from);
                 finalizePartnerSkip();
             }
-        });
+        }));
 
-        onPeerLeave((leftPeerId) => {
+        register(onPeerLeave((leftPeerId) => {
             if (leftPeerId === partnerId) {
                 if (partnerSkipIntentRef.current.has(leftPeerId)) {
                     finalizePartnerSkip();
@@ -422,11 +430,11 @@ export function VideoChatArea() {
                 partnerLeaveTimerRef.current = setTimeout(() => {
                     if (pendingLeavePeerRef.current !== leftPeerId) return;
                     finalizePartnerSkip();
-                }, 5000);
+                }, 1200);
             }
-        });
+        }));
 
-        onPeerJoin((joinedPeerId) => {
+        register(onPeerJoin((joinedPeerId) => {
             if (joinedPeerId !== partnerId) return;
             if (pendingLeavePeerRef.current === joinedPeerId) {
                 pendingLeavePeerRef.current = null;
@@ -437,9 +445,9 @@ export function VideoChatArea() {
             }
             partnerSkipIntentRef.current.delete(joinedPeerId);
             partnerSkipHandledRef.current = false;
-        });
+        }));
 
-        onChatMessage(async (message, from) => {
+        register(onChatMessage(async (message, from) => {
             try {
                 new Audio('/sounds/message.mp3').play().catch(() => { });
             } catch (e) { }
@@ -487,23 +495,23 @@ export function VideoChatArea() {
             if (from === partnerId && message.avatarUrl) {
                 setPartnerAvatarUrl(message.avatarUrl);
             }
-        });
+        }));
 
-        onTyping((isTyping, from) => {
+        register(onTyping((isTyping, from) => {
             if (from === partnerId) {
                 setIsPartnerTyping(isTyping);
             }
-        });
+        }));
 
-        onKeysRequest((from) => {
+        register(onKeysRequest((from) => {
             if (from === partnerId && isCryptoReady) {
                 console.log('[VideoChatArea] Received key request from partner');
                 const bundle = generatePreKeyBundle();
                 sendKeysResponse(from, bundle as any);
             }
-        });
+        }));
 
-        onKeysResponse((bundleStr, from) => {
+        register(onKeysResponse((bundleStr, from) => {
             if (from === partnerId && isCryptoReady) {
                 // ROLE ENFORCEMENT: Only the initiator (lower peerId) processes KeysResponse
                 const myPeerId = useSessionStore.getState().peerId;
@@ -523,9 +531,9 @@ export function VideoChatArea() {
                     console.error('[VideoChatArea] Failed to initiate Signal session:', err);
                 }
             }
-        });
+        }));
 
-        onHandshake((initiationStr, from) => {
+        register(onHandshake((initiationStr, from) => {
             if (from === partnerId && isCryptoReady) {
                 // ROLE ENFORCEMENT: Only the responder (higher peerId) processes SignalHandshake
                 const myPeerId = useSessionStore.getState().peerId;
@@ -544,9 +552,9 @@ export function VideoChatArea() {
                     console.error('[VideoChatArea] Failed to respond to Signal handshake:', err);
                 }
             }
-        });
+        }));
 
-        onFriendRequest((action, from, username, avatarSeed, avatarUrl) => {
+        register(onFriendRequest((action, from, username, avatarSeed, avatarUrl) => {
             console.log('[VideoChatArea] Received friend request action:', action, 'from:', from);
             if (action === 'send') {
                 handleReceivedFriendRequest({
@@ -560,15 +568,19 @@ export function VideoChatArea() {
             } else if (action === 'decline') {
                 declineFriendRequest(from);
             }
-        });
+        }));
 
-        onProfile((from, username, avatarSeed, incomingAvatarUrl) => {
+        register(onProfile((from, username, avatarSeed, incomingAvatarUrl) => {
             updatePeerProfile(from, {
                 username: username || undefined,
                 avatarSeed: avatarSeed || undefined,
                 avatarUrl: incomingAvatarUrl,
             });
-        });
+        }));
+
+        return () => {
+            unsubscribers.forEach((unsubscribe) => unsubscribe());
+        };
     }, [onPeerLeave, onPeerSkip, onPeerJoin, finalizePartnerSkip, onChatMessage, onTyping, partnerId, disconnectSignaling, partnerIsVerified, isCryptoReady, decryptMessage, onKeysRequest, onKeysResponse, onHandshake, generatePreKeyBundle, sendKeysResponse, initiateSignalSession, respondToSignalSession, sendHandshake, onFriendRequest, onProfile, closePeerConnection, stopMatching, leaveRoom, setMatchData]);
 
     useEffect(() => {
@@ -631,29 +643,46 @@ export function VideoChatArea() {
         }
     };
     const handleSkip = () => {
+        const shouldDelayDisconnect = Boolean(partnerId && signalingConnected);
         if (partnerId && signalingConnected) {
             sendSkip(partnerId, 'skip');
         }
-        stopMatching(true);
-        disconnectSignaling();
-        leaveRoom();
-        setMatchData(null);
-        setIsSignalReady(false);
-        setPartner(null);
-        partnerRef.current = null;
-        handledMatchId.current = null;
-        keyExchangeInitiatedRef.current = null;
-        setMessages([]);
-        if (partnerId) {
-            closePeerConnection(partnerId);
+        const finalizeSelfSkip = () => {
+            stopMatching(true);
+            disconnectSignaling();
+            leaveRoom();
+            setMatchData(null);
+            setIsSignalReady(false);
+            setPartner(null);
+            partnerRef.current = null;
+            handledMatchId.current = null;
+            keyExchangeInitiatedRef.current = null;
+            setMessages([]);
+            if (partnerId) {
+                closePeerConnection(partnerId);
+            }
+            setConnectionState('self_skipped');
+            if (remoteVideoRef.current) {
+                remoteVideoRef.current.srcObject = null;
+            }
+            if (remoteAudioRef.current) {
+                remoteAudioRef.current.srcObject = null;
+            }
+            selfSkipFinalizeTimerRef.current = null;
+        };
+
+        if (selfSkipFinalizeTimerRef.current) {
+            clearTimeout(selfSkipFinalizeTimerRef.current);
+            selfSkipFinalizeTimerRef.current = null;
         }
-        setConnectionState('self_skipped');
-        if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = null;
+
+        if (shouldDelayDisconnect) {
+            setConnectionState('self_skipped');
+            selfSkipFinalizeTimerRef.current = setTimeout(finalizeSelfSkip, 140);
+            return;
         }
-        if (remoteAudioRef.current) {
-            remoteAudioRef.current.srcObject = null;
-        }
+
+        finalizeSelfSkip();
     };
 
     const handleSendMessage = useCallback(async (content: string, replyToMessage?: Message | null) => {
@@ -692,7 +721,13 @@ export function VideoChatArea() {
                         return;
                     }
                 } else {
-                    console.warn('[VideoChatArea] Signal not ready, sending plaintext...');
+                    console.warn('[VideoChatArea] Signal not ready, message not sent');
+                    setMessages(prev => prev.map(m =>
+                        m.id === message.id
+                            ? { ...m, content: '\u26a0 Secure channel not ready \u2014 message not sent' }
+                            : m
+                    ));
+                    return;
                 }
             }
 

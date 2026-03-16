@@ -874,3 +874,73 @@
     font-size: 2rem;
   }
 }
+
+:root {
+  --ss-theater-max-height: 62dvh;
+  --ss-control-target: 2.5rem;
+  --ss-title-size: clamp(0.75rem, 0.72rem + 0.22vw, 0.9rem);
+}
+
+@media (max-width: 320px) {
+  :root {
+    --ss-theater-max-height: 32dvh;
+    --ss-control-target: 2.75rem;
+  }
+}
+
+@media (min-width: 321px) and (max-width: 480px) {
+  :root {
+    --ss-theater-max-height: 34dvh;
+    --ss-control-target: 2.75rem;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  :root {
+    --ss-theater-max-height: 38dvh;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  :root {
+    --ss-theater-max-height: 52dvh;
+  }
+}
+
+@media (min-width: 1025px) and (max-width: 1200px) {
+  :root {
+    --ss-theater-max-height: 58dvh;
+  }
+}
+
+@media (min-width: 1201px) and (max-width: 1440px) {
+  :root {
+    --ss-theater-max-height: 62dvh;
+  }
+}
+
+@media (min-width: 1441px) {
+  :root {
+    --ss-theater-max-height: 66dvh;
+  }
+}
+
+.ss-theater-root {
+  background: radial-gradient(circle at center, rgba(37, 42, 58, 0.45) 0%, rgba(11, 13, 18, 0.95) 72%);
+}
+
+.ss-theater-label {
+  font-size: var(--ss-title-size);
+}
+
+.ss-theater-viewport {
+  max-height: var(--ss-theater-max-height);
+}
+
+.ss-control-btn {
+  min-width: var(--ss-control-target);
+  min-height: var(--ss-control-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

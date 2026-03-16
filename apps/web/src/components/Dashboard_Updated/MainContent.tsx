@@ -17,6 +17,7 @@ interface MainContentProps {
   activeArea: 'main' | 'chat';
   setActiveArea: (area: 'main' | 'chat') => void;
   roomId?: string;
+  suppressEmbeddedChat?: boolean;
 }
 
 const interestSets = [
@@ -27,7 +28,7 @@ const interestSets = [
   ['Meditation', 'TikTok', 'Writing']
 ];
 
-export default function MainContent({ onManageInterests, activeArea, setActiveArea, roomId }: MainContentProps) {
+export default function MainContent({ onManageInterests, activeArea, setActiveArea, roomId, suppressEmbeddedChat = false }: MainContentProps) {
   const navigate = useNavigate();
   const { gender, genderFilter, setGender, setGenderFilter, interests, avatarSeed, genderModalDismissed, setGenderModalDismissed, adminAccessKey } = useSessionStore();
   const [currentInterestSet, setCurrentInterestSet] = useState(0);
@@ -66,6 +67,10 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
       setShowGenderModal(true);
       return;
     }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('buzzu:skip-view-state');
+      sessionStorage.removeItem('buzzu:suppress-chat-autostart-once');
+    }
     navigate('/chat/text');
   };
 
@@ -95,6 +100,9 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
   const currentInterests = interests.length > 0 ? interests : interestSets[currentInterestSet];
 
   if (activeArea === 'chat') {
+    if (suppressEmbeddedChat) {
+      return null;
+    }
     if (roomTypeState) {
       return (
         <ChatArea
@@ -161,7 +169,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                 <div className="space-y-2.5">
                   <div className="flex justify-between items-center">
                     <h2 className="lg:text-lg text-base font-medium text-brightness">
-                      <span className="text-inherit flex items-center">Your Interests<span className="ml-2 text-xs font-medium text-success">(ON)</span></span>
+                      <span className="text-inherit flex items-center">Your Interests<span className="ml-2 font-semibold" style={{ color: 'hsl(var(--success))', fontSize: '0.95rem' }}>(ON)</span></span>
                     </h2>
                     <span
                       className="text-sm text-panel-foreground cursor-pointer hover:underline"
@@ -179,7 +187,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                     </span>
                   </div>
                   <div
-                    className="mb-2 cursor-pointer"
+                    className="mb-4 cursor-pointer"
                     role="button"
                     tabIndex={0}
                     aria-label="Edit interests"
@@ -191,7 +199,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                       }
                     }}
                   >
-                    <div className="border-2 border-dashed border-[hsla(var(--dashed-border)/var(--dashed-border-opacity))] rounded-lg p-3 min-h-[48px] flex items-center">
+                    <div className="rounded-lg border-2 border-dashed p-3" style={{ borderColor: 'hsla(var(--dashed-border), 0.42)' }}>
                       <AnimatePresence mode="wait">
                         <motion.div
                           key={currentInterestSet}
@@ -228,7 +236,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                             className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
                               ${genderFilter === 'male'
                                 ? 'bg-blue-500/15 border-blue-500 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.25)] scale-[1.05]'
-                                : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
+                                : 'bg-background/50 border-brightness/20 dark:border-brightness/10 text-muted-foreground hover:bg-muted opacity-80 hover:opacity-100 hover:scale-100'}`}
                             onClick={() => setGenderFilter('male')}
                           >
                             {genderFilter === 'male' && (
@@ -250,7 +258,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                             className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
                               ${genderFilter === 'both'
                                 ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)] scale-[1.05]'
-                                : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
+                                : 'bg-background/50 border-brightness/20 dark:border-brightness/10 text-muted-foreground hover:bg-muted opacity-80 hover:opacity-100 hover:scale-100'}`}
                             onClick={() => setGenderFilter('both')}
                           >
                             {genderFilter === 'both' && (
@@ -272,7 +280,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
                             className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
                               ${genderFilter === 'female'
                                 ? 'bg-pink-500/15 border-pink-500 text-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.25)] scale-[1.05]'
-                                : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
+                                : 'bg-background/50 border-brightness/20 dark:border-brightness/10 text-muted-foreground hover:bg-muted opacity-80 hover:opacity-100 hover:scale-100'}`}
                             onClick={() => setGenderFilter('female')}
                           >
                             {genderFilter === 'female' && (

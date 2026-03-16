@@ -5,6 +5,11 @@ import { useScreenShareStore } from '../stores/screenShareStore';
 import { useIceServers } from './useIceServers';
 import { getLocalRankingJson, mergePeerRanking, recordLiveRtt } from './useOptimalStun';
 import { createPeerConnection, getBrowserInfo } from '../utils/browserCompatibility';
+import {
+  isStaleAnswerSession,
+  isStaleIceSession,
+  isStaleOfferSession,
+} from './webrtcSessionGuards';
 
 export type PeerConnectionState = 
   | { type: 'new' }
@@ -31,6 +36,27 @@ export interface UseWebRTCResult {
   isFallbackActive: (targetPeerId: string) => boolean;
   getConnectionState: (targetPeerId: string) => PeerConnectionState;
 }
+
+export const shouldRecoverFromAnswerError = (err: unknown): boolean => {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return message.includes("m-lines in answer doesn't match order in offer");
+};
+
+export const shouldIgnoreDuplicateOfferSdp = (
+  incomingSdp?: string,
+  lastSdp?: string,
+  lastSeenAt: number = 0,
+  now: number = Date.now(),
+  windowMs: number = 8000,
+): boolean => {
+  if (!incomingSdp || !lastSdp) return false;
+  if (incomingSdp !== lastSdp) return false;
+  return now - lastSeenAt <= windowMs;
+};
+
+export const shouldReplayDataChannelState = (readyState: RTCDataChannelState): boolean => {
+  return readyState === 'connecting' || readyState === 'open';
+};
 
 // Whether the current browser is Firefox (setCodecPreferences is broken on FF answerer).
 // References:
@@ -135,6 +161,7 @@ declare global {
 }
 
 export function useWebRTC(): UseWebRTCResult {
+  const isDev = import.meta.env.DEV;
   const { stunServers, turnServers } = useIceServers();
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const fallbackTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -147,6 +174,8 @@ export function useWebRTC(): UseWebRTCResult {
   const activeDataChannelsRef = useRef<Map<string, RTCDataChannel[]>>(new Map());
   const candidateBufferRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const candidateDedupRef = useRef<Map<string, Set<string>>>(new Map());
+  const localOfferSessionRef = useRef<Map<string, number>>(new Map());
+  const remoteOfferSessionRef = useRef<Map<string, number>>(new Map());
   const peerStateRef = useRef<Map<string, PeerConnectionState>>(new Map());
   const iceGatheringCompleteRef = useRef<Map<string, boolean>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -187,6 +216,20 @@ export function useWebRTC(): UseWebRTCResult {
     currentBitrate: number;
     stableSince: number;
   }>>(new Map());
+  const lastTelemetryStatsRef = useRef<Map<string, {
+    timestamp: number;
+    inboundBytes: number;
+    outboundBytes: number;
+    inboundPacketsReceived: number;
+    inboundPacketsLost: number;
+    lastEmitAt: number;
+    sampleCount: number;
+  }>>(new Map());
+  const initiatedCallSessionRef = useRef<Map<string, string>>(new Map());
+  const lastHandledOfferSessionRef = useRef<Map<string, number>>(new Map());
+  const pendingDataChannelNoticeRef = useRef<Set<string>>(new Set());
+  const lastOfferSdpRef = useRef<Map<string, string>>(new Map());
+  const lastOfferSeenAtRef = useRef<Map<string, number>>(new Map());
 
   // ── Per-peer negotiation lock ───────────────────────────────
   // Serializes offer/answer/TURN-fallback processing per peer so that
@@ -198,6 +241,32 @@ export function useWebRTC(): UseWebRTCResult {
     negotiationLockRef.current.set(peerId, next);
     return next;
   }, []);
+
+  const pruneDataChannelsForPeer = useCallback((targetPeerId: string) => {
+    const channels = activeDataChannelsRef.current.get(targetPeerId) || [];
+    if (channels.length === 0) return;
+    const deduped: RTCDataChannel[] = [];
+    for (const channel of channels) {
+      if (deduped.includes(channel)) continue;
+      if (channel.readyState === 'closed' || channel.readyState === 'closing') continue;
+      deduped.push(channel);
+    }
+    if (deduped.length === 0) {
+      activeDataChannelsRef.current.delete(targetPeerId);
+      return;
+    }
+    activeDataChannelsRef.current.set(targetPeerId, deduped);
+  }, []);
+
+  const registerDataChannel = useCallback((targetPeerId: string, channel: RTCDataChannel) => {
+    pruneDataChannelsForPeer(targetPeerId);
+    const channels = activeDataChannelsRef.current.get(targetPeerId) || [];
+    if (channels.includes(channel)) {
+      return;
+    }
+    channels.push(channel);
+    activeDataChannelsRef.current.set(targetPeerId, channels);
+  }, [pruneDataChannelsForPeer]);
 
   const logEvent = useCallback((level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown>) => {
     const payload = { level, event, ts: Date.now(), ...data };
@@ -231,6 +300,60 @@ export function useWebRTC(): UseWebRTCResult {
     return true;
   }, [getCandidateKey]);
 
+  const beginLocalOfferSession = useCallback((targetPeerId: string, sessionTs?: number) => {
+    const lastLocalTs = localOfferSessionRef.current.get(targetPeerId) ?? 0;
+    const incomingTs = sessionTs ?? Date.now();
+    const ts = Math.max(incomingTs, lastLocalTs + 1);
+    localOfferSessionRef.current.set(targetPeerId, ts);
+    candidateBufferRef.current.delete(targetPeerId);
+    candidateDedupRef.current.delete(targetPeerId);
+    return ts;
+  }, []);
+
+  const beginRemoteOfferSession = useCallback((targetPeerId: string, sessionTs?: number) => {
+    if (typeof sessionTs !== 'number') {
+      return;
+    }
+    const lastRemoteTs = remoteOfferSessionRef.current.get(targetPeerId) ?? 0;
+    remoteOfferSessionRef.current.set(targetPeerId, Math.max(sessionTs, lastRemoteTs));
+    candidateBufferRef.current.delete(targetPeerId);
+    candidateDedupRef.current.delete(targetPeerId);
+  }, []);
+
+  const getActiveSessionTs = useCallback((targetPeerId: string) => {
+    const localTs = localOfferSessionRef.current.get(targetPeerId) ?? 0;
+    const remoteTs = remoteOfferSessionRef.current.get(targetPeerId) ?? 0;
+    const maxTs = Math.max(localTs, remoteTs);
+    return maxTs > 0 ? maxTs : undefined;
+  }, []);
+
+  const getActiveSignalMeta = useCallback(() => {
+    const state = useSessionStore.getState();
+    const roomId = state.currentRoomId ?? undefined;
+    const localPeerId = state.peerId ?? peerId;
+    const partner = state.partnerId ?? undefined;
+    const sessionId =
+      roomId && partner && localPeerId
+        ? `${roomId}:${partner}:${localPeerId}`
+        : undefined;
+    return { roomId, sessionId };
+  }, [peerId]);
+
+  const shouldDropBySession = useCallback((from: string, roomId?: string, sessionId?: string) => {
+    const active = getActiveSignalMeta();
+    if (roomId && active.roomId && roomId !== active.roomId) {
+      return true;
+    }
+    if (sessionId && active.sessionId && sessionId !== active.sessionId) {
+      return true;
+    }
+    const expectedPartner = useSessionStore.getState().partnerId;
+    if (expectedPartner && expectedPartner !== from) {
+      return true;
+    }
+    return false;
+  }, [getActiveSignalMeta]);
+
   const requestRenegotiation = useCallback(async (targetPeerId: string, reason?: string) => {
     await withNegotiationLock(targetPeerId, async () => {
       const pc = peerConnectionsRef.current.get(targetPeerId);
@@ -254,11 +377,15 @@ export function useWebRTC(): UseWebRTCResult {
           return;
         }
         await pc.setLocalDescription(offer);
+        const sessionTs = beginLocalOfferSession(targetPeerId);
         sendMessage({
           type: 'Offer',
           from: peerId,
           to: targetPeerId,
           payload: JSON.stringify(pc.localDescription),
+          timestamp: sessionTs,
+          room_id: getActiveSignalMeta().roomId,
+          session_id: getActiveSignalMeta().sessionId,
         });
         if (reason) {
           console.log('[useWebRTC] Renegotiation offer sent to', targetPeerId, 'reason:', reason);
@@ -269,7 +396,7 @@ export function useWebRTC(): UseWebRTCResult {
         makingOfferRef.current.set(targetPeerId, false);
       }
     });
-  }, [peerId, sendMessage, withNegotiationLock]);
+  }, [beginLocalOfferSession, peerId, sendMessage, withNegotiationLock]);
 
   // Ref to break the circular dependency: applyTurnFallback ↔ createPeerConnectionWrapper
   const createPcRef = useRef<(id: string, s?: MediaStream, o?: boolean, t?: boolean) => Promise<RTCPeerConnection>>(null!);
@@ -334,11 +461,15 @@ export function useWebRTC(): UseWebRTCResult {
         // ── Send fresh offer ────────────────────────────────────────
         const offer = await newPc.createOffer();
         await newPc.setLocalDescription(offer);
+        const sessionTs = beginLocalOfferSession(targetPeerId);
         sendMessage({
           type: 'Offer',
           from: peerId,
           to: targetPeerId,
-          payload: JSON.stringify(offer)
+          payload: JSON.stringify(offer),
+          timestamp: sessionTs,
+          room_id: getActiveSignalMeta().roomId,
+          session_id: getActiveSignalMeta().sessionId,
         });
         console.log('[useWebRTC] TURN fallback: new offer sent to', targetPeerId);
 
@@ -363,7 +494,7 @@ export function useWebRTC(): UseWebRTCResult {
         setTimeout(() => fallbackActiveRef.current.delete(targetPeerId), 1000);
       }
     });
-  }, [sendMessage, peerId, withNegotiationLock]);
+  }, [beginLocalOfferSession, sendMessage, peerId, withNegotiationLock]);
 
   const browser = getBrowserInfo();
 
@@ -374,11 +505,14 @@ export function useWebRTC(): UseWebRTCResult {
   ): Promise<RTCPeerConnection> => {
     const existingPC = peerConnectionsRef.current.get(targetPeerId);
     if (existingPC) {
+      pruneDataChannelsForPeer(targetPeerId);
       // If we're the offerer but the PC was already created (e.g., by handling a signaling message),
       // we still need to ensure a file-transfer DataChannel exists.
       if (isOfferer) {
         const existingChannels = activeDataChannelsRef.current.get(targetPeerId) || [];
-        const hasFileTransfer = existingChannels.some(ch => ch.label === 'file-transfer');
+        const hasFileTransfer = existingChannels.some(
+          ch => ch.label === 'file-transfer' && ch.readyState !== 'closed' && ch.readyState !== 'closing',
+        );
         if (!hasFileTransfer) {
           console.log('[useWebRTC] Existing PC found but missing file-transfer channel, creating one for:', targetPeerId);
           const channel = existingPC.createDataChannel('file-transfer');
@@ -396,11 +530,11 @@ export function useWebRTC(): UseWebRTCResult {
           channel.onclose = () => {
             console.log('[useWebRTC] Late-created file-transfer channel CLOSED for:', targetPeerId);
             dataChannelOpenStatesRef.current.delete(targetPeerId);
+            pruneDataChannelsForPeer(targetPeerId);
           };
           channel.onerror = (e) => console.error('[useWebRTC] Late-created file-transfer channel ERROR for:', targetPeerId, e);
 
-          existingChannels.push(channel);
-          activeDataChannelsRef.current.set(targetPeerId, existingChannels);
+          registerDataChannel(targetPeerId, channel);
 
           if (dataChannelCallbackRef.current) {
             dataChannelCallbackRef.current(channel, targetPeerId);
@@ -445,22 +579,31 @@ export function useWebRTC(): UseWebRTCResult {
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('[useWebRTC] Local ICE candidate generated for:', targetPeerId);
+        if (isDev) {
+          console.log('[useWebRTC] Local ICE candidate generated for:', targetPeerId);
+        }
         sendMessage({
           type: 'IceCandidate',
           from: peerId,
           to: targetPeerId,
-          payload: JSON.stringify(event.candidate.toJSON())
+          payload: JSON.stringify(event.candidate.toJSON()),
+          timestamp: getActiveSessionTs(targetPeerId),
+          room_id: getActiveSignalMeta().roomId,
+          session_id: getActiveSignalMeta().sessionId,
         });
       } else {
-        console.log('[useWebRTC] ICE gathering complete for:', targetPeerId);
+        if (isDev) {
+          console.log('[useWebRTC] ICE gathering complete for:', targetPeerId);
+        }
         iceGatheringCompleteRef.current.set(targetPeerId, true);
       }
     };
 
     pc.oniceconnectionstatechange = async () => {
       const state = pc.iceConnectionState;
-      console.log('[useWebRTC] ICE state for', targetPeerId, ':', state);
+      if (isDev) {
+        console.log('[useWebRTC] ICE state for', targetPeerId, ':', state);
+      }
 
       if (state === 'connected' || state === 'completed') {
         const currentState = peerStateRef.current.get(targetPeerId);
@@ -500,8 +643,12 @@ export function useWebRTC(): UseWebRTCResult {
               payload: JSON.stringify({ kind: 'stun_ranking', ranking: rankingJson }),
               hop_count: 0,
               timestamp: Date.now(),
+              room_id: getActiveSignalMeta().roomId,
+              session_id: getActiveSignalMeta().sessionId,
             });
-            console.log('[useWebRTC] Sent bilateral STUN ranking to', targetPeerId);
+            if (isDev) {
+              console.log('[useWebRTC] Sent bilateral STUN ranking to', targetPeerId);
+            }
           }
         }
 
@@ -521,7 +668,9 @@ export function useWebRTC(): UseWebRTCResult {
                   const stunUrl = localCandReport?.url;
                   if (stunUrl) {
                     recordLiveRtt(stunUrl, rtt * 1000); // s → ms
-                    console.log('[useWebRTC] Fed live RTT', (rtt * 1000).toFixed(1), 'ms for', stunUrl);
+                    if (isDev) {
+                      console.log('[useWebRTC] Fed live RTT', (rtt * 1000).toFixed(1), 'ms for', stunUrl);
+                    }
                   }
                 }
               }
@@ -564,11 +713,15 @@ export function useWebRTC(): UseWebRTCResult {
             pc.restartIce();
             const offer = await pc.createOffer({ iceRestart: true });
             await pc.setLocalDescription(offer);
+            const sessionTs = beginLocalOfferSession(targetPeerId);
             sendMessage({
               type: 'Offer',
               from: peerId,
               to: targetPeerId,
-              payload: JSON.stringify(offer)
+              payload: JSON.stringify(offer),
+              timestamp: sessionTs,
+              room_id: getActiveSignalMeta().roomId,
+              session_id: getActiveSignalMeta().sessionId,
             });
             return; // Soft restart initiated
           } catch (err) {
@@ -606,11 +759,15 @@ export function useWebRTC(): UseWebRTCResult {
                 pc.restartIce();
                 const offer = await pc.createOffer({ iceRestart: true });
                 await pc.setLocalDescription(offer);
+                const sessionTs = beginLocalOfferSession(targetPeerId);
                 sendMessage({
                   type: 'Offer',
                   from: peerId,
                   to: targetPeerId,
-                  payload: JSON.stringify(offer)
+                  payload: JSON.stringify(offer),
+                  timestamp: sessionTs,
+                  room_id: getActiveSignalMeta().roomId,
+                  session_id: getActiveSignalMeta().sessionId,
                 });
               } catch (err) {
                 console.error('[useWebRTC] Proactive soft restart failed:', err);
@@ -1002,19 +1159,22 @@ export function useWebRTC(): UseWebRTCResult {
         event.channel.onclose = () => {
           console.log('[useWebRTC] Remote data channel CLOSED:', event.channel.label, 'from', targetPeerId);
           dataChannelOpenStatesRef.current.delete(targetPeerId);
+          pruneDataChannelsForPeer(targetPeerId);
         };
       }
 
       // Store channel for replay if callback isn't ready
-      const channels = activeDataChannelsRef.current.get(targetPeerId) || [];
-      channels.push(event.channel);
-      activeDataChannelsRef.current.set(targetPeerId, channels);
+      registerDataChannel(targetPeerId, event.channel);
 
       if (dataChannelCallbackRef.current) {
         console.log('[useWebRTC] Forwarding remote channel to callback');
+        pendingDataChannelNoticeRef.current.delete(targetPeerId);
         dataChannelCallbackRef.current(event.channel, targetPeerId);
       } else {
-        console.warn('[useWebRTC] No dataChannelCallbackRef.current ready yet');
+        if (!pendingDataChannelNoticeRef.current.has(targetPeerId)) {
+          pendingDataChannelNoticeRef.current.add(targetPeerId);
+          console.log('[useWebRTC] Data channel callback pending for:', targetPeerId);
+        }
       }
     };
 
@@ -1033,23 +1193,24 @@ export function useWebRTC(): UseWebRTCResult {
       channel.onopen = () => {
         console.log('[useWebRTC] Local data channel "file-transfer" OPEN for:', targetPeerId);
         dataChannelOpenStatesRef.current.set(targetPeerId, true);
-
-        // Trigger callback if registered
-        if (dataChannelCallbackRef.current) {
-          console.log('[useWebRTC] Forwarding local channel to callback on open');
-          dataChannelCallbackRef.current(channel, targetPeerId);
-        }
       };
       channel.onclose = () => {
         console.log('[useWebRTC] Local data channel "file-transfer" CLOSED for:', targetPeerId);
         dataChannelOpenStatesRef.current.delete(targetPeerId);
+        pruneDataChannelsForPeer(targetPeerId);
       };
-      channel.onerror = (e) => console.error('[useWebRTC] Local data channel "file-transfer" ERROR for:', targetPeerId, e);
+      channel.onerror = (e) => {
+        const errorName = (e as any)?.error?.name;
+        const errorMessage = (e as any)?.error?.message || (e as any)?.message;
+        if (errorName === 'OperationError' || `${errorMessage || ''}`.includes('Abort')) {
+          console.log('[useWebRTC] Ignoring intentional local data channel abort for:', targetPeerId);
+          return;
+        }
+        console.error('[useWebRTC] Local data channel "file-transfer" ERROR for:', targetPeerId, e);
+      };
 
       // Store channel for replay
-      const channels = activeDataChannelsRef.current.get(targetPeerId) || [];
-      channels.push(channel);
-      activeDataChannelsRef.current.set(targetPeerId, channels);
+      registerDataChannel(targetPeerId, channel);
 
       // Notify the local caller about our own created channel immediately (don't wait for open)
       // This allows the caller to set up their own handlers before the channel opens
@@ -1077,24 +1238,34 @@ export function useWebRTC(): UseWebRTCResult {
     const connectionTimer = setTimeout(() => {
       if (peerConnectionsRef.current.get(targetPeerId) !== pc) return; // stale timer
       if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
-        console.warn(`[useWebRTC] Connection timeout for ${targetPeerId} after 20s — forcing ICE restart`);
-        // We triggere an ICE restart instead of applyTurnFallback since both are already included
-        pc.restartIce();
-        pc.createOffer({ iceRestart: true }).then(offer => {
-          pc.setLocalDescription(offer);
-          sendMessage({
-            type: 'Offer',
-            from: peerId,
-            to: targetPeerId,
-            payload: JSON.stringify(offer)
-          });
-        }).catch(err => console.error('[useWebRTC] ICE restart failed during timeout:', err));
+        const attempts = iceRestartAttemptsRef.current.get(targetPeerId) ?? 0;
+        const jitter = Math.floor(Math.random() * 300);
+        const delay = Math.min(
+          ICE_RESTART_BASE_DELAY_MS * Math.pow(1.4, attempts) + jitter,
+          ICE_RESTART_MAX_DELAY_MS,
+        );
+        console.warn(
+          `[useWebRTC] Connection timeout for ${targetPeerId} after 20s — scheduling recovery in ${delay}ms`,
+        );
+        const existingTimer = iceRestartTimersRef.current.get(targetPeerId);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+        const timer = setTimeout(() => {
+          iceRestartTimersRef.current.delete(targetPeerId);
+          const currentPc = peerConnectionsRef.current.get(targetPeerId);
+          if (!currentPc || currentPc.connectionState === 'connected' || currentPc.connectionState === 'closed') {
+            return;
+          }
+          applyTurnFallback(targetPeerId);
+        }, delay);
+        iceRestartTimersRef.current.set(targetPeerId, timer);
       }
     }, 20000);
     connectionTimeoutRef.current.set(targetPeerId, connectionTimer);
 
     return pc;
-  }, [stunServers, turnServers, sendMessage, peerId, browser]);
+  }, [stunServers, turnServers, sendMessage, peerId, browser, pruneDataChannelsForPeer, registerDataChannel]);
 
   // Wire up the ref so applyTurnFallback can call createPeerConnectionWrapper
   // without a circular useCallback dependency.
@@ -1104,7 +1275,21 @@ export function useWebRTC(): UseWebRTCResult {
     localStreamRef.current = stream;
     if (!stream) return;
     peerConnectionsRef.current.forEach((pc) => {
+      const nextTracksByKind = new Map<string, MediaStreamTrack>();
       stream.getTracks().forEach((track) => {
+        nextTracksByKind.set(track.kind, track);
+      });
+      pc.getSenders().forEach((sender) => {
+        const currentTrack = sender.track;
+        const nextTrack = currentTrack ? nextTracksByKind.get(currentTrack.kind) : undefined;
+        if (nextTrack && currentTrack?.id !== nextTrack.id) {
+          void sender.replaceTrack(nextTrack).catch((err) => {
+            console.warn("[useWebRTC] replaceTrack failed during setLocalStream:", err);
+          });
+          nextTracksByKind.delete(nextTrack.kind);
+        }
+      });
+      nextTracksByKind.forEach((track) => {
         const hasTrack = pc.getSenders().some((sender) => sender.track?.id === track.id);
         if (!hasTrack) {
           pc.addTrack(track, stream);
@@ -1153,9 +1338,36 @@ export function useWebRTC(): UseWebRTCResult {
     fallbackTimersRef.current.clear();
     connectionTimeoutRef.current.forEach((timer) => clearTimeout(timer));
     connectionTimeoutRef.current.clear();
+    localOfferSessionRef.current.clear();
+    remoteOfferSessionRef.current.clear();
     intentionalLeaveRef.current.clear();
+    makingOfferRef.current.clear();
+    ignoreOfferRef.current.clear();
+    skipNextNegotiationRef.current.clear();
+    negotiationQueuedRef.current.clear();
+    lastAbrStatsRef.current.clear();
+    lastTelemetryStatsRef.current.clear();
+    initiatedCallSessionRef.current.clear();
+    lastHandledOfferSessionRef.current.clear();
+    pendingDataChannelNoticeRef.current.clear();
+    lastOfferSdpRef.current.clear();
+    lastOfferSeenAtRef.current.clear();
+    negotiationLockRef.current.clear();
+    peerStateRef.current.clear();
+    const snapshot = {
+      peerConnections: peerConnectionsRef.current.size,
+      dataChannels: activeDataChannelsRef.current.size,
+      candidateBuffers: candidateBufferRef.current.size,
+      candidateDedup: candidateDedupRef.current.size,
+      signalingSessions: localOfferSessionRef.current.size + remoteOfferSessionRef.current.size,
+      fallbackTimers: fallbackTimersRef.current.size,
+      connectionTimers: connectionTimeoutRef.current.size,
+      restartTimers: iceRestartTimersRef.current.size,
+      negotiationLocks: negotiationLockRef.current.size,
+    };
+    logEvent('info', 'webrtc_teardown_all_snapshot', snapshot);
     // Note: intentionalLeaveAllRef stays true until next createPeerConnection
-  }, []);
+  }, [logEvent]);
 
   const closePeerConnection = useCallback((targetPeerId: string) => {
     const pc = peerConnectionsRef.current.get(targetPeerId);
@@ -1193,8 +1405,21 @@ export function useWebRTC(): UseWebRTCResult {
       activeDataChannelsRef.current.delete(targetPeerId);
       candidateBufferRef.current.delete(targetPeerId);
       candidateDedupRef.current.delete(targetPeerId);
+      localOfferSessionRef.current.delete(targetPeerId);
+      remoteOfferSessionRef.current.delete(targetPeerId);
       makingOfferRef.current.delete(targetPeerId);
       ignoreOfferRef.current.delete(targetPeerId);
+      skipNextNegotiationRef.current.delete(targetPeerId);
+      negotiationQueuedRef.current.delete(targetPeerId);
+      lastAbrStatsRef.current.delete(targetPeerId);
+      lastTelemetryStatsRef.current.delete(targetPeerId);
+      initiatedCallSessionRef.current.delete(targetPeerId);
+      lastHandledOfferSessionRef.current.delete(targetPeerId);
+      pendingDataChannelNoticeRef.current.delete(targetPeerId);
+      lastOfferSdpRef.current.delete(targetPeerId);
+      lastOfferSeenAtRef.current.delete(targetPeerId);
+      negotiationLockRef.current.delete(targetPeerId);
+      peerStateRef.current.delete(targetPeerId);
       iceGatheringCompleteRef.current.delete(targetPeerId);
       dataChannelOpenStatesRef.current.delete(targetPeerId);
       stunRankingSentRef.current.delete(targetPeerId);
@@ -1218,8 +1443,16 @@ export function useWebRTC(): UseWebRTCResult {
       }
 
       console.log('[useWebRTC] Closed peer connection to', targetPeerId);
+      logEvent('info', 'webrtc_teardown_peer_snapshot', {
+        targetPeerId,
+        peerConnections: peerConnectionsRef.current.size,
+        dataChannels: activeDataChannelsRef.current.size,
+        candidateBuffers: candidateBufferRef.current.size,
+        fallbackTimers: fallbackTimersRef.current.size,
+        connectionTimers: connectionTimeoutRef.current.size,
+      });
     }
-  }, []);
+  }, [logEvent]);
 
   const getConnectionStats = useCallback(async (targetPeerId: string): Promise<RTCStatsReport | null> => {
     const pc = peerConnectionsRef.current.get(targetPeerId);
@@ -1276,25 +1509,53 @@ export function useWebRTC(): UseWebRTCResult {
     targetPeerId: string,
     localStream: MediaStream
   ) => {
+    const signalMeta = getActiveSignalMeta();
+    const initiateSessionKey = `${signalMeta.sessionId ?? 'unknown'}:${targetPeerId}`;
+    const existingSessionKey = initiatedCallSessionRef.current.get(targetPeerId);
+    const existingPc = peerConnectionsRef.current.get(targetPeerId);
+    if (existingSessionKey === initiateSessionKey && existingPc && existingPc.signalingState !== 'closed') {
+      console.log('[useWebRTC] Skipping duplicate initiateCall session for:', targetPeerId);
+      return;
+    }
+    initiatedCallSessionRef.current.set(targetPeerId, initiateSessionKey);
     try {
       const pc = await createPeerConnectionWrapper(targetPeerId, localStream);
+      if (makingOfferRef.current.get(targetPeerId) || pc.signalingState !== 'stable') {
+        negotiationQueuedRef.current.set(targetPeerId, true);
+        console.log('[useWebRTC] Skipping duplicate initiateCall for:', targetPeerId, 'state:', pc.signalingState);
+        return;
+      }
 
-      const offerOptions = await preferH264Codec(pc);
-      const offer = await pc.createOffer(offerOptions);
-      await pc.setLocalDescription(offer);
+      makingOfferRef.current.set(targetPeerId, true);
+      try {
+        const offerOptions = await preferH264Codec(pc);
+        const offer = await pc.createOffer(offerOptions);
+        if (pc.signalingState !== 'stable') {
+          negotiationQueuedRef.current.set(targetPeerId, true);
+          return;
+        }
+        await pc.setLocalDescription(offer);
+        const sessionTs = beginLocalOfferSession(targetPeerId);
 
-      sendMessage({
-        type: 'Offer',
-        from: peerId,
-        to: targetPeerId,
-        payload: JSON.stringify(offer)
-      });
-      console.log('[useWebRTC] Sent offer to', targetPeerId);
+        sendMessage({
+          type: 'Offer',
+          from: peerId,
+          to: targetPeerId,
+          payload: JSON.stringify(offer),
+          timestamp: sessionTs,
+          room_id: signalMeta.roomId,
+          session_id: signalMeta.sessionId,
+        });
+        console.log('[useWebRTC] Sent offer to', targetPeerId);
+      } finally {
+        makingOfferRef.current.set(targetPeerId, false);
+      }
     } catch (err) {
+      initiatedCallSessionRef.current.delete(targetPeerId);
       console.error('[useWebRTC] Failed to initiate call:', err);
       throw err;
     }
-  }, [createPeerConnectionWrapper, sendMessage, peerId]);
+  }, [beginLocalOfferSession, createPeerConnectionWrapper, sendMessage, peerId, getActiveSignalMeta]);
 
   const onDataChannel = useCallback((callback: (channel: RTCDataChannel, from: string) => void) => {
     dataChannelCallbackRef.current = callback;
@@ -1303,13 +1564,18 @@ export function useWebRTC(): UseWebRTCResult {
     // This ensures the callback can set up handlers before the channel opens
     if (callback) {
       activeDataChannelsRef.current.forEach((channels, from) => {
+        pruneDataChannelsForPeer(from);
+        pendingDataChannelNoticeRef.current.delete(from);
         channels.forEach(channel => {
+          if (!shouldReplayDataChannelState(channel.readyState)) {
+            return;
+          }
           console.log('[useWebRTC] Replaying buffered data channel:', channel.label, 'from:', from, 'readyState:', channel.readyState);
           callback(channel, from);
         });
       });
     }
-  }, []);
+  }, [pruneDataChannelsForPeer]);
 
   // Helper function to check if data channel is open and ready
   const isDataChannelOpen = useCallback((targetPeerId: string): boolean => {
@@ -1342,7 +1608,7 @@ export function useWebRTC(): UseWebRTCResult {
   }, []);
 
   useEffect(() => {
-    const handleOfferInternal = async (offer: RTCSessionDescriptionInit, from: string) => {
+    const handleOfferInternal = async (offer: RTCSessionDescriptionInit, from: string, sessionTs?: number) => {
       await withNegotiationLock(from, async () => {
         try {
           const pc = await createPeerConnectionWrapper(from, localStreamRef.current ?? undefined);
@@ -1351,6 +1617,36 @@ export function useWebRTC(): UseWebRTCResult {
           if (pc.signalingState === 'closed') {
             console.warn('[useWebRTC] Ignoring offer from', from, '— PC is closed');
             return;
+          }
+
+          const lastRemoteSessionTs = remoteOfferSessionRef.current.get(from);
+          if (isStaleOfferSession(sessionTs, lastRemoteSessionTs)) {
+            console.warn('[useWebRTC] Ignoring stale offer from', from, 'session:', sessionTs, 'last:', lastRemoteSessionTs);
+            return;
+          }
+          const incomingSdp = offer.sdp;
+          const lastSeenOfferSdp = lastOfferSdpRef.current.get(from);
+          const lastSeenOfferAt = lastOfferSeenAtRef.current.get(from) ?? 0;
+          if (
+            shouldIgnoreDuplicateOfferSdp(incomingSdp, lastSeenOfferSdp, lastSeenOfferAt) &&
+            (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected')
+          ) {
+            console.log('[useWebRTC] Ignoring duplicate offer SDP from', from);
+            return;
+          }
+          if (incomingSdp) {
+            lastOfferSdpRef.current.set(from, incomingSdp);
+            lastOfferSeenAtRef.current.set(from, Date.now());
+          }
+          if (typeof sessionTs === 'number') {
+            const lastHandledSessionTs = lastHandledOfferSessionRef.current.get(from);
+            if (
+              lastHandledSessionTs === sessionTs &&
+              (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected')
+            ) {
+              console.log('[useWebRTC] Ignoring duplicate already-handled offer from', from, 'session:', sessionTs);
+              return;
+            }
           }
 
           // ── Perfect Negotiation: Offer glare handling ──────────────────
@@ -1370,6 +1666,7 @@ export function useWebRTC(): UseWebRTCResult {
           }
 
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          beginRemoteOfferSession(from, sessionTs);
           console.log('[useWebRTC] Set remote offer for:', from);
 
           const buffered = candidateBufferRef.current.get(from) || [];
@@ -1388,12 +1685,19 @@ export function useWebRTC(): UseWebRTCResult {
           const answer = await pc.createAnswer(answerOptions);
           await pc.setLocalDescription(answer);
 
+          const answerSessionTs = typeof sessionTs === 'number' ? sessionTs : getActiveSessionTs(from);
           sendMessage({
             type: 'Answer',
             from: peerId,
             to: from,
-            payload: JSON.stringify(answer)
+            payload: JSON.stringify(answer),
+            timestamp: answerSessionTs,
+            room_id: getActiveSignalMeta().roomId,
+            session_id: getActiveSignalMeta().sessionId,
           });
+          if (typeof answerSessionTs === 'number') {
+            lastHandledOfferSessionRef.current.set(from, answerSessionTs);
+          }
           console.log('[useWebRTC] Sent answer to', from);
         } catch (err) {
           console.error('[useWebRTC] Failed to handle offer:', err);
@@ -1401,12 +1705,18 @@ export function useWebRTC(): UseWebRTCResult {
       });
     };
 
-    const handleAnswerInternal = async (answer: RTCSessionDescriptionInit, from: string) => {
+    const handleAnswerInternal = async (answer: RTCSessionDescriptionInit, from: string, sessionTs?: number) => {
       await withNegotiationLock(from, async () => {
+        const pc = peerConnectionsRef.current.get(from);
         try {
-          const pc = peerConnectionsRef.current.get(from);
           if (!pc) {
             console.warn('[useWebRTC] Ignoring answer from', from, '— no peer connection');
+            return;
+          }
+
+          const expectedSessionTs = localOfferSessionRef.current.get(from);
+          if (isStaleAnswerSession(sessionTs, expectedSessionTs)) {
+            console.warn('[useWebRTC] Ignoring stale answer from', from, 'session:', sessionTs, 'expected >=', expectedSessionTs);
             return;
           }
 
@@ -1428,12 +1738,30 @@ export function useWebRTC(): UseWebRTCResult {
           }
           candidateBufferRef.current.delete(from);
         } catch (err) {
+          if (shouldRecoverFromAnswerError(err)) {
+            console.warn('[useWebRTC] Answer m-line mismatch detected for', from, '- rolling back and renegotiating');
+            negotiationQueuedRef.current.set(from, true);
+            if (pc.signalingState === 'have-local-offer') {
+              try {
+                await pc.setLocalDescription({ type: 'rollback' });
+                console.log('[useWebRTC] Rolled back local offer for', from, 'after answer mismatch');
+              } catch (rollbackErr) {
+                console.warn('[useWebRTC] Failed to rollback after answer mismatch for', from, rollbackErr);
+              }
+            }
+            setTimeout(() => {
+              requestRenegotiation(from, 'answer-mline-recover').catch((recoverErr) => {
+                console.error('[useWebRTC] Recovery renegotiation failed for', from, recoverErr);
+              });
+            }, 0);
+            return;
+          }
           console.error('[useWebRTC] Failed to handle answer:', err);
         }
       });
     };
 
-    const handleIceCandidateInternal = async (candidate: RTCIceCandidateInit, from: string) => {
+    const handleIceCandidateInternal = async (candidate: RTCIceCandidateInit, from: string, sessionTs?: number) => {
       try {
         if (!candidate?.candidate) {
           logEvent('warn', 'ice_candidate_empty', { peerId: from });
@@ -1443,6 +1771,16 @@ export function useWebRTC(): UseWebRTCResult {
           logEvent('info', 'ice_candidate_duplicate', { peerId: from });
           return;
         }
+        const activeSessionTs = getActiveSessionTs(from);
+        if (isStaleIceSession(sessionTs, activeSessionTs)) {
+          logEvent('info', 'ice_candidate_stale_session', {
+            peerId: from,
+            candidateSessionTs: sessionTs,
+            activeSessionTs,
+          });
+          return;
+        }
+
         const pc = peerConnectionsRef.current.get(from);
         if (pc && pc.remoteDescription) {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -1464,13 +1802,31 @@ export function useWebRTC(): UseWebRTCResult {
 
     const unsubs = [
       onMessage('Offer', (msg) => {
-        if (msg.from && msg.payload) handleOfferInternal(JSON.parse(msg.payload), msg.from);
+        if (
+          msg.from &&
+          msg.payload &&
+          !shouldDropBySession(msg.from, msg.room_id, msg.session_id)
+        ) {
+          handleOfferInternal(JSON.parse(msg.payload), msg.from, msg.timestamp);
+        }
       }),
       onMessage('Answer', (msg) => {
-        if (msg.from && msg.payload) handleAnswerInternal(JSON.parse(msg.payload), msg.from);
+        if (
+          msg.from &&
+          msg.payload &&
+          !shouldDropBySession(msg.from, msg.room_id, msg.session_id)
+        ) {
+          handleAnswerInternal(JSON.parse(msg.payload), msg.from, msg.timestamp);
+        }
       }),
       onMessage('IceCandidate', (msg) => {
-        if (msg.from && msg.payload) handleIceCandidateInternal(JSON.parse(msg.payload), msg.from);
+        if (
+          msg.from &&
+          msg.payload &&
+          !shouldDropBySession(msg.from, msg.room_id, msg.session_id)
+        ) {
+          handleIceCandidateInternal(JSON.parse(msg.payload), msg.from, msg.timestamp);
+        }
       }),
       // ── Bilateral STUN ranking receiver ──────────────────────
       onMessage('Relay', (msg) => {
@@ -1493,7 +1849,18 @@ export function useWebRTC(): UseWebRTCResult {
     return () => {
       unsubs.forEach(unsub => unsub());
     };
-  }, [createPeerConnectionWrapper, sendMessage, onMessage, peerId, withNegotiationLock]);
+  }, [
+    beginRemoteOfferSession,
+    createPeerConnectionWrapper,
+    getActiveSessionTs,
+    logEvent,
+    onMessage,
+    peerId,
+    requestRenegotiation,
+    sendMessage,
+    shouldDropBySession,
+    withNegotiationLock,
+  ]);
 
   // ── Adaptive Bitrate (ABR) Looping Logic ───────────────────────
   useEffect(() => {
@@ -1512,10 +1879,19 @@ export function useWebRTC(): UseWebRTCResult {
             currentBitrate: 1500000,
             stableSince: Date.now()
           };
+          let inboundBytes = 0;
+          let outboundBytes = 0;
+          let inboundPacketsReceived = 0;
+          let inboundPacketsLost = 0;
+          let currentRttMs: number | null = null;
+          let availableOutgoingKbps: number | null = null;
 
           stats.forEach(async (report) => {
             // Monitor Inbound Video for packet loss detection
             if (report.type === 'inbound-rtp' && report.kind === 'video') {
+              inboundBytes += report.bytesReceived ?? 0;
+              inboundPacketsReceived += report.packetsReceived ?? 0;
+              inboundPacketsLost += report.packetsLost ?? 0;
               const now = Date.now();
               const deltaMs = now - currentStats.timestamp;
               if (deltaMs < 1500) return; // Need at least 1.5s of data
@@ -1555,6 +1931,58 @@ export function useWebRTC(): UseWebRTCResult {
               currentStats.timestamp = now;
               lastAbrStatsRef.current.set(targetPeerId, currentStats);
             }
+            if (report.type === 'outbound-rtp' && report.kind === 'video') {
+              outboundBytes += report.bytesSent ?? 0;
+            }
+            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+              if (typeof report.currentRoundTripTime === 'number') {
+                currentRttMs = report.currentRoundTripTime * 1000;
+              }
+              if (typeof report.availableOutgoingBitrate === 'number') {
+                availableOutgoingKbps = report.availableOutgoingBitrate / 1000;
+              }
+            }
+          });
+          const now = Date.now();
+          const previousTelemetry = lastTelemetryStatsRef.current.get(targetPeerId) ?? {
+            timestamp: now,
+            inboundBytes,
+            outboundBytes,
+            inboundPacketsReceived,
+            inboundPacketsLost,
+            lastEmitAt: 0,
+            sampleCount: 0,
+          };
+          const elapsedMs = Math.max(1, now - previousTelemetry.timestamp);
+          const inboundKbps = Math.max(0, ((inboundBytes - previousTelemetry.inboundBytes) * 8) / elapsedMs);
+          const outboundKbps = Math.max(0, ((outboundBytes - previousTelemetry.outboundBytes) * 8) / elapsedMs);
+          const deltaPacketsReceived = Math.max(0, inboundPacketsReceived - previousTelemetry.inboundPacketsReceived);
+          const deltaPacketsLost = Math.max(0, inboundPacketsLost - previousTelemetry.inboundPacketsLost);
+          const totalDeltaPackets = deltaPacketsReceived + deltaPacketsLost;
+          const lossPct = totalDeltaPackets > 0 ? (deltaPacketsLost / totalDeltaPackets) * 100 : 0;
+          const nextSampleCount = previousTelemetry.sampleCount + 1;
+          if (nextSampleCount >= 2 && now - previousTelemetry.lastEmitAt >= 5000) {
+            logEvent('info', 'webrtc_peer_health', {
+              peerId,
+              targetPeerId,
+              connectionState: pc.connectionState,
+              iceConnectionState: pc.iceConnectionState,
+              rttMs: currentRttMs !== null ? Number(currentRttMs.toFixed(1)) : null,
+              packetLossPct: Number(lossPct.toFixed(2)),
+              inboundKbps: Number(inboundKbps.toFixed(1)),
+              outboundKbps: Number(outboundKbps.toFixed(1)),
+              availableOutgoingKbps: availableOutgoingKbps !== null ? Number(availableOutgoingKbps.toFixed(1)) : null,
+            });
+            previousTelemetry.lastEmitAt = now;
+          }
+          lastTelemetryStatsRef.current.set(targetPeerId, {
+            timestamp: now,
+            inboundBytes,
+            outboundBytes,
+            inboundPacketsReceived,
+            inboundPacketsLost,
+            lastEmitAt: previousTelemetry.lastEmitAt,
+            sampleCount: nextSampleCount,
           });
         } catch (err) {
           console.warn(`[useWebRTC] ABR stats failed for ${targetPeerId}:`, err);
@@ -1563,7 +1991,7 @@ export function useWebRTC(): UseWebRTCResult {
     }, 2000);
 
     return () => clearInterval(abrInterval);
-  }, [browser.isMobile]);
+  }, [browser.isMobile, logEvent, peerId]);
 
   const applyBitrateLimit = async (pc: RTCPeerConnection, bitrate: number) => {
     try {
@@ -1595,16 +2023,8 @@ export function useWebRTC(): UseWebRTCResult {
 
   useEffect(() => {
     return () => {
-      // Only close peer connections if the user has explicitly left the room.
-      // When navigating to a DM (/chat/dm/:friendId) and back, the room is
-      // still active — destroying connections here would break the matched chat.
-      const { isInChat } = useSessionStore.getState();
-      if (isInChat) {
-        console.log('[useWebRTC] Component unmounting but isInChat=true — preserving peer connections');
-      } else {
-        console.log('[useWebRTC] Component unmounting, closing all peer connections');
-        closeAllPeerConnections();
-      }
+      console.log('[useWebRTC] Component unmounting, closing all peer connections');
+      closeAllPeerConnections();
     };
   }, [closeAllPeerConnections]);
 

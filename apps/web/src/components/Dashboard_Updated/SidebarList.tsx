@@ -25,10 +25,11 @@ interface SidebarListProps {
 }
 
 const SidebarList: React.FC<SidebarListProps> = ({ activeTab, setActiveTab }) => {
-    const { friendList, activeDmFriend, setDmFriend, friendRequestsReceived, removeFriend, currentRoomId, isInChat, partnerName, partnerAvatarSeed, partnerAvatarUrl } = useSessionStore();
+    const { friendList, activeDmFriend, setDmFriend, friendRequestsReceived, removeFriend, currentRoomId, isInChat, partnerName, partnerAvatarSeed, partnerAvatarUrl, dmUnreadCounts } = useSessionStore();
     const [searchQuery, setSearchQuery] = useState('');
     const navigate = useNavigate();
     const location = useLocation();
+    const totalUnreadDmCount = Object.values(dmUnreadCounts).reduce((sum, count) => sum + count, 0);
 
     const handleOpenDM = (friend: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null }) => {
         setDmFriend(friend);
@@ -80,13 +81,18 @@ const SidebarList: React.FC<SidebarListProps> = ({ activeTab, setActiveTab }) =>
                                     aria-controls="radix-_r_5_-content-chat"
                                     data-state={activeTab === 'chat' ? 'active' : 'inactive'}
                                     id="radix-_r_5_-trigger-chat"
-                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm gap-1"
+                                    className="relative inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm gap-1"
                                     tabIndex={-1}
                                     data-orientation="horizontal"
                                     data-radix-collection-item=""
                                     onClick={() => setActiveTab('chat')}
                                 >
                                     <ChatIcon /> Chat
+                                    {totalUnreadDmCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#ef4444] px-1 text-[10px] font-bold leading-none text-white">
+                                            {totalUnreadDmCount > 99 ? '99+' : totalUnreadDmCount}
+                                        </span>
+                                    )}
                                 </button>
                                 <button
                                     type="button"
@@ -193,12 +199,18 @@ const SidebarList: React.FC<SidebarListProps> = ({ activeTab, setActiveTab }) =>
                                                     </div>
                                                     <div className="w-36 overflow-hidden text-ellipsis whitespace-nowrap pl-2 pr-1 font-normal text-foreground focus:text-placeholder-foreground">{friend.username}</div>
                                                     <div className="flex-grow"></div>
-                                                    <button
-                                                        onClick={(e) => handleCloseDM(e, friend.id)}
-                                                        className="disabled:select-none items-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-6 rounded-md px-2 hidden flex-grow justify-end ml-auto focus:flex focus:opacity-100 group-hover:opacity-100 hover:bg-transparent text-card-foreground/70 hover:text-card-foreground md:flex md:opacity-0"
-                                                    >
-                                                        <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                                    </button>
+                                                    {(dmUnreadCounts[friend.id] || 0) > 0 ? (
+                                                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1.5 text-[11px] font-bold leading-none text-white shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+                                                            {dmUnreadCounts[friend.id] > 99 ? '99+' : dmUnreadCounts[friend.id]}
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            onClick={(e) => handleCloseDM(e, friend.id)}
+                                                            className="disabled:select-none items-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-6 rounded-md px-2 hidden flex-grow justify-end ml-auto focus:flex focus:opacity-100 group-hover:opacity-100 hover:bg-transparent text-card-foreground/70 hover:text-card-foreground md:flex md:opacity-0"
+                                                        >
+                                                            <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]" xmlns="http://www.w3.org/2000/svg"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                                        </button>
+                                                    )}
                                                 </a>
                                             </li>
                                         ))}

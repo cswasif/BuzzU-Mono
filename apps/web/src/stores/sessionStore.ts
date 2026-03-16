@@ -16,6 +16,14 @@ export interface MatchRecord {
     isVerified: boolean;
 }
 
+export interface BlockedUserRecord {
+    id: string;
+    username: string;
+    avatarSeed: string;
+    avatarUrl: string | null;
+    blockedAt: string;
+}
+
 export interface Notification {
     id: string;
     type: 'friend_request_accepted' | 'system';
@@ -68,8 +76,10 @@ export interface SessionState {
     friendRequestsSent: string[];
     friendRequestsReceived: { [peerId: string]: { username: string; avatarSeed: string; avatarUrl?: string | null } };
     friendList: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null }[];
+    blockedUsers: BlockedUserRecord[];
     activeDmFriend: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null } | null;
     hasNewDmMessage: boolean;
+    dmUnreadCounts: Record<string, number>;
     dmMessages: Record<string, Message[]>;
     matchHistory: MatchRecord[];
     notifications: Notification[];
@@ -104,12 +114,17 @@ export interface SessionState {
     setDmFriend: (friend: { id: string; username: string; avatarSeed: string; avatarUrl?: string | null } | null) => void;
     updatePeerProfile: (peerId: string, profile: { username?: string; avatarSeed?: string; avatarUrl?: string | null }) => void;
     setHasNewDmMessage: (hasNew: boolean) => void;
+    incrementDmUnread: (friendId: string, amount?: number) => void;
+    clearDmUnread: (friendId: string) => void;
     addDmMessage: (friendId: string, message: Message) => void;
     clearDmMessages: (friendId: string) => void;
     updateDmMessage: (friendId: string, messageId: string, newContent: string) => void;
     deleteDmMessage: (friendId: string, messageId: string) => void;
     syncDmMessages: (friendId: string, messages: Message[]) => void;
     removeFriend: (friendId: string) => void;
+    blockUser: (user: { id: string; username: string; avatarSeed?: string; avatarUrl?: string | null }) => void;
+    unblockUser: (friendId: string) => void;
+    isUserBlocked: (friendId: string) => boolean;
     addMatchToHistory: (match: MatchRecord) => void;
     addNotification: (notification: Notification) => void;
     removeNotification: (id: string) => void;
@@ -167,7 +182,7 @@ export function sendMatchmakerDisconnect(peerId: string | null | undefined, opti
     lastDisconnectAt = now;
     lastDisconnectPeerId = peerId;
 
-    const baseUrl = (import.meta.env.VITE_MATCHMAKER_URL || 'wss://buzzu-matchmaker.md-wasif-faisal.workers.dev').replace(/^ws/, 'http');
+    const baseUrl = (process.env.MATCHMAKER_URL || import.meta.env.VITE_MATCHMAKER_URL || 'wss://buzzu-matchmaker.buzzu.workers.dev').replace(/^ws/, 'http');
     const url = `${baseUrl}/match/disconnect?peer_id=${peerId}`;
     if (options?.useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
         try {
@@ -224,8 +239,10 @@ export const useSessionStore = create<SessionState>()(
             friendRequestsSent: [],
             friendRequestsReceived: {},
             friendList: [],
+            blockedUsers: [],
             activeDmFriend: null,
             hasNewDmMessage: false,
+            dmUnreadCounts: {},
             dmMessages: {},
             matchHistory: [],
             notifications: [],
@@ -288,11 +305,21 @@ export const useSessionStore = create<SessionState>()(
                 }
 
                 const path = typeof window !== 'undefined' ? window.location.pathname : '';
-                const reconnectRoomId = path.startsWith('/chat/new/') ? path.split('/chat/new/')[1] : null;
+                const reconnectMatch = path.match(/^\/chat\/(?:new|text)\/([^/?#]+)/);
+                const reconnectRoomId = reconnectMatch ? decodeURIComponent(reconnectMatch[1]) : null;
+                const isChatLandingPath = /^\/chat\/(?:new|text)\/?$/.test(path);
+                let isReloadNavigation = false;
+                if (typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
+                    const navEntry = performance
+                        .getEntriesByType('navigation')
+                        .find((entry) => (entry as PerformanceNavigationTiming).type) as PerformanceNavigationTiming | undefined;
+                    isReloadNavigation = navEntry?.type === 'reload';
+                }
                 const shouldPreserveChat =
-                    !!reconnectRoomId &&
-                    state.currentRoomId === reconnectRoomId &&
-                    !!state.partnerId;
+                    !!state.currentRoomId &&
+                    !!state.partnerId &&
+                    ((!!reconnectRoomId && state.currentRoomId === reconnectRoomId) ||
+                        (isReloadNavigation && isChatLandingPath));
 
                 // Clear stale in-chat state — on a fresh page load there is no
                 // active WebSocket / WebRTC connection, so any persisted chat
@@ -393,6 +420,8 @@ export const useSessionStore = create<SessionState>()(
                     partnerAvatarSeed: null,
                     partnerAvatarUrl: null,
                     partnerIsVerified: false,
+                    hasNewDmMessage: false,
+                    dmUnreadCounts: {},
                     avatarUrl: null,
                     avatarSeed: generateAvatarSeed(),
                     joinedAt: new Date().toISOString(),
@@ -454,8 +483,38 @@ export const useSessionStore = create<SessionState>()(
                 });
             },
 
-            setDmFriend: (friend) => set({ activeDmFriend: friend, hasNewDmMessage: false }),
+            setDmFriend: (friend) => set((state) => {
+                if (!friend) {
+                    const hasUnread = Object.values(state.dmUnreadCounts).some((count) => count > 0);
+                    return { activeDmFriend: null, hasNewDmMessage: hasUnread };
+                }
+                const nextUnreadCounts = { ...state.dmUnreadCounts };
+                delete nextUnreadCounts[friend.id];
+                const hasUnread = Object.values(nextUnreadCounts).some((count) => count > 0);
+                return { activeDmFriend: friend, hasNewDmMessage: hasUnread, dmUnreadCounts: nextUnreadCounts };
+            }),
             setHasNewDmMessage: (hasNew) => set({ hasNewDmMessage: hasNew }),
+            incrementDmUnread: (friendId, amount = 1) => set((state) => {
+                if (!friendId || amount <= 0) return state;
+                const current = state.dmUnreadCounts[friendId] || 0;
+                const nextUnreadCounts = {
+                    ...state.dmUnreadCounts,
+                    [friendId]: current + amount,
+                };
+                return {
+                    dmUnreadCounts: nextUnreadCounts,
+                    hasNewDmMessage: Object.values(nextUnreadCounts).some((count) => count > 0),
+                };
+            }),
+            clearDmUnread: (friendId) => set((state) => {
+                if (!friendId || !state.dmUnreadCounts[friendId]) return state;
+                const nextUnreadCounts = { ...state.dmUnreadCounts };
+                delete nextUnreadCounts[friendId];
+                return {
+                    dmUnreadCounts: nextUnreadCounts,
+                    hasNewDmMessage: Object.values(nextUnreadCounts).some((count) => count > 0),
+                };
+            }),
             addDmMessage: (friendId, message) => set((state) => ({
                 dmMessages: {
                     ...state.dmMessages,
@@ -491,12 +550,67 @@ export const useSessionStore = create<SessionState>()(
             removeFriend: (friendId) => set((state) => {
                 const newDmMessages = { ...state.dmMessages };
                 delete newDmMessages[friendId];
+                const newUnreadCounts = { ...state.dmUnreadCounts };
+                delete newUnreadCounts[friendId];
                 return {
                     friendList: state.friendList.filter(f => f.id !== friendId),
                     dmMessages: newDmMessages,
+                    dmUnreadCounts: newUnreadCounts,
+                    hasNewDmMessage: Object.values(newUnreadCounts).some((count) => count > 0),
                     activeDmFriend: state.activeDmFriend?.id === friendId ? null : state.activeDmFriend,
                 };
             }),
+
+            blockUser: (user) => set((state) => {
+                if (!user.id) return state;
+
+                const alreadyBlocked = state.blockedUsers.some(b => b.id === user.id);
+                const blockedUsers = alreadyBlocked
+                    ? state.blockedUsers
+                    : [{
+                        id: user.id,
+                        username: user.username || 'User',
+                        avatarSeed: user.avatarSeed || user.id,
+                        avatarUrl: user.avatarUrl || null,
+                        blockedAt: new Date().toISOString(),
+                    }, ...state.blockedUsers];
+
+                const friendRequestsReceived = { ...state.friendRequestsReceived };
+                delete friendRequestsReceived[user.id];
+                const newDmMessages = { ...state.dmMessages };
+                delete newDmMessages[user.id];
+                const newUnreadCounts = { ...state.dmUnreadCounts };
+                delete newUnreadCounts[user.id];
+
+                const updates: Partial<SessionState> = {
+                    blockedUsers,
+                    friendRequestsReceived,
+                    friendRequestsSent: state.friendRequestsSent.filter(id => id !== user.id),
+                    friendList: state.friendList.filter(f => f.id !== user.id),
+                    dmMessages: newDmMessages,
+                    dmUnreadCounts: newUnreadCounts,
+                    hasNewDmMessage: Object.values(newUnreadCounts).some((count) => count > 0),
+                    activeDmFriend: state.activeDmFriend?.id === user.id ? null : state.activeDmFriend,
+                };
+
+                if (state.partnerId === user.id) {
+                    updates.currentRoomId = null;
+                    updates.isInChat = false;
+                    updates.partnerId = null;
+                    updates.partnerName = null;
+                    updates.partnerAvatarSeed = null;
+                    updates.partnerAvatarUrl = null;
+                    updates.partnerIsVerified = false;
+                }
+
+                return updates;
+            }),
+
+            unblockUser: (friendId) => set((state) => ({
+                blockedUsers: state.blockedUsers.filter(b => b.id !== friendId),
+            })),
+
+            isUserBlocked: (friendId) => get().blockedUsers.some(b => b.id === friendId),
 
             addMatchToHistory: (match) => set((state) => {
                 // Find existing match info to prevent stale data from overwriting recent updates
@@ -607,7 +721,9 @@ export const useSessionStore = create<SessionState>()(
                 friendRequestsSent: state.friendRequestsSent,
                 friendRequestsReceived: state.friendRequestsReceived,
                 friendList: state.friendList,
+                blockedUsers: state.blockedUsers,
                 activeDmFriend: state.activeDmFriend,
+                dmUnreadCounts: state.dmUnreadCounts,
                 // Persist match/room state so it survives route changes (DM ↔ chat)
                 currentRoomId: state.currentRoomId,
                 isInChat: state.isInChat,

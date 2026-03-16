@@ -14,9 +14,9 @@ export function TopBar() {
         <div className="flex h-full flex-none items-center justify-center lg:hidden !pointer-events-auto">
           <span className="mt-1 flex px-2">
             <div className="relative">
-              <span>
+              <button type="button" aria-label="Open menu">
                 <Menu className="w-[23px] h-[23px] text-foreground" />
-              </span>
+              </button>
             </div>
           </span>
         </div>
@@ -31,17 +31,17 @@ export function TopBar() {
           </div>
         </div>
         <div className="flex flex-1 items-center px-4">
-          <span className="text-md truncate font-bold normal-case cursor-pointer text-foreground" role="button" tabIndex={0}>@Hooman</span>
+          <span className="text-md truncate font-bold normal-case cursor-pointer text-foreground">@Hooman</span>
         </div>
         <div className="flex items-center gap-1 md:gap-2 pr-4">
           <div data-orientation="vertical" role="none" className="shrink-0 bg-border w-[1px] h-4 self-center mx-2"></div>
-          <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative" type="button">
+          <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative" type="button" aria-label="Open friend requests">
             <Users className="h-[21px] w-[21px]" />
           </button>
-          <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative" type="button">
+          <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative" type="button" aria-label="Open notifications">
             <Bell className="h-[21px] w-[21px]" />
           </button>
-          <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full">
+          <button className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full" type="button" aria-label="Open messages">
             <MessageCircle className="h-[21px] w-[21px] text-foreground" />
           </button>
         </div>

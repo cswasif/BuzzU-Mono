@@ -99,7 +99,7 @@ export interface UseScreenShareResult {
     pc: RTCPeerConnection,
     requestRenegotiation: () => Promise<void>,
     quality?: ScreenShareQuality,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   /** Stop screen sharing — removes tracks from PC and triggers renegotiation */
   stopScreenShare: (
     pc: RTCPeerConnection,
@@ -714,11 +714,11 @@ export function useScreenShare(): UseScreenShareResult {
     ) => {
       if (streamRef.current) {
         console.warn("[useScreenShare] Already sharing — stop first");
-        return;
+        return false;
       }
       if (startInFlightRef.current) {
         console.warn("[useScreenShare] Start already in flight — skipping");
-        return;
+        return false;
       }
       startInFlightRef.current = true;
 
@@ -917,11 +917,11 @@ export function useScreenShare(): UseScreenShareResult {
 
         // ── Start debug stats logger ─────────────────────────────
         startDebugStats(pc);
+        return true;
       } catch (err: any) {
-        // User cancelled the picker
         if (err.name === "NotAllowedError" || err.name === "AbortError") {
           console.log("[useScreenShare] User cancelled screen share picker");
-          return;
+          return false;
         }
         console.error("[useScreenShare] Failed to start screen share:", err);
         throw err;

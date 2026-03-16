@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use worker::*;
+use std::cell::RefCell;
 
 // -- Free-Tier Guardrails -----------------------------------------------
 // CF Workers free tier: 100K req/day, 10ms CPU.
@@ -56,6 +57,10 @@ pub enum SignalingMessage {
     },
     Leave {
         peer_id: String,
+        #[serde(default)]
+        reason: Option<String>,
+        #[serde(rename = "closeCode", default)]
+        close_code: Option<usize>,
     },
     Error {
         message: String,
@@ -83,6 +88,14 @@ pub enum SignalingMessage {
         to: String,
         #[serde(default)]
         reason: Option<String>,
+        #[serde(rename = "skipId", default)]
+        skip_id: Option<String>,
+    },
+    SkipAck {
+        from: String,
+        to: String,
+        #[serde(rename = "skipId")]
+        skip_id: String,
     },
     PublishKeys {
         from: String,
@@ -189,17 +202,44 @@ struct PeerAttachment {
 pub struct RoomDurableObject {
     state: State,
     env: Env,
+    metrics: RefCell<RoomMetrics>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RoomMetrics {
+    websocket_connect_total: u64,
+    websocket_message_total: u64,
+    relay_hop_drop_total: u64,
+    parse_error_total: u64,
+    delivery_failure_total: u64,
+}
+
+impl Default for RoomMetrics {
+    fn default() -> Self {
+        Self {
+            websocket_connect_total: 0,
+            websocket_message_total: 0,
+            relay_hop_drop_total: 0,
+            parse_error_total: 0,
+            delivery_failure_total: 0,
+        }
+    }
 }
 
 impl DurableObject for RoomDurableObject {
     fn new(state: State, env: Env) -> Self {
-        Self { state, env }
+        Self {
+            state,
+            env,
+            metrics: RefCell::new(RoomMetrics::default()),
+        }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
         let upgrade = req.headers().get("Upgrade")?;
         if upgrade.map(|u| u == "websocket").unwrap_or(false) {
             let WebSocketPair { client, server } = WebSocketPair::new()?;
+            self.metrics.borrow_mut().websocket_connect_total += 1;
 
             let url = req.url()?;
             let peer_id = url
@@ -359,6 +399,15 @@ impl DurableObject for RoomDurableObject {
 
             Response::from_websocket(client)
         } else {
+            if req.path() == "/metrics" {
+                let metrics = self.metrics.borrow().clone();
+                return Response::from_json(&json!({
+                    "metrics": metrics,
+                    "activePeers": self.count_active_peers(),
+                    "sockets": self.state.get_websockets().len(),
+                    "timestamp": now_ms(),
+                }));
+            }
             Response::ok("Room Durable Object - WebSocket endpoint")
         }
     }
@@ -368,6 +417,7 @@ impl DurableObject for RoomDurableObject {
         ws: WebSocket,
         message: WebSocketIncomingMessage,
     ) -> Result<()> {
+        self.metrics.borrow_mut().websocket_message_total += 1;
         let text = match message {
             WebSocketIncomingMessage::String(s) => s,
             WebSocketIncomingMessage::Binary(b) => String::from_utf8_lossy(&b).to_string(),
@@ -443,6 +493,7 @@ impl DurableObject for RoomDurableObject {
         let msg = match serde_json::from_str::<SignalingMessage>(&text) {
             Ok(m) => m,
             Err(e) => {
+                self.metrics.borrow_mut().parse_error_total += 1;
                 // Notify the sender so they can detect protocol mismatches
                 let err = SignalingMessage::Error {
                     message: format!("Invalid message format: {}", e),
@@ -461,7 +512,7 @@ impl DurableObject for RoomDurableObject {
                 room_id,
                 ..
             } => {
-                self.forward_to_peer(
+                if !self.forward_to_peer(
                     &to,
                     SignalingMessage::Offer {
                         from: from_peer,
@@ -469,7 +520,12 @@ impl DurableObject for RoomDurableObject {
                         payload,
                         room_id,
                     },
-                );
+                ) {
+                    let err = SignalingMessage::Error { message: "Target peer unavailable".to_string() };
+                    if let Ok(json_str) = serde_json::to_string(&err) {
+                        let _ = ws.send_with_str(&json_str);
+                    }
+                }
             }
             SignalingMessage::Answer {
                 to,
@@ -477,7 +533,7 @@ impl DurableObject for RoomDurableObject {
                 room_id,
                 ..
             } => {
-                self.forward_to_peer(
+                if !self.forward_to_peer(
                     &to,
                     SignalingMessage::Answer {
                         from: from_peer,
@@ -485,7 +541,12 @@ impl DurableObject for RoomDurableObject {
                         payload,
                         room_id,
                     },
-                );
+                ) {
+                    let err = SignalingMessage::Error { message: "Target peer unavailable".to_string() };
+                    if let Ok(json_str) = serde_json::to_string(&err) {
+                        let _ = ws.send_with_str(&json_str);
+                    }
+                }
             }
             SignalingMessage::IceCandidate {
                 to,
@@ -493,7 +554,7 @@ impl DurableObject for RoomDurableObject {
                 room_id,
                 ..
             } => {
-                self.forward_to_peer(
+                if !self.forward_to_peer(
                     &to,
                     SignalingMessage::IceCandidate {
                         from: from_peer,
@@ -501,7 +562,12 @@ impl DurableObject for RoomDurableObject {
                         payload,
                         room_id,
                     },
-                );
+                ) {
+                    let err = SignalingMessage::Error { message: "Target peer unavailable".to_string() };
+                    if let Ok(json_str) = serde_json::to_string(&err) {
+                        let _ = ws.send_with_str(&json_str);
+                    }
+                }
             }
             SignalingMessage::Relay {
                 to,
@@ -513,6 +579,7 @@ impl DurableObject for RoomDurableObject {
             } => {
                 // -- Hop Count Validation --
                 if hop_count >= MAX_RELAY_HOPS {
+                    self.metrics.borrow_mut().relay_hop_drop_total += 1;
                     let err = SignalingMessage::Error {
                         message: "Relay hop limit exceeded".to_string(),
                     };
@@ -522,7 +589,7 @@ impl DurableObject for RoomDurableObject {
                     return Ok(());
                 }
                 let target = if from_peer == via { &to } else { &via };
-                self.forward_to_peer(
+                if !self.forward_to_peer(
                     target,
                     SignalingMessage::Relay {
                         from: from_peer,
@@ -532,7 +599,12 @@ impl DurableObject for RoomDurableObject {
                         hop_count: hop_count + 1,
                         timestamp,
                     },
-                );
+                ) {
+                    let err = SignalingMessage::Error { message: "Relay target unavailable".to_string() };
+                    if let Ok(json_str) = serde_json::to_string(&err) {
+                        let _ = ws.send_with_str(&json_str);
+                    }
+                }
             }
             SignalingMessage::Chat { to, payload, .. } => {
                 if to.is_empty() || to == "all" {
@@ -545,14 +617,19 @@ impl DurableObject for RoomDurableObject {
                         },
                     );
                 } else {
-                    self.forward_to_peer(
+                    if !self.forward_to_peer(
                         &to,
                         SignalingMessage::Chat {
                             from: from_peer,
                             to: to.clone(),
                             payload,
                         },
-                    );
+                    ) {
+                        let err = SignalingMessage::Error { message: "Target peer unavailable".to_string() };
+                        if let Ok(json_str) = serde_json::to_string(&err) {
+                            let _ = ws.send_with_str(&json_str);
+                        }
+                    }
                 }
             }
             SignalingMessage::Typing { to, typing, .. } => {
@@ -576,16 +653,30 @@ impl DurableObject for RoomDurableObject {
                     );
                 }
             }
-            SignalingMessage::Skip { to, reason, .. } => {
+            SignalingMessage::Skip { to, reason, skip_id, .. } => {
                 if !to.is_empty() {
-                    self.forward_to_peer(
+                    let sender_peer = from_peer.clone();
+                    let delivered = self.forward_to_peer(
                         &to,
                         SignalingMessage::Skip {
-                            from: from_peer,
+                            from: sender_peer.clone(),
                             to: to.clone(),
                             reason,
+                            skip_id: skip_id.clone(),
                         },
                     );
+                    if delivered {
+                        if let Some(skip_id_value) = skip_id {
+                            self.forward_to_peer(
+                                &sender_peer,
+                                SignalingMessage::SkipAck {
+                                    from: to.clone(),
+                                    to: sender_peer.clone(),
+                                    skip_id: skip_id_value,
+                                },
+                            );
+                        }
+                    }
                 }
             }
             SignalingMessage::PublishKeys { bundle, .. } => {
@@ -771,11 +862,11 @@ impl DurableObject for RoomDurableObject {
     async fn websocket_close(
         &self,
         ws: WebSocket,
-        _code: usize,
-        _reason: String,
+        code: usize,
+        reason: String,
         _was_clean: bool,
     ) -> Result<()> {
-        self.handle_socket_gone(ws).await
+        self.handle_socket_gone(ws, Some(code), Some(reason)).await
     }
 
     async fn websocket_error(
@@ -783,14 +874,19 @@ impl DurableObject for RoomDurableObject {
         ws: WebSocket,
         _error: worker::Error,
     ) -> Result<()> {
-        self.handle_socket_gone(ws).await
+        self.handle_socket_gone(ws, None, None).await
     }
 }
 
 impl RoomDurableObject {
     /// Shared handler for websocket_close and websocket_error.
     /// Broadcasts Leave to remaining peers only when this peer has no other sockets.
-    async fn handle_socket_gone(&self, ws: WebSocket) -> Result<()> {
+    async fn handle_socket_gone(
+        &self,
+        ws: WebSocket,
+        close_code: Option<usize>,
+        close_reason: Option<String>,
+    ) -> Result<()> {
         let peer_id: String = ws
             .deserialize_attachment::<PeerAttachment>()
             .ok()
@@ -814,19 +910,51 @@ impl RoomDurableObject {
             return Ok(());
         }
 
-        // Broadcast Leave to remaining peers
-        let leave_msg = SignalingMessage::Leave {
-            peer_id: peer_id.clone(),
-        };
-        if let Ok(json_str) = serde_json::to_string(&leave_msg) {
-            for other_ws in self.state.get_websockets_with_tag("all") {
-                if let Some(att) = other_ws
-                    .deserialize_attachment::<PeerAttachment>()
-                    .ok()
-                    .flatten()
-                {
-                    if att.peer_id != peer_id && matches!(att.status, PeerStatus::Active) {
-                        let _ = other_ws.send_with_str(&json_str);
+        let normalized_reason = close_reason
+            .as_ref()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let is_skip_intent = close_code == Some(4001)
+            || normalized_reason
+                .as_deref()
+                .map(|reason| reason.eq_ignore_ascii_case("intentional_skip"))
+                .unwrap_or(false);
+
+        if is_skip_intent {
+            if let Ok(json_str) = serde_json::to_string(&SignalingMessage::Skip {
+                from: peer_id.clone(),
+                to: String::new(),
+                reason: Some("skip".to_string()),
+                skip_id: None,
+            }) {
+                for other_ws in self.state.get_websockets_with_tag("all") {
+                    if let Some(att) = other_ws
+                        .deserialize_attachment::<PeerAttachment>()
+                        .ok()
+                        .flatten()
+                    {
+                        if att.peer_id != peer_id && matches!(att.status, PeerStatus::Active) {
+                            let _ = other_ws.send_with_str(&json_str);
+                        }
+                    }
+                }
+            }
+        } else {
+            let leave_msg = SignalingMessage::Leave {
+                peer_id: peer_id.clone(),
+                reason: Some("disconnect".to_string()),
+                close_code,
+            };
+            if let Ok(json_str) = serde_json::to_string(&leave_msg) {
+                for other_ws in self.state.get_websockets_with_tag("all") {
+                    if let Some(att) = other_ws
+                        .deserialize_attachment::<PeerAttachment>()
+                        .ok()
+                        .flatten()
+                    {
+                        if att.peer_id != peer_id && matches!(att.status, PeerStatus::Active) {
+                            let _ = other_ws.send_with_str(&json_str);
+                        }
                     }
                 }
             }
@@ -847,13 +975,24 @@ impl RoomDurableObject {
     /// O(1) targeted message delivery using WebSocket tags.
     /// Sends to ALL sockets tagged with the peer_id — handles the case where a peer
     /// has multiple connections (e.g., from rapid reconnects or React StrictMode).
-    fn forward_to_peer(&self, target_peer_id: &str, message: SignalingMessage) {
+    fn forward_to_peer(&self, target_peer_id: &str, message: SignalingMessage) -> bool {
+        if target_peer_id.is_empty() {
+            return false;
+        }
         if let Ok(json_str) = serde_json::to_string(&message) {
             let tagged = self.state.get_websockets_with_tag(target_peer_id);
+            let mut delivered = 0usize;
             for ws in tagged {
-                let _ = ws.send_with_str(&json_str);
+                if ws.send_with_str(&json_str).is_ok() {
+                    delivered += 1;
+                } else {
+                    self.metrics.borrow_mut().delivery_failure_total += 1;
+                    let _ = ws.close(Some(1011), Some("Delivery failure"));
+                }
             }
+            return delivered > 0;
         }
+        false
     }
 
     /// Broadcast a message to all peers in the room except the sender.
@@ -866,7 +1005,10 @@ impl RoomDurableObject {
                     .flatten()
                 {
                     if att.peer_id != sender_peer_id && matches!(att.status, PeerStatus::Active) {
-                        let _ = ws_other.send_with_str(&json_str);
+                        if ws_other.send_with_str(&json_str).is_err() {
+                            self.metrics.borrow_mut().delivery_failure_total += 1;
+                            let _ = ws_other.close(Some(1011), Some("Broadcast delivery failure"));
+                        }
                     }
                 }
             }
@@ -1032,10 +1174,45 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let path = req.path();
     let method = req.method();
+    let origin = req.headers().get("Origin")?.unwrap_or_default();
+    let referer = req.headers().get("Referer")?.unwrap_or_default();
+    let url = req.url()?;
 
     // -- CORS Preflight (zero DO cost) --
     if method == Method::Options {
-        return cors_preflight();
+        if !origin_allowed(&origin, &referer, &env) {
+            return Response::error("Forbidden", 403);
+        }
+        return cors_preflight(&origin);
+    }
+
+    if should_inject_chaos(&env, &req) {
+        let response = Response::from_json(&json!({
+            "error": "Injected chaos failure",
+            "status": 503,
+            "timestamp": now_ms()
+        }))?.with_status(503);
+        let response = apply_cors(response, &origin, &referer, &env);
+        return with_timing(response, start_ms, &request_id);
+    }
+
+    if method == Method::Get && path == "/_ops/room-plan" {
+        let room_id = url.query_pairs()
+            .find(|(k, _)| k == "room_id")
+            .map(|(_, v)| v.to_string())
+            .unwrap_or_else(|| "default".to_string());
+        let room_type = url.query_pairs()
+            .find(|(k, _)| k == "room_type")
+            .map(|(_, v)| v.to_string())
+            .unwrap_or_else(|| "match".to_string());
+        let response = Response::from_json(&json!({
+            "roomId": room_id,
+            "roomType": room_type,
+            "maxPeers": max_peers_for_type(&room_type),
+            "timestamp": now_ms()
+        }))?;
+        let response = apply_cors(response, &origin, &referer, &env);
+        return with_timing(response, start_ms, &request_id);
     }
 
     let result = async {
@@ -1048,7 +1225,21 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                     "timestamp": now_ms()
                 }))
             }
-            "/ice-servers" => handle_ice_servers(&req, env).await,
+            "/metrics" => {
+                let room = req.url()?.query_pairs()
+                    .find(|(k, _)| k == "room_id")
+                    .map(|(_, v)| v.to_string())
+                    .unwrap_or_else(|| "default".to_string());
+                let namespace = env.durable_object("ROOMS")?;
+                let id = namespace.id_from_name(&room)?;
+                let stub = id.get_stub()?;
+                let mut metrics_req = Request::new("https://internal/metrics", Method::Get)?;
+                if let Ok(headers) = metrics_req.headers_mut() {
+                    let _ = headers.set("X-Internal-Metrics", "1");
+                }
+                stub.fetch_with_request(metrics_req).await
+            }
+            "/ice-servers" => handle_ice_servers(&req, &env).await,
             _ if path.starts_with("/room/") => {
                 let room_id = path
                     .strip_prefix("/room/")
@@ -1060,9 +1251,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                     return Response::error("Invalid room ID", 400);
                 }
 
-                let origin = req.headers().get("Origin")?.unwrap_or_default();
-                let referer = req.headers().get("Referer")?.unwrap_or_default();
-                if !origin_allowed(&origin, &referer) || origin == "null" {
+                if !origin_allowed(&origin, &referer, &env) {
                     return Response::error("Forbidden", 403);
                 }
 
@@ -1087,25 +1276,18 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         return Ok(response);
     }
 
-    let cors = Cors::default()
-        .with_origins(vec!["*"])
-        .with_methods(vec![
-            Method::Get,
-            Method::Post,
-            Method::Options,
-            Method::Head,
-        ])
-        .with_allowed_headers(vec!["Content-Type", "Upgrade", "Connection"])
-        .with_max_age(86400);
-
-    let response = response.with_cors(&cors)?;
+    let response = apply_cors(response, &origin, &referer, &env);
     with_timing(response, start_ms, &request_id)
 }
 
-fn cors_preflight() -> Result<Response> {
+fn cors_preflight(origin: &str) -> Result<Response> {
     let mut r = Response::ok("")?;
     let headers = r.headers_mut();
-    headers.set("Access-Control-Allow-Origin", "*")?;
+    let allow_origin = if origin.is_empty() { "*" } else { origin };
+    headers.set("Access-Control-Allow-Origin", allow_origin)?;
+    if allow_origin != "*" {
+        headers.set("Access-Control-Allow-Credentials", "true")?;
+    }
     headers.set(
         "Access-Control-Allow-Methods",
         "GET, POST, OPTIONS, HEAD, UPGRADE",
@@ -1120,11 +1302,11 @@ fn cors_preflight() -> Result<Response> {
 
 /// ICE server credential endpoint.
 /// Protected: requires Origin header from known domain.
-async fn handle_ice_servers(req: &Request, env: Env) -> Result<Response> {
+async fn handle_ice_servers(req: &Request, env: &Env) -> Result<Response> {
     // -- Origin Check: reject unknown origins --
     let origin = req.headers().get("Origin")?.unwrap_or_default();
     let referer = req.headers().get("Referer")?.unwrap_or_default();
-    if !origin_allowed(&origin, &referer) || origin == "null" {
+    if !origin_allowed(&origin, &referer, env) {
         return Response::error("Forbidden", 403);
     }
 
@@ -1173,10 +1355,175 @@ async fn handle_ice_servers(req: &Request, env: Env) -> Result<Response> {
     Response::ok(body)
 }
 
-fn origin_allowed(origin: &str, referer: &str) -> bool {
-    origin.is_empty()
-        || origin.contains("buzzu")
-        || origin.contains("localhost")
-        || origin.contains("127.0.0.1")
-        || referer.contains("buzzu")
+fn apply_cors(response: Response, origin: &str, referer: &str, env: &Env) -> Response {
+    if response.status_code() == 101 {
+        return response;
+    }
+    let headers = response.headers().clone();
+    let allow_origin = if origin_allowed(origin, referer, env) && !origin.is_empty() {
+        origin.to_string()
+    } else {
+        "*".to_string()
+    };
+    let _ = headers.set("Access-Control-Allow-Origin", &allow_origin);
+    if allow_origin != "*" {
+        let _ = headers.set("Access-Control-Allow-Credentials", "true");
+    }
+    let _ = headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD, UPGRADE");
+    let _ = headers.set("Access-Control-Allow-Headers", "Content-Type, Upgrade, Connection");
+    let _ = headers.set("Access-Control-Max-Age", "86400");
+    response.with_headers(headers)
+}
+
+fn origin_allowed(origin: &str, referer: &str, env: &Env) -> bool {
+    if origin == "null" {
+        return false;
+    }
+    if let Some(origin_value) = pick_origin(origin, referer) {
+        if is_local_origin(&origin_value) || is_buzzu_origin(&origin_value) {
+            return true;
+        }
+        return configured_origins(env).iter().any(|allowed| allowed == &origin_value);
+    }
+    true
+}
+
+fn pick_origin(origin: &str, referer: &str) -> Option<String> {
+    if !origin.trim().is_empty() {
+        return normalize_origin(origin);
+    }
+    if referer.trim().is_empty() {
+        return None;
+    }
+    let parsed = Url::parse(referer).ok()?;
+    let host = parsed.host_str()?;
+    let mut base = format!("{}://{}", parsed.scheme(), host);
+    if let Some(port) = parsed.port() {
+        base.push(':');
+        base.push_str(&port.to_string());
+    }
+    normalize_origin(&base)
+}
+
+fn normalize_origin(value: &str) -> Option<String> {
+    let trimmed = value.trim().trim_end_matches('/').to_lowercase();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let parsed = Url::parse(&trimmed).ok()?;
+    let host = parsed.host_str()?;
+    let mut normalized = format!("{}://{}", parsed.scheme(), host);
+    if let Some(port) = parsed.port() {
+        normalized.push(':');
+        normalized.push_str(&port.to_string());
+    }
+    Some(normalized)
+}
+
+fn is_local_origin(origin: &str) -> bool {
+    origin.contains("://localhost")
+        || origin.contains("://127.0.0.1")
+        || origin.contains("://[::1]")
+}
+
+fn is_buzzu_origin(origin: &str) -> bool {
+    if let Ok(parsed) = Url::parse(origin) {
+        if let Some(host) = parsed.host_str() {
+            return host == "buzzu.xyz" || host == "www.buzzu.xyz" || host.ends_with(".buzzu.xyz");
+        }
+    }
+    false
+}
+
+fn configured_origins(env: &Env) -> Vec<String> {
+    env.var("ALLOWED_ORIGINS")
+        .ok()
+        .map(|v| v.to_string())
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(normalize_origin)
+        .collect()
+}
+
+fn should_inject_chaos(env: &Env, req: &Request) -> bool {
+    let enabled = env.var("CHAOS_ENABLED")
+        .ok()
+        .map(|v| v.to_string().to_lowercase())
+        .unwrap_or_default();
+    if enabled != "true" {
+        return false;
+    }
+    let chaos_header = req.headers().get("X-Chaos-Test").ok().flatten().unwrap_or_default();
+    if chaos_header.to_lowercase() != "true" {
+        return false;
+    }
+    let percentage = env.var("CHAOS_ERROR_RATE")
+        .ok()
+        .and_then(|v| v.to_string().parse::<u32>().ok())
+        .unwrap_or(5)
+        .min(100);
+    if percentage == 0 {
+        return false;
+    }
+    (now_ms() % 100) < percentage as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skip_message_parses_with_and_without_skip_id() {
+        let with_skip_id = serde_json::from_value::<SignalingMessage>(json!({
+            "type": "Skip",
+            "from": "peer_a",
+            "to": "peer_b",
+            "reason": "skip",
+            "skipId": "skip_123"
+        }))
+        .expect("skip message with skipId should parse");
+
+        match with_skip_id {
+            SignalingMessage::Skip { skip_id, reason, .. } => {
+                assert_eq!(skip_id.as_deref(), Some("skip_123"));
+                assert_eq!(reason.as_deref(), Some("skip"));
+            }
+            _ => panic!("expected SignalingMessage::Skip"),
+        }
+
+        let without_skip_id = serde_json::from_value::<SignalingMessage>(json!({
+            "type": "Skip",
+            "from": "peer_a",
+            "to": "peer_b"
+        }))
+        .expect("skip message without skipId should parse");
+
+        match without_skip_id {
+            SignalingMessage::Skip { skip_id, reason, .. } => {
+                assert!(skip_id.is_none());
+                assert!(reason.is_none());
+            }
+            _ => panic!("expected SignalingMessage::Skip"),
+        }
+    }
+
+    #[test]
+    fn skip_ack_serializes_with_camel_case_skip_id() {
+        let msg = SignalingMessage::SkipAck {
+            from: "peer_b".to_string(),
+            to: "peer_a".to_string(),
+            skip_id: "skip_abc".to_string(),
+        };
+        let value = serde_json::to_value(msg).expect("skip ack should serialize");
+        assert_eq!(value.get("type").and_then(|v| v.as_str()), Some("SkipAck"));
+        assert_eq!(value.get("skipId").and_then(|v| v.as_str()), Some("skip_abc"));
+        assert!(value.get("skip_id").is_none());
+    }
+
+    #[test]
+    fn pick_origin_uses_referer_when_origin_missing() {
+        let picked = pick_origin("", "https://www.buzzu.xyz/chat?x=1").expect("origin should be inferred");
+        assert_eq!(picked, "https://www.buzzu.xyz");
+        assert!(pick_origin("null", "").is_none());
+    }
 }

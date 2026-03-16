@@ -35,6 +35,10 @@ const googleAuthMiddleware = () => ({
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
+  const normalizeWorkersUrl = (url: string) =>
+    url
+      .replace(".md-wasif-faisal.workers.dev", ".buzzu.workers.dev")
+      .replace(".bd-torrent-optimizer.workers.dev", ".buzzu.workers.dev");
   return {
     server: {
       port: 3000,
@@ -47,7 +51,7 @@ export default defineConfig(({ mode }) => {
       topLevelAwait(),
       googleAuthMiddleware(),
       VitePWA({
-        registerType: "prompt",
+        registerType: "autoUpdate",
         injectRegister: "auto",
         includeAssets: ["favicon.ico", "pwa-icon.svg"],
         manifest: {
@@ -100,6 +104,8 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
           globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
           cleanupOutdatedCaches: true,
@@ -189,12 +195,22 @@ export default defineConfig(({ mode }) => {
       "process.env.API_KEY": JSON.stringify(env.GEMINI_API_KEY),
       "process.env.GEMINI_API_KEY": JSON.stringify(env.GEMINI_API_KEY),
       "process.env.SIGNALING_URL": JSON.stringify(
-        env.SIGNALING_URL ||
-          "wss://buzzu-signaling.md-wasif-faisal.workers.dev",
+        normalizeWorkersUrl(
+          env.SIGNALING_URL ||
+          "wss://buzzu-signaling.buzzu.workers.dev",
+        ),
       ),
       "process.env.MATCHMAKER_URL": JSON.stringify(
-        env.MATCHMAKER_URL ||
-          "wss://buzzu-matchmaker.md-wasif-faisal.workers.dev",
+        normalizeWorkersUrl(
+          env.MATCHMAKER_URL ||
+          "wss://buzzu-matchmaker.buzzu.workers.dev",
+        ),
+      ),
+      "process.env.REPUTATION_URL": JSON.stringify(
+        normalizeWorkersUrl(
+          env.REPUTATION_URL ||
+          "https://buzzu-reputation.buzzu.workers.dev",
+        ),
       ),
       // KLIPY_API_KEY must be set via .env.local or Cloudflare Pages secrets — no hardcoded fallback.
       "process.env.KLIPY_API_KEY": JSON.stringify(env.KLIPY_API_KEY || ""),

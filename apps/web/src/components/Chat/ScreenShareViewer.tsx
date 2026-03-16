@@ -53,6 +53,8 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [needsAudioUnlock, setNeedsAudioUnlock] = useState(false);
+  const [isStreamUnavailable, setIsStreamUnavailable] = useState(false);
+  const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
   const playRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Robust stream attachment with play() retry for audio autoplay policy
@@ -75,6 +77,16 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
     if (bgVideoRef.current) {
       bgVideoRef.current.srcObject = stream;
     }
+    const updateAspectRatio = () => {
+      const width = video.videoWidth || 0;
+      const height = video.videoHeight || 0;
+      if (width > 0 && height > 0) {
+        setVideoAspectRatio(width / height);
+      }
+    };
+    video.addEventListener('loadedmetadata', updateAspectRatio);
+    video.addEventListener('resize', updateAspectRatio);
+    updateAspectRatio();
     setNeedsAudioUnlock(false);
 
     const attemptPlay = (attempt = 0, maxAttempts = 5) => {
@@ -128,6 +140,17 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
     // During ICE disconnection, tracks get muted. When ICE recovers,
     // they unmute — but the video element might not resume automatically.
     const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack || videoTrack.readyState !== 'live') {
+      setIsStreamUnavailable(true);
+    } else {
+      setIsStreamUnavailable(false);
+    }
+
+    const handleTrackEnded = () => setIsStreamUnavailable(true);
+    const handleTrackAlive = () => setIsStreamUnavailable(false);
+    videoTrack?.addEventListener('ended', handleTrackEnded);
+    videoTrack?.addEventListener('unmute', handleTrackAlive);
+
     const audioTrack = stream.getAudioTracks()[0];
 
     const handleUnmute = () => {
@@ -146,7 +169,11 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
         playRetryTimerRef.current = null;
       }
       videoTrack?.removeEventListener('unmute', handleUnmute);
+      videoTrack?.removeEventListener('ended', handleTrackEnded);
+      videoTrack?.removeEventListener('unmute', handleTrackAlive);
       audioTrack?.removeEventListener('unmute', handleUnmute);
+      video.removeEventListener('loadedmetadata', updateAspectRatio);
+      video.removeEventListener('resize', updateAspectRatio);
       if (video) video.srcObject = null;
       if (bgVideoRef.current) bgVideoRef.current.srcObject = null;
     };
@@ -363,8 +390,9 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
                     type="button"
                     role="switch"
                     aria-checked={!!adaptiveBitrateEnabled}
+                    aria-label="Toggle adaptive bitrate"
                     data-state={adaptiveBitrateEnabled ? "checked" : "unchecked"}
-                    className="inline-flex h-[18px] w-[34px] shrink-0 cursor-pointer items-center rounded-full border border-white/10 transition-colors"
+                    className="ss-control-btn inline-flex h-[18px] w-[34px] shrink-0 cursor-pointer items-center rounded-full border border-white/10 transition-colors"
                     style={{
                       backgroundColor: adaptiveBitrateEnabled
                         ? "hsl(var(--primary))"
@@ -387,8 +415,9 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
               {onClose && (
                 <button
                   onClick={onClose}
-                  className="p-1 rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors"
+                  className="ss-control-btn p-1 rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
                   title="Stop sharing"
+                  aria-label="Stop local screen sharing"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" />
@@ -417,8 +446,9 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
       <div className="absolute bottom-4 right-4 z-30">
         <button
           onClick={() => setIsMinimized(false)}
-          className="flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-white text-xs font-medium shadow-lg hover:bg-emerald-500 transition-colors"
+          className="ss-control-btn flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-white text-xs font-medium shadow-lg hover:bg-emerald-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
           title="Expand screen share"
+          aria-label={`Expand ${label}'s screen share`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M13 3H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3" />
@@ -434,6 +464,9 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
 
   const isTheater = layout === 'theater';
   const useOverlayHeader = isMobile && !isFullscreen;
+  const remoteVideoFitClass = isTheater
+    ? 'relative z-10 w-full h-full object-contain'
+    : 'max-w-full max-h-full object-contain';
 
   return (
     <div
@@ -441,23 +474,23 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
       className={`${isFullscreen
         ? 'fixed inset-0 z-[9999] bg-black'
         : isTheater
-          ? 'relative w-full h-full bg-black/95 z-20 shadow-[0_30px_120px_rgba(0,0,0,0.7)] overflow-hidden sm:rounded-2xl'
+          ? 'ss-theater-root relative w-full h-full bg-[#0b0d12] z-20 shadow-[0_30px_120px_rgba(0,0,0,0.7)] overflow-hidden sm:rounded-2xl'
           : 'relative w-full flex-none bg-black z-20 shadow-lg border-b border-border/20'
         } flex flex-col`}
       style={!isFullscreen && !isTheater ? { maxHeight: 'clamp(200px, 45vh, 600px)', aspectRatio: '16/9' } : {}}
     >
       {/* Header bar — always visible */}
-      <div className={`flex items-center justify-between px-3 sm:px-4 ${useOverlayHeader ? 'absolute inset-x-0 top-0 z-20 py-1.5 bg-gradient-to-b from-black/80 to-transparent' : isTheater ? 'py-1.5 sm:py-2.5 bg-black/70 backdrop-blur border-b border-transparent' : 'py-2.5 bg-gradient-to-b from-black/90 to-black/60 border-b border-border/40'} ${useOverlayHeader ? '' : 'flex-shrink-0'}`}>
+      <div className={`ss-theater-header flex items-center justify-between px-3 sm:px-4 ${useOverlayHeader ? 'absolute inset-x-0 top-0 z-20 py-1.5 bg-gradient-to-b from-black/45 to-transparent' : isTheater ? 'py-1.5 sm:py-2.5 bg-black/70 backdrop-blur border-b border-transparent' : 'py-2.5 bg-gradient-to-b from-black/90 to-black/60 border-b border-border/40'} ${useOverlayHeader ? '' : 'flex-shrink-0'}`}>
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className={`text-white font-medium truncate ${useOverlayHeader ? 'text-[11px] max-w-[52vw]' : 'text-xs'}`}>{label}'s screen</span>
+          <span className={`ss-theater-label text-white font-medium truncate ${useOverlayHeader ? 'text-[11px] max-w-[52vw]' : 'text-xs'}`}>{label}'s screen</span>
         </div>
         <div className={`flex items-center ${useOverlayHeader ? 'gap-0.5' : 'gap-1'}`}>
           {/* PiP button */}
-          {document.pictureInPictureEnabled && (
+          {!useOverlayHeader && document.pictureInPictureEnabled && (
             <button
               onClick={togglePiP}
-              className={`${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors`}
+              className={`ss-control-btn ${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80`}
               title="Picture-in-Picture"
               aria-label="Open picture in picture"
             >
@@ -469,24 +502,26 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
           )}
 
           {/* Minimize */}
-          <button
-            onClick={() => setIsMinimized(true)}
-            className={`${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors`}
-            title="Minimize"
-            aria-label="Minimize screen share"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="4 14 10 14 10 20" />
-              <polyline points="20 10 14 10 14 4" />
-              <line x1="14" y1="10" x2="21" y2="3" />
-              <line x1="3" y1="21" x2="10" y2="14" />
-            </svg>
-          </button>
+          {!useOverlayHeader && (
+            <button
+              onClick={() => setIsMinimized(true)}
+              className={`ss-control-btn ${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80`}
+              title="Minimize"
+              aria-label="Minimize screen share"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="4 14 10 14 10 20" />
+                <polyline points="20 10 14 10 14 4" />
+                <line x1="14" y1="10" x2="21" y2="3" />
+                <line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            </button>
+          )}
 
           {/* Fullscreen */}
           <button
             onClick={toggleFullscreen}
-            className={`${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors`}
+            className={`ss-control-btn ${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-white/20 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80`}
             title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
             aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
           >
@@ -511,7 +546,7 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
           {onClose && (
             <button
               onClick={onClose}
-              className={`${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors`}
+              className={`ss-control-btn ${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80`}
               title="Stop viewing"
               aria-label="Stop viewing screen share"
             >
@@ -525,23 +560,40 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
       </div>
 
       {/* Video element */}
-      <div className={`relative flex-grow flex items-center justify-center min-h-0 overflow-hidden ${isTheater ? 'p-0 sm:p-2 lg:p-3' : 'p-1'}`}>
-        {isTheater && !isMobile && (
+      <div
+        className={`ss-theater-viewport relative flex items-center justify-center min-h-0 overflow-hidden ${isTheater ? 'w-full p-0 sm:p-2 lg:p-3' : 'flex-grow p-1'}`}
+        style={isTheater ? { aspectRatio: `${videoAspectRatio}` } : {}}
+      >
+        {isTheater && (
           <video
             ref={bgVideoRef}
             autoPlay
             playsInline
             muted
             disablePictureInPicture
-            className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40"
+            className={`absolute inset-0 w-full h-full object-cover ${isMobile ? 'scale-125 blur-3xl opacity-65' : 'scale-110 blur-2xl opacity-40'}`}
           />
         )}
         <video
           ref={videoRef}
           autoPlay
           playsInline
-          className={`${isTheater ? 'relative z-10 w-full h-full object-cover' : 'max-w-full max-h-full object-contain'} ${isTheater ? 'rounded-none sm:rounded-2xl' : 'rounded-2xl'} bg-black`}
+          className={`${remoteVideoFitClass} ${isTheater ? 'rounded-none sm:rounded-2xl bg-transparent' : 'rounded-2xl bg-black'}`}
         />
+        {isStreamUnavailable && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70">
+            <div className="flex flex-col items-center gap-3 px-4 text-center text-white">
+              <span className="text-sm font-semibold">Screen share unavailable</span>
+              <button
+                type="button"
+                onClick={handleAudioUnlock}
+                className="ss-control-btn rounded-md bg-white/15 px-4 py-2 text-sm font-medium text-white hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+              >
+                Retry playback
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Audio unlock overlay — shown when autoplay policy blocks playback */}
@@ -549,6 +601,15 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
         <div
           onClick={handleAudioUnlock}
           className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 cursor-pointer"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleAudioUnlock();
+            }
+          }}
+          aria-label="Enable screen share audio"
         >
           <div className="flex flex-col items-center gap-2 text-white">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

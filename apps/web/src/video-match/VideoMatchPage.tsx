@@ -16,6 +16,7 @@ import { reportUser } from "../utils/reputationUtils";
 import { REPORT_REASONS } from "./components/report-user-modal";
 import { useUserMedia } from "./hooks/use-user-media";
 import { UserMediaProvider } from "../context/UserMediaContext";
+import { useConnectionResilience } from "../hooks/useConnectionResilience";
 
 type AppViewerState = "idle" | "searching" | "connecting" | "matched";
 
@@ -38,18 +39,42 @@ function VideoMatchContent({ onBack }: { onBack?: () => void }) {
 
   const { isMatching, startMatching, stopMatching, matchData, setMatchData, error: matchingError } = useMatching();
   const { onPeerLeave, onPeerSkip, onPeerJoin, sendSkip, connect, disconnect, isConnected: signalingConnected } = useSignaling();
-  const { initiateCall, setLocalStream, closeAllPeerConnections } = useWebRTC();
+  const {
+    initiateCall,
+    setLocalStream,
+    closeAllPeerConnections,
+    getPeerConnections,
+    applyTurnFallback,
+    isFallbackActive,
+    getConnectionState,
+  } = useWebRTC();
   const { stream: localMediaStream } = useUserMedia();
 
   const [viewerState, setViewerState] = useState<AppViewerState>("idle");
   const partnerLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selfSkipFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingLeavePeerRef = useRef<string | null>(null);
   const partnerSkipIntentRef = useRef<Set<string>>(new Set());
   const partnerSkipHandledRef = useRef(false);
+  const initiatedOfferKeyRef = useRef<string | null>(null);
+  const offerInitInFlightRef = useRef<Set<string>>(new Set());
+  const waitingOfferKeyRef = useRef<string | null>(null);
+  const isInChat = viewerState === "matched" || viewerState === "connecting";
+
+  useConnectionResilience({
+    getPeerConnections,
+    applyTurnFallback,
+    isFallbackActive,
+    getConnectionState,
+    isInChat,
+  });
 
   const handlePartnerSkip = useCallback(() => {
     if (partnerSkipHandledRef.current) return;
     partnerSkipHandledRef.current = true;
+    initiatedOfferKeyRef.current = null;
+    waitingOfferKeyRef.current = null;
+    offerInitInFlightRef.current.clear();
     disconnect();
     closeAllPeerConnections();
     setMatchData(null);
@@ -61,13 +86,29 @@ function VideoMatchContent({ onBack }: { onBack?: () => void }) {
   }, [startMatching, closeAllPeerConnections, disconnect, leaveRoom, setMatchData]);
 
   const handleSkip = useCallback(() => {
+    const shouldDelayDisconnect = Boolean(partnerId && signalingConnected);
     if (partnerId && signalingConnected) {
       sendSkip(partnerId, "skip");
+    }
+    if (selfSkipFinalizeTimerRef.current) {
+      clearTimeout(selfSkipFinalizeTimerRef.current);
+      selfSkipFinalizeTimerRef.current = null;
+    }
+    if (shouldDelayDisconnect) {
+      setViewerState("idle");
+      selfSkipFinalizeTimerRef.current = setTimeout(() => {
+        selfSkipFinalizeTimerRef.current = null;
+        handlePartnerSkip();
+      }, 140);
+      return;
     }
     handlePartnerSkip();
   }, [partnerId, signalingConnected, sendSkip, handlePartnerSkip]);
 
   const handleEndChat = () => {
+    initiatedOfferKeyRef.current = null;
+    waitingOfferKeyRef.current = null;
+    offerInitInFlightRef.current.clear();
     stopMatching(true);
     closeAllPeerConnections();
     leaveRoom();
@@ -96,16 +137,53 @@ function VideoMatchContent({ onBack }: { onBack?: () => void }) {
   // Handle incoming match - initiate call if we are the offerer
   useEffect(() => {
     if (matchData && peerId && localMediaStream && signalingConnected) {
+      const sessionKey = `${matchData.room_id}:${matchData.partner_id}:${peerId}`;
       // Simple logic: lexicographically smaller peer_id is the offerer
       const isOfferer = peerId < matchData.partner_id;
       if (isOfferer) {
+        waitingOfferKeyRef.current = null;
+        if (
+          initiatedOfferKeyRef.current === sessionKey ||
+          offerInitInFlightRef.current.has(sessionKey)
+        ) {
+          return;
+        }
+        const connectionState = getConnectionState(matchData.partner_id);
+        if (connectionState.type === "connected" || connectionState.type === "connecting") {
+          initiatedOfferKeyRef.current = sessionKey;
+          return;
+        }
+        offerInitInFlightRef.current.add(sessionKey);
         console.log("[VideoMatchPage] We are the offerer, initiating call to:", matchData.partner_id);
-        initiateCall(matchData.partner_id, localMediaStream);
+        initiateCall(matchData.partner_id, localMediaStream)
+          .then(() => {
+            initiatedOfferKeyRef.current = sessionKey;
+          })
+          .catch(() => {
+            if (initiatedOfferKeyRef.current === sessionKey) {
+              initiatedOfferKeyRef.current = null;
+            }
+          })
+          .finally(() => {
+            offerInitInFlightRef.current.delete(sessionKey);
+          });
       } else {
+        if (waitingOfferKeyRef.current === sessionKey) {
+          return;
+        }
+        waitingOfferKeyRef.current = sessionKey;
         console.log("[VideoMatchPage] We are the answerer, waiting for offer from:", matchData.partner_id);
       }
     }
-  }, [matchData, peerId, localMediaStream, initiateCall, signalingConnected]);
+  }, [matchData, peerId, localMediaStream, initiateCall, signalingConnected, getConnectionState]);
+
+  useEffect(() => {
+    if (!matchData) {
+      initiatedOfferKeyRef.current = null;
+      waitingOfferKeyRef.current = null;
+      offerInitInFlightRef.current.clear();
+    }
+  }, [matchData]);
 
   // Transition to matched state when room/partner assigned in store
   useEffect(() => {
@@ -147,7 +225,7 @@ function VideoMatchContent({ onBack }: { onBack?: () => void }) {
         partnerLeaveTimerRef.current = setTimeout(() => {
           if (pendingLeavePeerRef.current !== leftPeerId) return;
           handlePartnerSkip();
-        }, 5000);
+        }, 1200);
       }
     });
 
@@ -186,11 +264,22 @@ function VideoMatchContent({ onBack }: { onBack?: () => void }) {
   };
 
   return (
-    <main className="dark text-[hsl(var(--cc-foreground))] bg-[hsl(var(--cc-background))] h-full w-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-      <div className="text-[hsl(var(--cc-foreground))] bg-[hsl(var(--cc-background))] h-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-        <div className="flex h-full flex-col select-none fixed top-0 left-0 w-full">
+    <main className="dark text-[hsl(var(--cc-foreground))] bg-[hsl(var(--cc-background))] h-[100dvh] w-full overflow-hidden" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+      <div className="text-[hsl(var(--cc-foreground))] bg-[hsl(var(--cc-background))] h-[100dvh]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+        <div className="flex h-[100dvh] flex-col select-none fixed top-0 left-0 w-full pb-[env(safe-area-inset-bottom)]">
           <div className="relative h-full flex grow flex-1 overflow-hidden">
             <div className="h-full w-full flex flex-row items-center bg-[hsl(var(--cc-card))] relative">
+              {matchingError && (
+                <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1rem)] max-w-xl rounded-xl border border-red-500/40 bg-red-500/15 backdrop-blur-md px-3 py-2 text-sm text-red-100 flex items-center justify-between gap-3">
+                  <span className="truncate">Matching issue: {matchingError}</span>
+                  <button
+                    onClick={() => startMatching(true)}
+                    className="rounded-lg bg-red-500/30 hover:bg-red-500/40 px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
               {/* Header Navigation */}
               <HeaderNav
                 isSearching={viewerState === "searching"}

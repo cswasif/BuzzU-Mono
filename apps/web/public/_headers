@@ -1,0 +1,14 @@
+/*
+  X-Content-Type-Options: nosniff
+
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/workbox-*
+  Cache-Control: no-cache, no-store, must-revalidate

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
     UserIcon, CogIcon, ShieldIcon, Settings2Icon, BanIcon,
     XIcon, CheckIcon, ChevronDownIcon, CircleQuestionIcon,
-    DeleteAccountIcon, SolidCheckCircleIcon, LockIcon, UserXIcon
+    DeleteAccountIcon, SolidCheckCircleIcon, LockIcon, UserXIcon, CloseIcon
 } from './Icons';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useWasm } from '../../hooks/useWasm';
@@ -345,14 +345,14 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
                     </div>
                 </div>
                 <div>
-                    <div className="flex flex-wrap gap-2 bg-muted rounded-md p-2 py-4 mb-4">
+                    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-border/20 bg-card p-3">
                         {interests.map(interest => (
-                            <div key={interest} className="inline-flex items-center justify-center px-2.5 py-1 text-sm font-medium rounded-full bg-action/80 dark:bg-placeholder/50 gap-1.5 group">
+                            <div key={interest} className="group inline-flex items-center justify-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-sm font-medium text-foreground">
                                 {interest}
                                 <button
                                     type="button"
                                     onClick={() => removeInterest(interest)}
-                                    className="flex-shrink-0 ml-1.5 h-3.5 w-3.5 rounded-full inline-flex items-center justify-center text-card bg-card-foreground hover:bg-card-foreground/80 focus:bg-card-foreground-hover"
+                                    className="ml-1 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-foreground/15 text-foreground/80 hover:bg-foreground/25"
                                 >
                                     <span className="sr-only">Remove</span>
                                     <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 20 20" aria-hidden="true" height="10" width="10" xmlns="http://www.w3.org/2000/svg">
@@ -362,7 +362,7 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
                             </div>
                         ))}
                         <input
-                            className="w-32 select-auto sm:text-sm text-sm rounded-md bg-popover dark:bg-placeholder p-1 focus-visible:outline-none inline-flex"
+                            className="inline-flex h-8 min-w-[10rem] select-auto rounded-md border border-border/20 bg-muted px-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                             maxLength={32}
                             placeholder="Add an interest..."
                             type="text"
@@ -440,7 +440,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
         interests, avatarSeed, avatarUrl, setAvatarUrl,
         bannerType, setBannerType,
         bannerColor, setBannerColor,
-        bannerGradient, setBannerGradient
+        bannerGradient, setBannerGradient,
+        blockedUsers, unblockUser
     } = useSessionStore();
     const { wasm } = useWasm();
     const [activeTab, setActiveTab] = useState('Profile');
@@ -633,15 +634,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
             type="button"
             role="switch"
             aria-checked={checked}
+            data-state={checked ? 'checked' : 'unchecked'}
             value="on"
             className="peer inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
             style={{ backgroundColor: checked ? 'hsl(var(--primary))' : 'hsl(var(--input))' }}
             onClick={() => onChange(!checked)}
         >
             <span
-                className="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
-                style={{ transform: checked ? 'translateX(20px)' : 'translateX(0px)' }}
-            />
+                data-state={checked ? 'checked' : 'unchecked'}
+                className="pointer-events-none relative block h-5 w-5 rounded-full shadow-lg ring-0 transition-transform"
+                style={{
+                    backgroundColor: checked ? 'hsl(var(--primary-foreground))' : 'hsl(var(--background))',
+                    transform: checked ? 'translateX(20px)' : 'translateX(0px)'
+                }}
+            >
+                {checked ? (
+                    <SolidCheckCircleIcon className="w-4 h-4 absolute inset-0 m-auto text-primary" />
+                ) : (
+                    <span className="absolute inset-0 m-auto h-2.5 w-2.5 text-foreground">
+                        <svg stroke="currentColor" fill="currentColor" strokeWidth="3" viewBox="0 0 384 512" className="h-2.5 w-2.5">
+                            <path d="M376.6 84.5c11.3-13.6 9.5-33.8-4.1-45.1s-33.8-9.5-45.1 4.1L192 206 56.6 43.5C45.3 29.9 25.1 28.1 11.5 39.4S-3.9 70.9 7.4 84.5L150.3 256 7.4 427.5c-11.3 13.6-9.5 33.8 4.1 45.1s33.8 9.5 45.1-4.1L192 306 327.4 468.5c11.3 13.6 31.5 15.4 45.1 4.1s15.4-31.5 4.1-45.1L233.7 256 376.6 84.5z" />
+                        </svg>
+                    </span>
+                )}
+            </span>
         </button>
     );
 
@@ -672,6 +688,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
         </div>
     );
 
+    const renderBlockedUsersContent = () => (
+        <div className="w-full">
+            {blockedUsers.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <p className="text-sm">You haven't blocked anyone yet.</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">You have blocked {blockedUsers.length} {blockedUsers.length === 1 ? 'user' : 'users'}.</p>
+                    {blockedUsers.map((user) => {
+                        const fallback = `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${user.avatarSeed || user.id}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`;
+                        return (
+                            <div key={user.id} className="flex items-center justify-between rounded-md border border-border/40 bg-action px-3 py-2.5">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <span className="relative flex shrink-0 overflow-hidden rounded-full h-10 w-10">
+                                        <img className="aspect-square h-full w-full" alt={user.username} src={user.avatarUrl || fallback} />
+                                    </span>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold truncate">{user.username}</p>
+                                        <p className="text-xs text-muted-foreground truncate">Blocked at {new Date(user.blockedAt).toLocaleDateString('en-US')}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3 py-2"
+                                    onClick={() => unblockUser(user.id)}
+                                >
+                                    Unblock
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+
     return (
         <>
             <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" onClick={onClose} />
@@ -682,7 +735,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                     aria-describedby="radix-_r_4b_"
                     aria-labelledby="radix-_r_4a_"
                     data-state="open"
-                    className="fixed inset-0 z-50 m-auto w-full max-h-[90vh] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 sm:max-w-lg sm:rounded-lg md:w-full select-text md:min-w-[620px] md:max-h-[450px] flex flex-col max-md:px-3.5 border-none sm:h-fit max-sm:mt-auto max-sm:rounded-t-lg max-sm:rounded-b-none"
+                    className="fixed left-[50%] sm:top-[50%] max-sm:bottom-0 z-50 w-full translate-x-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=open]:slide-in-from-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] data-[state=closed]:slide-out-to-bottom-[48%] sm:data-[state=open]:slide-in-from-top-[48%] data-[state=open]:slide-in-from-bottom-[48%] sm:max-w-lg sm:translate-y-[-50%] sm:rounded-lg md:w-full select-text md:min-w-[620px] md:h-[450px] flex flex-col max-md:px-3.5 border-none"
                     tabIndex={-1}
                     style={{ pointerEvents: 'auto' }}
                 >
@@ -949,9 +1002,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                             )}
                             {activeTab === 'Blocked' && (
                                 <div data-state="active" data-orientation="horizontal" role="tabpanel" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 w-full">
-                                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                                        <p className="text-sm">You haven't blocked anyone yet.</p>
-                                    </div>
+                                    {renderBlockedUsersContent()}
                                 </div>
                             )}
                         </div>
@@ -1216,8 +1267,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                     )}
 
                                     {activeTab === 'Blocked' && (
-                                        <div className="flex items-center justify-center h-full text-muted-foreground">
-                                            <p className="text-sm">You haven't blocked anyone yet.</p>
+                                        <div className="pr-3">
+                                            {renderBlockedUsersContent()}
                                         </div>
                                     )}
                                 </div>
@@ -1227,10 +1278,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
 
                     <button
                         type="button"
-                        className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+                        className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background/90 text-foreground/70 ring-offset-background transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
                         onClick={onClose}
                     >
-                        <XIcon className="h-4 w-4" />
+                        <CloseIcon className="h-4 w-4" />
                         <span className="sr-only">Close</span>
                     </button>
                 </div>

@@ -18,6 +18,7 @@ const signalingBase =
 const reputationBase = process.env.REPUTATION_URL || "";
 const matchmakerBase = process.env.MATCHMAKER_HTTP_URL || toHttpBase(process.env.MATCHMAKER_URL);
 const matchmakerToken = process.env.MATCHMAKER_TOKEN || "";
+const enableReputationWrites = process.env.ENABLE_REPUTATION_WRITES === "1";
 
 const targets = [
   {
@@ -34,19 +35,21 @@ if (reputationBase) {
     method: "GET",
     url: `${reputationBase}/reputation/${peerHash}`,
   });
-  targets.push({
-    name: "reputation-report",
-    method: "POST",
-    url: `${reputationBase}/reputation/report?target=bbbb`,
-    bodyFactory: () =>
-      JSON.stringify({
-        reporter_hash: `aaaa_${Math.random().toString(36).slice(2, 8)}`,
-        target_hash: "bbbb",
-        reason: "load-test",
-        details: "synthetic",
-      }),
-    headers: { "Content-Type": "application/json" },
-  });
+  if (enableReputationWrites) {
+    targets.push({
+      name: "reputation-report",
+      method: "POST",
+      url: `${reputationBase}/reputation/report?target=bbbb`,
+      bodyFactory: () =>
+        JSON.stringify({
+          reporter_hash: `aaaa_${Math.random().toString(36).slice(2, 8)}`,
+          target_hash: "bbbb",
+          reason: "load-test",
+          details: "synthetic",
+        }),
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 }
 
 if (matchmakerBase && matchmakerToken) {

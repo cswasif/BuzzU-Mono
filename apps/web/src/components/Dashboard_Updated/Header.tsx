@@ -39,78 +39,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
-  // ── PiP (Picture-in-Picture) bubble ────────────────────────────
-  const [pipWindow, setPipWindow] = useState<Window | null>(null);
-  const isPipSupported = 'documentPictureInPicture' in window;
-
-  const togglePip = useCallback(async () => {
-    try {
-      if (pipWindow && !pipWindow.closed) {
-        pipWindow.close();
-        setPipWindow(null);
-        return;
-      }
-
-      const dpip = (window as any).documentPictureInPicture;
-      if (!dpip) return;
-
-      const pip: Window = await dpip.requestWindow({
-        width: 320,
-        height: 180,
-      });
-
-      // Copy styles into PiP window
-      const allStyles = document.querySelectorAll('style, link[rel="stylesheet"]');
-      allStyles.forEach(node => {
-        pip.document.head.appendChild(node.cloneNode(true));
-      });
-
-      // Create a mini status indicator in the PiP window
-      const container = pip.document.createElement('div');
-      container.innerHTML = `
-        <div style="
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
-          height: 100%; background: #09090b; color: white; font-family: 'DM Sans', sans-serif;
-          gap: 12px; padding: 16px; box-sizing: border-box;
-        ">
-          <div style="
-            width: 48px; height: 48px; border-radius: 50%;
-            background: linear-gradient(135deg, #7c3aed, #2563eb);
-            display: flex; align-items: center; justify-content: center;
-            animation: pulse 2s ease-in-out infinite;
-          ">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </div>
-          <div style="font-size: 14px; font-weight: 600; color: #a78bfa;">BuzzU Chat Active</div>
-          <div style="font-size: 11px; color: #71717a;">Tap to return to chat</div>
-        </div>
-        <style>
-          @keyframes pulse {
-            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124,58,237,0.4); }
-            50% { transform: scale(1.05); box-shadow: 0 0 0 12px rgba(124,58,237,0); }
-          }
-        </style>
-      `;
-      pip.document.body.appendChild(container);
-      pip.document.body.style.margin = '0';
-      pip.document.body.style.overflow = 'hidden';
-
-      // Click anywhere in PiP to return to main window
-      pip.document.addEventListener('click', () => {
-        window.focus();
-        pip.close();
-      });
-
-      pip.addEventListener('pagehide', () => setPipWindow(null));
-      setPipWindow(pip);
-      console.log('[Header] PiP bubble opened');
-    } catch (err) {
-      console.warn('[Header] PiP failed:', err);
-    }
-  }, [pipWindow]);
-
   // Dynamic header title — mirrors BuzzU behaviour
   const isDmPage = location.pathname.startsWith('/chat/dm/');
   const isRoomPage = /^\/chat\/new\/[^/]+/.test(location.pathname);
@@ -121,22 +49,22 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
       : 'New Chat';
 
   return (
-    <div className="z-40 flex-row w-full flex items-center flex-grow flex-shrink-0 max-h-12 h-12 p-0 pr-2 shadow-md">
+    <div className="z-40 flex-row w-full flex items-center flex-grow flex-shrink-0 max-h-12 h-12 p-0 pr-2 shadow-sm border-b border-black/10 dark:border-white/10 bg-background">
       {/* Hamburger menu - always visible on mobile; on desktop, it sits in a w-12 block over the sidebar (or alone) */}
       <div className={`flex h-full flex-none items-center justify-center !pointer-events-auto transition-all duration-300 w-12 ${isLeftSidebarOpen ? 'lg:bg-popover' : ''}`}>
         <span className="mt-1 flex px-2 lg:px-0 lg:ml-2">
           <div className="relative">
-            <span onClick={onMenuClick} className="cursor-pointer block p-2 -ml-2 hover:bg-white/10 rounded-md transition-colors">
+            <button type="button" onClick={onMenuClick} className="cursor-pointer block p-2 -ml-2 hover:bg-white/10 rounded-md transition-colors" aria-label="Open menu">
               <svg width="24" height="24" viewBox="0 0 24 24" className="text-foreground" aria-hidden="true" stroke="currentColor">
                 <path strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h18M3 18h18" />
               </svg>
-            </span>
+            </button>
           </div>
         </span>
       </div>
 
       {/* Brand Logo - hidden on mobile. On desktop, expands to fill up to w-64 (along with the w-12 above, total w-64 bg-popover) */}
-      <div className={`h-full overflow-hidden hidden lg:flex items-center shrink-0 transition-all duration-300 ${isLeftSidebarOpen ? 'w-[13rem] bg-popover border-border/10 border-r' : 'w-auto'}`}>
+      <div className={`h-full overflow-hidden hidden lg:flex items-center shrink-0 transition-all duration-300 ${isLeftSidebarOpen ? 'w-[13rem] bg-popover' : 'w-auto'}`}>
         <a className="hidden h-full flex-row items-center gap-2 px-4 text-xl normal-case no-underline hover:no-underline lg:flex" href="/chat/new" title="Home" aria-label="Home">
           <svg width="32" height="32" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" fill="#8d96f6" stroke="#8d96f6">
             <g id="SVGRepo_bgCarrier" strokeWidth="0" />
@@ -149,7 +77,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
         </a>
       </div>
       <div className="flex items-center ml-4 gap-2 flex-1 min-w-0">
-        <span className="text-md truncate font-bold normal-case cursor-default px-2 text-brightness" role="button" tabIndex={0}>{headerTitle}</span>
+        <span className="text-md truncate font-bold normal-case cursor-default px-2 text-brightness">{headerTitle}</span>
         {(partnerId || activeDmFriend) && <ConnectionIndicator size="sm" className="flex-shrink-0" tooltipPlacement="bottom" />}
       </div>
       <div className="flex justify-end gap-1 md:gap-2 shrink-0">
@@ -157,7 +85,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
         <button
           onClick={toggleFullscreen}
           title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-          className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full"
+          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-11 w-11 rounded-full"
         >
           {isFullscreen ? (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -171,26 +100,14 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
             </svg>
           )}
         </button>
-        {/* PiP Bubble (mini-window to keep chat alive in background) */}
-        {isPipSupported && (
-          <button
-            onClick={togglePip}
-            title={pipWindow ? 'Close PiP Bubble' : 'Float as Bubble'}
-            className={`inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full ${pipWindow ? 'text-green-400' : ''}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <rect x="12" y="10" width="8" height="6" rx="1" fill={pipWindow ? 'currentColor' : 'none'} />
-            </svg>
-          </button>
-        )}
         <div data-orientation="vertical" role="none" className="shrink-0 bg-border w-[1px] h-4 self-center"></div>
         <button
-          className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative"
+          className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-11 w-11 rounded-full relative"
           type="button"
           aria-haspopup="dialog"
           aria-expanded="false"
           aria-controls="radix-_r_0_"
+          aria-label="Open friend requests"
           data-state="closed"
           onClick={onFriendRequestsClick}
         >
@@ -205,11 +122,12 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           )}
         </button>
         <button
-          className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full relative"
+          className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-11 w-11 rounded-full relative"
           type="button"
           aria-haspopup="dialog"
           aria-expanded="false"
           aria-controls="radix-_r_2_"
+          aria-label="Open inbox"
           data-state="closed"
           onClick={onInboxClick}
         >
@@ -218,7 +136,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           </svg>
         </button>
         <button
-          className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full"
+          className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-11 w-11 rounded-full"
+          type="button"
+          aria-label="Open chat history"
           data-state="closed"
           onClick={onHistoryClick}
         >

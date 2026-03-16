@@ -2,7 +2,12 @@ import React, { createContext, useContext, useCallback, useEffect, useRef } from
 import { useSessionStore } from '../stores/sessionStore';
 import { DmYjsManager, type YjsMessageData } from '../yjs/DmYjsManager';
 
-const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || 'wss://buzzu-signaling.md-wasif-faisal.workers.dev';
+const SIGNALING_URL = process.env.SIGNALING_URL || import.meta.env.VITE_SIGNALING_URL || 'wss://buzzu-signaling.buzzu.workers.dev';
+const DM_WS_HEARTBEAT_INTERVAL = 20000;
+const DM_WS_HEARTBEAT_TIMEOUT = 45000;
+const DM_WS_RECONNECT_BASE_DELAY = 1500;
+const DM_WS_RECONNECT_MAX_DELAY = 20000;
+const DM_WS_MAX_PAYLOAD_BYTES = 128 * 1024;
 
 interface DmSignalingContextType {
     /** Add a message to the DM conversation. Auto-syncs to store + peer via Yjs. */
@@ -24,6 +29,8 @@ interface DmSignalingContextType {
     deleteDmMessage: (friendId: string, messageId: string) => void;
     /** Send typing status to a friend. */
     sendTyping: (friendId: string, isTyping: boolean) => void;
+    /** Send profile updates to a friend. */
+    sendProfile: (friendId: string, profile: { username: string; avatarSeed: string; avatarUrl: string | null }) => void;
     /** Subscribe to typing events from any friend. */
     onTyping: (callback: (friendId: string, isTyping: boolean) => void) => () => void;
     /** Get active data channel for file transfers with a friend. */
@@ -64,6 +71,42 @@ function yjsToStoreMessage(yMsg: YjsMessageData, myPeerId: string) {
     };
 }
 
+function extractProfileFields(msg: any) {
+    const payload = (() => {
+        if (typeof msg?.payload === 'string') {
+            try {
+                return JSON.parse(msg.payload);
+            } catch {
+                return {};
+            }
+        }
+        if (msg?.payload && typeof msg.payload === 'object') {
+            return msg.payload;
+        }
+        return msg ?? {};
+    })();
+    return {
+        username: payload.username ?? msg?.username ?? '',
+        avatarSeed: payload.avatarSeed ?? msg?.avatarSeed ?? '',
+        avatarUrl: payload.avatarUrl ?? msg?.avatarUrl ?? null,
+    };
+}
+
+function playDmMessageSound() {
+    if (typeof window === 'undefined') return;
+    const now = Date.now();
+    const globalState = window as unknown as { __dmLastSoundAt?: number };
+    if (globalState.__dmLastSoundAt && now - globalState.__dmLastSoundAt < 700) {
+        return;
+    }
+    globalState.__dmLastSoundAt = now;
+    try {
+        const audio = new Audio('/sounds/message.mp3');
+        audio.volume = 0.7;
+        audio.play().catch(() => { });
+    } catch { }
+}
+
 /**
  * DmSignalingProvider — Yjs-powered DM messaging over existing Cloudflare Worker.
  *
@@ -85,11 +128,14 @@ function yjsToStoreMessage(yMsg: YjsMessageData, myPeerId: string) {
  *   { _yjs: "update", data: "<base64 yjs update>" }
  */
 export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { peerId, friendList } = useSessionStore();
+    const { peerId, friendList, activeDmFriend } = useSessionStore();
     const connectionsRef = useRef<Map<string, WebSocket>>(new Map());
     const cleanupRef = useRef<Map<string, (() => void)[]>>(new Map());
     const reconnectTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+    const reconnectAttemptsRef = useRef<Map<string, number>>(new Map());
     const heartbeatTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+    const heartbeatDeadlineTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+    const intentionalCloseRef = useRef<Set<string>>(new Set());
     const typingCallbacksRef = useRef<Set<(friendId: string, isTyping: boolean) => void>>(new Set());
     const profileCallbacksRef = useRef<Set<(friendId: string, username: string, avatarSeed: string, avatarUrl: string | null) => void>>(new Set());
     const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -97,9 +143,65 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const dataChannelCallbackRef = useRef<((channel: RTCDataChannel, from: string) => void) | null>(null);
     const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
     const candidateDedupRef = useRef<Map<string, Set<string>>>(new Map());
+    const connectToFriendRef = useRef<(friendId: string) => void>(() => { });
+    const lastActivityRef = useRef<Map<string, number>>(new Map());
+    const knownRemoteMessageIdsRef = useRef<Map<string, Set<string>>>(new Map());
+    const unreadTrackingReadyRef = useRef<Map<string, boolean>>(new Map());
 
     const peerIdRef = useRef(peerId);
     peerIdRef.current = peerId;
+
+    const markActivity = useCallback((friendId: string) => {
+        if (!friendId) return;
+        lastActivityRef.current.set(friendId, Date.now());
+    }, []);
+
+    const snapshotRemoteMessageIds = useCallback((friendId: string, roomId: string) => {
+        const snapshot = DmYjsManager.getSnapshot(roomId);
+        const remoteIds = new Set<string>();
+        for (const message of snapshot) {
+            if (message.senderId === friendId && message.id) {
+                remoteIds.add(message.id);
+            }
+        }
+        return remoteIds;
+    }, []);
+
+    const markRemoteBaseline = useCallback((friendId: string, roomId: string) => {
+        knownRemoteMessageIdsRef.current.set(friendId, snapshotRemoteMessageIds(friendId, roomId));
+        unreadTrackingReadyRef.current.set(friendId, true);
+    }, [snapshotRemoteMessageIds]);
+
+    const countNewRemoteMessages = useCallback((friendId: string, roomId: string) => {
+        const nextRemoteIds = snapshotRemoteMessageIds(friendId, roomId);
+        const previousRemoteIds = knownRemoteMessageIdsRef.current.get(friendId) || new Set<string>();
+        let newCount = 0;
+        for (const id of nextRemoteIds) {
+            if (!previousRemoteIds.has(id)) {
+                newCount += 1;
+            }
+        }
+        knownRemoteMessageIdsRef.current.set(friendId, nextRemoteIds);
+        return newCount;
+    }, [snapshotRemoteMessageIds]);
+
+    const handleRemoteUnreadDelta = useCallback((friendId: string, roomId: string) => {
+        if (!unreadTrackingReadyRef.current.get(friendId)) return;
+        const newRemoteMessageCount = countNewRemoteMessages(friendId, roomId);
+        if (newRemoteMessageCount <= 0) return;
+        playDmMessageSound();
+        const state = useSessionStore.getState();
+        if (state.activeDmFriend?.id !== friendId) {
+            state.incrementDmUnread(friendId, newRemoteMessageCount);
+        }
+    }, [countNewRemoteMessages]);
+
+    const collectDesiredConnectionIds = useCallback((
+        currentFriendList: { id: string }[],
+        _currentActiveFriendId: string | null,
+    ): Set<string> => {
+        return new Set(currentFriendList.map((friend) => friend.id));
+    }, []);
 
     /** Sync Yjs messages → Zustand store for rendering. */
     const syncToStore = useCallback((friendId: string, roomId: string) => {
@@ -155,6 +257,58 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
         pendingCandidatesRef.current.delete(friendId);
     }, []);
+
+    const clearReconnectTimer = useCallback((friendId: string) => {
+        const timer = reconnectTimersRef.current.get(friendId);
+        if (timer) {
+            clearTimeout(timer);
+            reconnectTimersRef.current.delete(friendId);
+        }
+    }, []);
+
+    const clearHeartbeatTimers = useCallback((friendId: string) => {
+        const heartbeatTimer = heartbeatTimersRef.current.get(friendId);
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimersRef.current.delete(friendId);
+        }
+        const deadlineTimer = heartbeatDeadlineTimersRef.current.get(friendId);
+        if (deadlineTimer) {
+            clearTimeout(deadlineTimer);
+            heartbeatDeadlineTimersRef.current.delete(friendId);
+        }
+    }, []);
+
+    const clearConnectionCallbacks = useCallback((friendId: string) => {
+        const cleanups = cleanupRef.current.get(friendId);
+        if (cleanups) {
+            cleanups.forEach(fn => fn());
+            cleanupRef.current.delete(friendId);
+        }
+    }, []);
+
+    const scheduleReconnect = useCallback((friendId: string) => {
+        clearReconnectTimer(friendId);
+        const attempts = (reconnectAttemptsRef.current.get(friendId) || 0) + 1;
+        reconnectAttemptsRef.current.set(friendId, attempts);
+        const baseDelay = Math.min(
+            DM_WS_RECONNECT_MAX_DELAY,
+            DM_WS_RECONNECT_BASE_DELAY * Math.pow(2, Math.max(0, attempts - 1)),
+        );
+        const jitter = Math.floor(Math.random() * 600);
+        const timer = setTimeout(() => {
+            reconnectTimersRef.current.delete(friendId);
+            const state = useSessionStore.getState();
+            const desired = collectDesiredConnectionIds(
+                state.friendList,
+                state.activeDmFriend?.id ?? null,
+            );
+            if (desired.has(friendId)) {
+                connectToFriendRef.current(friendId);
+            }
+        }, baseDelay + jitter);
+        reconnectTimersRef.current.set(friendId, timer);
+    }, [clearReconnectTimer, collectDesiredConnectionIds]);
 
     /** Handle incoming WebRTC offer from friend. */
     const handleWebRTCOffer = useCallback(async (friendId: string, offer: RTCSessionDescriptionInit) => {
@@ -305,6 +459,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
             return;
         }
+        clearReconnectTimer(friendId);
 
         const roomId = DmYjsManager.getDmRoomId(myPeerId, friendId);
 
@@ -314,11 +469,13 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
         // Observe Y.Map changes → sync to Zustand store
         const unobserve = DmYjsManager.observeMessages(roomId, () => {
             syncToStore(friendId, roomId);
+            handleRemoteUnreadDelta(friendId, roomId);
         });
 
         // Load persisted messages from IndexedDB → sync to store
         DmYjsManager.waitForSync(roomId).then(() => {
             syncToStore(friendId, roomId);
+            markRemoteBaseline(friendId, roomId);
         });
 
         try {
@@ -326,30 +483,75 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
             ws.onopen = async () => {
                 console.log(`[DmYjs] Connected to DM room: ${roomId}`);
+                markActivity(friendId);
+                reconnectAttemptsRef.current.set(friendId, 0);
+                clearHeartbeatTimers(friendId);
 
                 // Wait for IndexedDB to finish loading before syncing
                 await DmYjsManager.waitForSync(roomId);
+                markRemoteBaseline(friendId, roomId);
 
                 // Sync step 1: send our state vector to peer
                 const sv = DmYjsManager.getEncodedStateVector(roomId);
                 sendYjsPayload(ws, friendId, { _yjs: 'sv', data: sv });
 
-                const existing = heartbeatTimersRef.current.get(friendId);
-                if (existing) clearInterval(existing);
                 const timer = setInterval(() => {
                     if (ws.readyState === WebSocket.OPEN) {
-                        ws.send("ping");
+                        ws.send(JSON.stringify({
+                            type: 'Ping',
+                            from: myPeerId,
+                            to: friendId,
+                            ts: Date.now(),
+                        }));
+                        const existingDeadline = heartbeatDeadlineTimersRef.current.get(friendId);
+                        if (existingDeadline) {
+                            clearTimeout(existingDeadline);
+                        }
+                        const deadline = setTimeout(() => {
+                            if (ws.readyState === WebSocket.OPEN) {
+                                ws.close(4001, 'ping-timeout');
+                            }
+                        }, DM_WS_HEARTBEAT_TIMEOUT);
+                        heartbeatDeadlineTimersRef.current.set(friendId, deadline);
                     }
-                }, 25000);
+                }, DM_WS_HEARTBEAT_INTERVAL);
                 heartbeatTimersRef.current.set(friendId, timer);
             };
 
             ws.onmessage = (event) => {
                 try {
                     if (event.data === "pong") {
+                        const deadline = heartbeatDeadlineTimersRef.current.get(friendId);
+                        if (deadline) {
+                            clearTimeout(deadline);
+                            heartbeatDeadlineTimersRef.current.delete(friendId);
+                        }
+                        return;
+                    }
+                    if (typeof event.data === 'string' && event.data.length > DM_WS_MAX_PAYLOAD_BYTES) {
                         return;
                     }
                     const msg = JSON.parse(event.data);
+                    markActivity(friendId);
+                    if (msg.type === 'Pong') {
+                        const deadline = heartbeatDeadlineTimersRef.current.get(friendId);
+                        if (deadline) {
+                            clearTimeout(deadline);
+                            heartbeatDeadlineTimersRef.current.delete(friendId);
+                        }
+                        return;
+                    }
+                    if (msg.type === 'Ping') {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                type: 'Pong',
+                                from: myPeerId,
+                                to: friendId,
+                                ts: Date.now(),
+                            }));
+                        }
+                        return;
+                    }
 
                     // When friend joins/reconnects: re-send state vector for sync
                     if (msg.type === 'Join' && msg.peer_id === friendId) {
@@ -364,7 +566,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
                     }
 
                     if (msg.type === 'Profile' && msg.from === friendId) {
-                        const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+                        const payload = extractProfileFields(msg);
                         profileCallbacksRef.current.forEach(cb =>
                             cb(friendId, payload.username, payload.avatarSeed, payload.avatarUrl)
                         );
@@ -406,32 +608,12 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
                     } else if (payload._yjs === 'update') {
                         // Peer sent Yjs update → apply to local Y.Doc
                         console.log(`[DmYjs] 📥 Received Yjs update from ${friendId.slice(0, 15)}… | base64len=${payload.data.length}`);
-                        const map = DmYjsManager.getMessagesMap(roomId);
-                        const countBefore = map.size;
-
                         DmYjsManager.applyRemoteUpdate(roomId, payload.data);
-
-                        const countAfter = map.size;
-
-                        // Notify if new messages arrived and this DM is not active
-                        if (countAfter > countBefore) {
-                            try {
-                                new Audio('/sounds/message.mp3').play().catch(() => { });
-                            } catch (e) { }
-
-                            const state = useSessionStore.getState();
-                            if (state.activeDmFriend?.id !== friendId) {
-                                state.setHasNewDmMessage(true);
-                            }
-                        }
 
                     } else if (payload.id && payload.content && !payload._yjs) {
                         // Legacy pre-Yjs chat message — migrate into Y.Doc
                         const existingMap = DmYjsManager.getMessagesMap(roomId);
                         if (!existingMap.has(payload.id)) {
-                            try {
-                                new Audio('/sounds/message.mp3').play().catch(() => { });
-                            } catch (e) { }
                             DmYjsManager.addMessage(roomId, {
                                 id: payload.id,
                                 senderId: friendId,
@@ -462,23 +644,22 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
             ws.onclose = (event) => {
                 console.log(`[DmYjs] Connection closed for friend: ${friendId}`, event.code);
                 connectionsRef.current.delete(friendId);
-                const heartbeatTimer = heartbeatTimersRef.current.get(friendId);
-                if (heartbeatTimer) {
-                    clearInterval(heartbeatTimer);
-                    heartbeatTimersRef.current.delete(friendId);
+                clearHeartbeatTimers(friendId);
+                clearConnectionCallbacks(friendId);
+
+                if (intentionalCloseRef.current.has(friendId)) {
+                    intentionalCloseRef.current.delete(friendId);
+                    clearReconnectTimer(friendId);
+                    reconnectAttemptsRef.current.delete(friendId);
+                    return;
                 }
 
-                // Auto-reconnect on abnormal closure if friend is still in list
-                if (event.code === 1006 || event.code === 1001) {
-                    const state = useSessionStore.getState();
-                    if (state.friendList.some(f => f.id === friendId)) {
-                        const timer = setTimeout(() => {
-                            reconnectTimersRef.current.delete(friendId);
-                            connectToFriend(friendId);
-                        }, 3000);
-                        reconnectTimersRef.current.set(friendId, timer);
-                    }
+                if (event.code === 1000) {
+                    reconnectAttemptsRef.current.delete(friendId);
+                    clearReconnectTimer(friendId);
+                    return;
                 }
+                scheduleReconnect(friendId);
             };
 
             ws.onerror = () => {
@@ -486,53 +667,86 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
             };
 
             connectionsRef.current.set(friendId, ws);
+            clearConnectionCallbacks(friendId);
             cleanupRef.current.set(friendId, [unobserve, unsubUpdate]);
 
         } catch (e) {
             console.error('[DmYjs] Failed to connect', e);
             unobserve();
+            scheduleReconnect(friendId);
         }
-    }, [syncToStore, sendYjsPayload]);
+    }, [syncToStore, handleRemoteUnreadDelta, markRemoteBaseline, sendYjsPayload, clearReconnectTimer, clearHeartbeatTimers, clearConnectionCallbacks, scheduleReconnect, markActivity]);
+
+    useEffect(() => {
+        connectToFriendRef.current = connectToFriend;
+    }, [connectToFriend]);
 
     // Sync WebSocket connections with friend list
     useEffect(() => {
         if (!peerId) return;
 
         const currentFriendIds = new Set(friendList.map(f => f.id));
+        const desiredFriendIds = collectDesiredConnectionIds(
+            friendList,
+            activeDmFriend?.id ?? null,
+        );
 
-        // Close connections for removed friends
         for (const [friendId, ws] of connectionsRef.current) {
-            if (!currentFriendIds.has(friendId)) {
+            if (!currentFriendIds.has(friendId) || !desiredFriendIds.has(friendId)) {
+                intentionalCloseRef.current.add(friendId);
                 ws.close();
                 connectionsRef.current.delete(friendId);
-                const cleanups = cleanupRef.current.get(friendId);
-                if (cleanups) cleanups.forEach(fn => fn());
-                cleanupRef.current.delete(friendId);
-                const timer = reconnectTimersRef.current.get(friendId);
-                if (timer) {
-                    clearTimeout(timer);
-                    reconnectTimersRef.current.delete(friendId);
-                }
+                clearHeartbeatTimers(friendId);
+                clearConnectionCallbacks(friendId);
+                clearReconnectTimer(friendId);
+                reconnectAttemptsRef.current.delete(friendId);
             }
         }
 
-        // Open connections for new friends
-        for (const friend of friendList) {
-            connectToFriend(friend.id);
+        for (const friendId of currentFriendIds) {
+            if (!desiredFriendIds.has(friendId)) {
+                lastActivityRef.current.delete(friendId);
+            }
         }
-    }, [peerId, friendList, connectToFriend]);
+        for (const trackedFriendId of Array.from(knownRemoteMessageIdsRef.current.keys())) {
+            if (!currentFriendIds.has(trackedFriendId)) {
+                knownRemoteMessageIdsRef.current.delete(trackedFriendId);
+            }
+        }
+        for (const trackedFriendId of Array.from(unreadTrackingReadyRef.current.keys())) {
+            if (!currentFriendIds.has(trackedFriendId)) {
+                unreadTrackingReadyRef.current.delete(trackedFriendId);
+            }
+        }
+
+        for (const friend of friendList) {
+            if (desiredFriendIds.has(friend.id)) {
+                connectToFriend(friend.id);
+            }
+        }
+    }, [peerId, friendList, activeDmFriend?.id, connectToFriend, clearHeartbeatTimers, clearConnectionCallbacks, clearReconnectTimer, collectDesiredConnectionIds]);
 
     // Cleanup all on unmount
     useEffect(() => {
         return () => {
-            for (const [, ws] of connectionsRef.current) ws.close();
+            for (const [friendId, ws] of connectionsRef.current) {
+                intentionalCloseRef.current.add(friendId);
+                ws.close();
+            }
             connectionsRef.current.clear();
             for (const [, timer] of heartbeatTimersRef.current) clearInterval(timer);
             heartbeatTimersRef.current.clear();
+            for (const [, timer] of heartbeatDeadlineTimersRef.current) clearTimeout(timer);
+            heartbeatDeadlineTimersRef.current.clear();
             for (const [, cleanups] of cleanupRef.current) cleanups.forEach(fn => fn());
             cleanupRef.current.clear();
             for (const [, timer] of reconnectTimersRef.current) clearTimeout(timer);
             reconnectTimersRef.current.clear();
+            reconnectAttemptsRef.current.clear();
+            intentionalCloseRef.current.clear();
+            lastActivityRef.current.clear();
+            knownRemoteMessageIdsRef.current.clear();
+            unreadTrackingReadyRef.current.clear();
         };
     }, []);
 
@@ -551,6 +765,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }) => {
         const myPeerId = peerIdRef.current;
         if (!myPeerId) return;
+        markActivity(friendId);
 
         const roomId = DmYjsManager.getDmRoomId(myPeerId, friendId);
         console.log(`[DmYjs] 💬 sendDmMessage | to=${friendId.slice(0, 15)}… room=${roomId} content="${message.content.slice(0, 50)}"`);
@@ -563,7 +778,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
             replyToContent: message.replyToContent ?? null,
             replyToSenderName: message.replyToSenderName ?? null,
         });
-    }, []);
+    }, [markActivity]);
 
     /** Edit a message via Yjs. Auto-syncs. */
     const editDmMessage = useCallback((friendId: string, messageId: string, newContent: string) => {
@@ -583,6 +798,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     /** Send typing status to a friend. */
     const sendTyping = useCallback((friendId: string, isTyping: boolean) => {
+        markActivity(friendId);
         const ws = connectionsRef.current.get(friendId);
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
@@ -592,7 +808,23 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 typing: isTyping,
             }));
         }
-    }, []);
+    }, [markActivity]);
+
+    /** Send profile updates to a friend. */
+    const sendProfile = useCallback((friendId: string, profile: { username: string; avatarSeed: string; avatarUrl: string | null }) => {
+        markActivity(friendId);
+        const ws = connectionsRef.current.get(friendId);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'Profile',
+                from: peerIdRef.current,
+                to: friendId,
+                username: profile.username,
+                avatarSeed: profile.avatarSeed,
+                avatarUrl: profile.avatarUrl,
+            }));
+        }
+    }, [markActivity]);
 
     /** Subscribe to typing events from any friend. */
     const onTyping = useCallback((callback: (friendId: string, isTyping: boolean) => void) => {
@@ -642,6 +874,7 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const initWebRTC = useCallback(async (friendId: string) => {
         const myPeerId = peerIdRef.current;
         if (!myPeerId) return;
+        markActivity(friendId);
 
         const existingPc = peerConnectionsRef.current.get(friendId);
         if (existingPc && existingPc.signalingState !== 'closed') {
@@ -753,11 +986,11 @@ export const DmSignalingProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 payload: JSON.stringify(offer),
             }));
         }
-    }, [waitForWebSocketOpen]);
+    }, [waitForWebSocketOpen, markActivity]);
 
     const value = React.useMemo(
-        () => ({ sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping, onProfile, getDataChannel, onDataChannel, initWebRTC }),
-        [sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping, onProfile, getDataChannel, onDataChannel, initWebRTC]
+        () => ({ sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, sendProfile, onTyping, onProfile, getDataChannel, onDataChannel, initWebRTC }),
+        [sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, sendProfile, onTyping, onProfile, getDataChannel, onDataChannel, initWebRTC]
     );
 
     return (

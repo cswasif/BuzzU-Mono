@@ -88,7 +88,7 @@ fn now_ms() -> f64 {
 
 const SLOW_SQL_MS: f64 = 25.0;
 
-fn sql_exec_timed(sql: &SqlStorage, label: &str, query: &str) -> Result<SqlResult> {
+fn sql_exec_timed(sql: &SqlStorage, label: &str, query: &str) -> Result<SqlCursor> {
     let start = now_ms();
     let result = sql.exec(query, None);
     let dur = now_ms() - start;
@@ -136,6 +136,15 @@ fn to_response(rec: &ReputationRecord) -> ReputationResponse {
     }
 }
 
+fn default_reputation_response(peer_hash: &str) -> ReputationResponse {
+    ReputationResponse {
+        peer_hash: peer_hash.to_string(),
+        trust_score: BASE_SCORE,
+        tier: tier_name(BASE_SCORE).to_string(),
+        shadow_queued: false,
+    }
+}
+
 fn hex_encode(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut s = String::with_capacity(bytes.len() * 2);
@@ -148,6 +157,11 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 fn sanitize(input: &str) -> String {
     input.replace('\'', "''")
+}
+
+fn is_free_tier_write_quota_error(err: &worker::Error) -> bool {
+    err.to_string()
+        .contains("Exceeded allowed rows written in Durable Objects free tier")
 }
 
 fn parse_flags(flags_str: &str) -> Vec<String> {
@@ -180,12 +194,30 @@ impl DurableObject for ReputationBucket {
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
-        self.ensure_tables().await?;
-
         let mut req = req;
         let url = req.url()?;
         let path = url.path();
         let method = req.method();
+
+        if let Err(err) = self.ensure_tables().await {
+            if is_free_tier_write_quota_error(&err) {
+                if method == Method::Get && path.starts_with("/reputation/") {
+                    let peer_hash = path.trim_start_matches("/reputation/").to_string();
+                    if peer_hash.is_empty() || peer_hash.len() > 128 {
+                        return Response::error("Invalid peer_hash", 400);
+                    }
+                    let fallback = ReputationResponse {
+                        peer_hash,
+                        trust_score: BASE_SCORE,
+                        tier: tier_name(BASE_SCORE).to_string(),
+                        shadow_queued: false,
+                    };
+                    return Response::from_json(&fallback);
+                }
+                return Response::error("Write quota exceeded. Retry later.", 429);
+            }
+            return Err(err);
+        }
 
         // Route: GET /reputation/:peer_hash
         if method == Method::Get && path.starts_with("/reputation/") {
@@ -244,7 +276,12 @@ impl DurableObject for ReputationBucket {
     }
 
     async fn alarm(&self) -> Result<Response> {
-        self.ensure_tables().await?;
+        if let Err(err) = self.ensure_tables().await {
+            if is_free_tier_write_quota_error(&err) {
+                return Response::ok("quota reached");
+            }
+            return Err(err);
+        }
         let _ = self.run_decay();
 
         // Re-arm alarm
@@ -313,28 +350,32 @@ impl ReputationBucket {
         Ok(())
     }
 
-    /// Get or create a reputation record.
-    fn get_or_create_record(&self, peer_hash: &str) -> Result<ReputationRecord> {
+    fn get_record(&self, peer_hash: &str) -> Result<Option<ReputationRecord>> {
         let sql = self.state.storage().sql();
-        let now = now_ms();
         let safe_hash = sanitize(peer_hash);
-
         let rows: Vec<ReputationRecord> = sql_exec_timed(
             &sql,
-            "get_or_create_record:select",
+            "get_record:select",
             &format!(
                 "SELECT peer_hash, trust_score, reports_received, sessions_completed, flags, last_active, created_at
                  FROM reputation WHERE peer_hash = '{}'",
                 safe_hash
             ),
         )?.to_array()?;
+        Ok(rows.into_iter().next())
+    }
 
-        if let Some(rec) = rows.into_iter().next() {
+    /// Get or create a reputation record.
+    fn get_or_create_record(&self, peer_hash: &str) -> Result<ReputationRecord> {
+        let now = now_ms();
+        if let Some(rec) = self.get_record(peer_hash)? {
             return Ok(rec);
         }
 
+        let sql = self.state.storage().sql();
+        let safe_hash = sanitize(peer_hash);
         // Create new record with BASE_SCORE
-        sql_exec_timed(
+        if let Err(err) = sql_exec_timed(
             &sql,
             "get_or_create_record:insert",
             &format!(
@@ -342,7 +383,11 @@ impl ReputationBucket {
                  VALUES ('{}', {}, 0, 0, '[]', {}, {})",
                 safe_hash, BASE_SCORE, now, now
             ),
-        )?;
+        ) {
+            if !is_free_tier_write_quota_error(&err) {
+                return Err(err);
+            }
+        }
 
         Ok(ReputationRecord {
             peer_hash: peer_hash.to_string(),
@@ -375,8 +420,11 @@ impl ReputationBucket {
 
     /// GET /reputation/:peer_hash
     fn get_reputation(&self, peer_hash: &str) -> Result<Response> {
-        let rec = self.get_or_create_record(peer_hash)?;
-        Response::from_json(&to_response(&rec))
+        let response = match self.get_record(peer_hash)? {
+            Some(rec) => to_response(&rec),
+            None => default_reputation_response(peer_hash),
+        };
+        Response::from_json(&response)
     }
 
     /// POST /reputation/report
@@ -412,7 +460,7 @@ impl ReputationBucket {
         }
 
         // Persist report
-        sql_exec_timed(
+        if let Err(err) = sql_exec_timed(
             &sql,
             "handle_report:insert_report",
             &format!(
@@ -424,7 +472,12 @@ impl ReputationBucket {
                 sanitize(&report.details),
                 now
             ),
-        )?;
+        ) {
+            if is_free_tier_write_quota_error(&err) {
+                return Response::error("Write quota exceeded. Retry later.", 429);
+            }
+            return Err(err);
+        }
 
         // Update target reputation
         let mut rec = self.get_or_create_record(&report.target_hash)?;
@@ -439,7 +492,12 @@ impl ReputationBucket {
             rec.flags = flags_to_string(&flags);
         }
 
-        self.save_record(&rec)?;
+        if let Err(err) = self.save_record(&rec) {
+            if is_free_tier_write_quota_error(&err) {
+                return Response::error("Write quota exceeded. Retry later.", 429);
+            }
+            return Err(err);
+        }
         Response::from_json(&to_response(&rec))
     }
 
@@ -465,7 +523,12 @@ impl ReputationBucket {
             rec.flags = flags_to_string(&flags);
         }
 
-        self.save_record(&rec)?;
+        if let Err(err) = self.save_record(&rec) {
+            if is_free_tier_write_quota_error(&err) {
+                return Response::error("Write quota exceeded. Retry later.", 429);
+            }
+            return Err(err);
+        }
         Response::from_json(&to_response(&rec))
     }
 
@@ -477,8 +540,11 @@ impl ReputationBucket {
 
         let mut results = Vec::new();
         for hash in &query.peer_hashes {
-            let rec = self.get_or_create_record(hash)?;
-            results.push(to_response(&rec));
+            let response = match self.get_record(hash)? {
+                Some(rec) => to_response(&rec),
+                None => default_reputation_response(hash),
+            };
+            results.push(response);
         }
 
         Response::from_json(&BatchQueryResponse { results })
@@ -558,7 +624,54 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let namespace = env.durable_object("REPUTATION_BUCKET")?;
     let stub = namespace.id_from_name(&shard_name)?.get_stub()?;
 
-    let resp = stub.fetch_with_request(req).await?;
+    let is_get = req.method() == Method::Get;
+    let resp = match stub.fetch_with_request(req).await {
+        Ok(resp) => resp,
+        Err(err) => {
+            if path.starts_with("/reputation/") {
+                if path.starts_with("/reputation/")
+                    && !path.contains("report")
+                    && !path.contains("complete-session")
+                    && !path.contains("batch-query")
+                    && !path.contains("decay")
+                    && is_get
+                {
+                    let peer_hash = path.trim_start_matches("/reputation/").to_string();
+                    if !peer_hash.is_empty() && peer_hash.len() <= 128 {
+                        let fallback = ReputationResponse {
+                            peer_hash,
+                            trust_score: BASE_SCORE,
+                            tier: tier_name(BASE_SCORE).to_string(),
+                            shadow_queued: false,
+                        };
+                        return cors_headers(Response::from_json(&fallback)?);
+                    }
+                }
+                return cors_headers(Response::error("Reputation write quota exceeded. Retry later.", 429)?);
+            }
+            return Err(err);
+        }
+    };
+    if path.starts_with("/reputation/") && resp.status_code() == 500 {
+        if !path.contains("report")
+            && !path.contains("complete-session")
+            && !path.contains("batch-query")
+            && !path.contains("decay")
+            && is_get
+        {
+            let peer_hash = path.trim_start_matches("/reputation/").to_string();
+            if !peer_hash.is_empty() && peer_hash.len() <= 128 {
+                let fallback = ReputationResponse {
+                    peer_hash,
+                    trust_score: BASE_SCORE,
+                    tier: tier_name(BASE_SCORE).to_string(),
+                    shadow_queued: false,
+                };
+                return cors_headers(Response::from_json(&fallback)?);
+            }
+        }
+        return cors_headers(Response::error("Reputation write quota exceeded. Retry later.", 429)?);
+    }
     cors_headers(resp)
 }
 

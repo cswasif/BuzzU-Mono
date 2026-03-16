@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use worker::*;
 use base64::{Engine as _, engine::general_purpose};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::cell::RefCell;
 use sha2::{Sha256, Digest};
+use std::hash::{Hash, Hasher};
 
 // -- Free-Tier Guardrails -----------------------------------------------
 // Single DO = single-threaded actor. All state is local.
@@ -18,6 +19,11 @@ const MAX_CANDIDATES_TO_EVALUATE: usize = 100;
 const MAX_PAYLOAD_BYTES: usize = 16 * 1024;  // 16KB max WS message
 const MAX_PROFILE_BYTES: usize = 8 * 1024;   // 8KB max profile size
 const CLEANUP_INTERVAL_MS: u64 = 60_000;     // Alarm every 60s
+const DEFAULT_BREAKER_QUEUE_LIMIT: usize = 400;
+const DEFAULT_BREAKER_OPEN_MS: u64 = 15_000;
+const DEFAULT_BREAKER_P95_MS: u64 = 1_500;
+const DEFAULT_BREAKER_MIN_SAMPLES: usize = 25;
+const DEFAULT_METRIC_WINDOW_SIZE: usize = 128;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -40,6 +46,8 @@ pub enum MatchMessage {
         device_id: String,
         #[serde(default)]
         tab_id: String,
+        #[serde(default)]
+        blocked_peer_ids: Vec<String>,
     },
     Match {
         room_id: String,
@@ -59,6 +67,16 @@ pub enum MatchMessage {
 fn default_filter() -> String { "both".to_string() }
 fn default_interest_timeout() -> u32 { 10 }
 fn default_chat_mode() -> String { "text".to_string() }
+
+fn sanitize_blocked_peer_ids(ids: Vec<String>, self_peer_id: &str) -> Vec<String> {
+    let mut unique = HashSet::new();
+    ids.into_iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty() && id.len() <= 128 && id != self_peer_id)
+        .filter(|id| unique.insert(id.clone()))
+        .take(500)
+        .collect()
+}
 
 fn normalize_interest(raw: &str) -> String {
     let lower = raw.trim().to_lowercase();
@@ -121,6 +139,8 @@ pub struct WaitingUserData {
     pub device_id: String,
     #[serde(default)]
     pub tab_id: String,
+    #[serde(default)]
+    pub blocked_peer_ids: Vec<String>,
     /// Trust score from reputation system (0-100, default 50)
     #[serde(default = "default_trust_score")]
     pub trust_score: f64,
@@ -294,6 +314,55 @@ struct PeerWsAttachment {
     window_start: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct MatchmakerMetrics {
+    requests_total: u64,
+    websocket_messages_total: u64,
+    matches_total: u64,
+    queue_rejections_total: u64,
+    breaker_open_total: u64,
+    errors_total: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct BreakerSnapshot {
+    open: bool,
+    open_until_ms: u64,
+    reason: String,
+    queue_depth: usize,
+    latency_p95_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+struct BreakerState {
+    open_until_ms: u64,
+    reason: String,
+    recent_match_latencies_ms: VecDeque<u64>,
+}
+
+impl Default for MatchmakerMetrics {
+    fn default() -> Self {
+        Self {
+            requests_total: 0,
+            websocket_messages_total: 0,
+            matches_total: 0,
+            queue_rejections_total: 0,
+            breaker_open_total: 0,
+            errors_total: 0,
+        }
+    }
+}
+
+impl Default for BreakerState {
+    fn default() -> Self {
+        Self {
+            open_until_ms: 0,
+            reason: "closed".to_string(),
+            recent_match_latencies_ms: VecDeque::new(),
+        }
+    }
+}
+
 #[durable_object]
 pub struct MatchmakerLobby {
     state: State,
@@ -301,6 +370,8 @@ pub struct MatchmakerLobby {
     waiting_users: RefCell<HashMap<String, WaitingUserData>>,
     interest_index: RefCell<HashMap<String, Vec<String>>>,
     hydrated: RefCell<bool>,
+    metrics: RefCell<MatchmakerMetrics>,
+    breaker: RefCell<BreakerState>,
 }
 
 impl DurableObject for MatchmakerLobby {
@@ -311,6 +382,8 @@ impl DurableObject for MatchmakerLobby {
             waiting_users: RefCell::new(HashMap::new()),
             interest_index: RefCell::new(HashMap::new()),
             hydrated: RefCell::new(false),
+            metrics: RefCell::new(MatchmakerMetrics::default()),
+            breaker: RefCell::new(BreakerState::default()),
         }
     }
 
@@ -323,21 +396,23 @@ impl DurableObject for MatchmakerLobby {
         let method = req.method();
 
         let response_result = async {
+            self.metrics.borrow_mut().requests_total += 1;
             let upgrade = req.headers().get("Upgrade")?;
             if upgrade.map(|u| u == "websocket").unwrap_or(false) {
                 let WebSocketPair { client, server } = WebSocketPair::new()?;
+                let origin = req.headers().get("Origin")?.unwrap_or_default();
+                let referer = req.headers().get("Referer")?.unwrap_or_default();
+                if !origin_allowed(&origin, &referer, &self.env) {
+                    return Response::error("Forbidden", 403);
+                }
 
-                let ws_auth_required = self.env.var("WS_AUTH_REQUIRED")
-                    .ok()
-                    .map(|v| v.to_string())
-                    .unwrap_or_default()
-                    .to_lowercase();
+                let ws_auth_required = websocket_auth_required(&self.env, &url);
 
                 let query_peer_id = url.query_pairs()
                     .find(|(k, _)| k == "peer_id")
                     .map(|(_, v)| v.to_string());
 
-                let token_peer_id = if ws_auth_required == "true" {
+                let token_peer_id = if ws_auth_required {
                     let jwt_secret = resolve_jwt_secret(&self.env, &url)?;
                     let token = url.query_pairs()
                         .find(|(k, _)| k == "token")
@@ -423,7 +498,16 @@ impl DurableObject for MatchmakerLobby {
 
             let mut response = if method == Method::Get && path == "/match" {
                 Response::ok("BuzzU Matchmaker Online").unwrap()
+            } else if method == Method::Get && path == "/metrics" {
+                self.handle_metrics().await?
             } else if method == Method::Post && path == "/match" {
+                if self.should_reject_new_search() {
+                    self.metrics.borrow_mut().queue_rejections_total += 1;
+                    return Ok(Response::from_json(&serde_json::json!({
+                        "error": "Service busy, retry shortly",
+                        "retryAfterMs": self.breaker_retry_after_ms(),
+                    }))?.with_status(429));
+                }
                 let match_req = req.json::<MatchRequest>().await?;
                 let storage = self.state.storage();
 
@@ -472,12 +556,14 @@ impl DurableObject for MatchmakerLobby {
                     queued_at: now_ms(), interest_timeout: match_preferences.interest_timeout,
                     device_id: String::new(),
                     tab_id: String::new(),
+                    blocked_peer_ids: vec![],
                     trust_score: default_trust_score(), // TODO: fetch from reputation worker via service binding
                     chat_mode: "text".to_string(), // Default fallback for raw REST trigger
                 };
                 let _ = storage.put(&wait_key, &waiting_data).await;
                 self.waiting_users.borrow_mut().insert(peer_id.to_string(), waiting_data.clone());
                 self.add_to_index(&peer_id, &waiting_data.interests);
+                self.ensure_alarm().await;
 
                 Response::from_json(&serde_json::json!({"matched": true}))?.with_status(201)
             } else if (method == Method::Patch || method == Method::Post || method == Method::Get) && path.starts_with("/match/disconnect") {
@@ -527,6 +613,7 @@ impl DurableObject for MatchmakerLobby {
         match response_result {
             Ok(res) => with_timing(res, start_ms, &request_id),
             Err(err) => {
+                self.metrics.borrow_mut().errors_total += 1;
                 console_log!("[MatchmakerLobby] Request Error: {:?}", err);
                 let resp = Response::error("Internal Server Error", 500).unwrap_or_else(|_| Response::ok("Error").unwrap());
                 with_timing(resp, start_ms, &request_id)
@@ -535,6 +622,7 @@ impl DurableObject for MatchmakerLobby {
     }
 
     async fn websocket_message(&self, ws: WebSocket, message: WebSocketIncomingMessage) -> Result<()> {
+        self.metrics.borrow_mut().websocket_messages_total += 1;
         let text = match message {
             WebSocketIncomingMessage::String(s) => s,
             WebSocketIncomingMessage::Binary(b) => String::from_utf8_lossy(&b).to_string(),
@@ -572,9 +660,16 @@ impl DurableObject for MatchmakerLobby {
 
         if let Ok(msg) = serde_json::from_str::<MatchMessage>(&text) {
             match msg {
-                MatchMessage::Search { interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id } => {
+                MatchMessage::Search { interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id, blocked_peer_ids } => {
+                    if self.should_reject_new_search() {
+                        self.metrics.borrow_mut().queue_rejections_total += 1;
+                        let _ = ws.send_with_str(&serde_json::to_string(&MatchMessage::Error {
+                            message: "Service busy. Please retry in a few seconds.".to_string(),
+                        }).unwrap_or_default());
+                        return Ok(());
+                    }
                     self.ensure_hydrated().await;
-                    self.handle_search(&peer_id, &ws, interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id).await?;
+                    self.handle_search(&peer_id, &ws, interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id, blocked_peer_ids).await?;
                 }
                 _ => {}
             }
@@ -583,27 +678,11 @@ impl DurableObject for MatchmakerLobby {
     }
 
     async fn websocket_close(&self, ws: WebSocket, _code: usize, _reason: String, _was_clean: bool) -> Result<()> {
-        let peer_id: String = ws.deserialize_attachment::<PeerWsAttachment>()
-            .ok().flatten().map(|a| a.peer_id).unwrap_or_default();
-        if !peer_id.is_empty() {
-            let _ = self.state.storage().delete(&format!("waiting:{}", peer_id)).await;
-            if let Some(data) = self.waiting_users.borrow_mut().remove(&peer_id) {
-                self.remove_from_index(&peer_id, &data.interests);
-            }
-        }
-        Ok(())
+        self.handle_socket_gone(ws).await
     }
 
     async fn websocket_error(&self, ws: WebSocket, _error: worker::Error) -> Result<()> {
-        let peer_id: String = ws.deserialize_attachment::<PeerWsAttachment>()
-            .ok().flatten().map(|a| a.peer_id).unwrap_or_default();
-        if !peer_id.is_empty() {
-            let _ = self.state.storage().delete(&format!("waiting:{}", peer_id)).await;
-            if let Some(data) = self.waiting_users.borrow_mut().remove(&peer_id) {
-                self.remove_from_index(&peer_id, &data.interests);
-            }
-        }
-        Ok(())
+        self.handle_socket_gone(ws).await
     }
 
     async fn alarm(&self) -> Result<Response> {
@@ -618,6 +697,121 @@ impl DurableObject for MatchmakerLobby {
 }
 
 impl MatchmakerLobby {
+    fn breaker_config(&self) -> (usize, u64, u64, usize) {
+        let queue_limit = self.env.var("MM_BREAKER_QUEUE_LIMIT").ok()
+            .and_then(|v| v.to_string().parse::<usize>().ok())
+            .unwrap_or(DEFAULT_BREAKER_QUEUE_LIMIT);
+        let open_ms = self.env.var("MM_BREAKER_OPEN_MS").ok()
+            .and_then(|v| v.to_string().parse::<u64>().ok())
+            .unwrap_or(DEFAULT_BREAKER_OPEN_MS);
+        let p95_limit = self.env.var("MM_BREAKER_P95_MS").ok()
+            .and_then(|v| v.to_string().parse::<u64>().ok())
+            .unwrap_or(DEFAULT_BREAKER_P95_MS);
+        let min_samples = self.env.var("MM_BREAKER_MIN_SAMPLES").ok()
+            .and_then(|v| v.to_string().parse::<usize>().ok())
+            .unwrap_or(DEFAULT_BREAKER_MIN_SAMPLES);
+        (queue_limit.max(1), open_ms.max(1000), p95_limit.max(100), min_samples.max(5))
+    }
+
+    fn p95_latency_ms(&self) -> u64 {
+        let breaker = self.breaker.borrow();
+        if breaker.recent_match_latencies_ms.is_empty() {
+            return 0;
+        }
+        let mut values: Vec<u64> = breaker.recent_match_latencies_ms.iter().copied().collect();
+        values.sort_unstable();
+        let idx = ((values.len() as f64) * 0.95).ceil() as usize;
+        values[idx.saturating_sub(1).min(values.len().saturating_sub(1))]
+    }
+
+    fn open_breaker(&self, reason: String) {
+        let (_, open_ms, _, _) = self.breaker_config();
+        let mut breaker = self.breaker.borrow_mut();
+        breaker.open_until_ms = now_ms().saturating_add(open_ms);
+        breaker.reason = reason;
+        self.metrics.borrow_mut().breaker_open_total += 1;
+    }
+
+    fn breaker_retry_after_ms(&self) -> u64 {
+        let now = now_ms();
+        let open_until = self.breaker.borrow().open_until_ms;
+        open_until.saturating_sub(now)
+    }
+
+    fn should_reject_new_search(&self) -> bool {
+        let now = now_ms();
+        let (queue_limit, _, p95_limit, min_samples) = self.breaker_config();
+
+        {
+            let breaker = self.breaker.borrow();
+            if now < breaker.open_until_ms {
+                return true;
+            }
+        }
+
+        let queue_depth = self.waiting_users.borrow().len();
+        if queue_depth >= queue_limit {
+            self.open_breaker(format!("queue_depth_exceeded:{}", queue_depth));
+            return true;
+        }
+
+        let latency_p95 = self.p95_latency_ms();
+        let sample_count = self.breaker.borrow().recent_match_latencies_ms.len();
+        if sample_count >= min_samples && latency_p95 > p95_limit {
+            self.open_breaker(format!("latency_p95_exceeded:{}", latency_p95));
+            return true;
+        }
+
+        false
+    }
+
+    fn record_match_latency(&self, latency_ms: u64) {
+        let mut breaker = self.breaker.borrow_mut();
+        if breaker.recent_match_latencies_ms.len() >= DEFAULT_METRIC_WINDOW_SIZE {
+            let _ = breaker.recent_match_latencies_ms.pop_front();
+        }
+        breaker.recent_match_latencies_ms.push_back(latency_ms);
+    }
+
+    async fn handle_metrics(&self) -> Result<Response> {
+        let queue_depth = self.waiting_users.borrow().len();
+        let now = now_ms();
+        let breaker_state = self.breaker.borrow();
+        let breaker_snapshot = BreakerSnapshot {
+            open: now < breaker_state.open_until_ms,
+            open_until_ms: breaker_state.open_until_ms,
+            reason: breaker_state.reason.clone(),
+            queue_depth,
+            latency_p95_ms: self.p95_latency_ms(),
+        };
+        let metrics = self.metrics.borrow().clone();
+        Response::from_json(&serde_json::json!({
+            "metrics": metrics,
+            "breaker": breaker_snapshot,
+            "queueDepth": queue_depth,
+            "activeSockets": self.state.get_websockets().len(),
+            "timestamp": now,
+        }))
+    }
+
+    async fn handle_socket_gone(&self, ws: WebSocket) -> Result<()> {
+        let peer_id: String = ws.deserialize_attachment::<PeerWsAttachment>()
+            .ok().flatten().map(|a| a.peer_id).unwrap_or_default();
+        if peer_id.is_empty() {
+            return Ok(());
+        }
+
+        if self.state.get_websockets_with_tag(&peer_id).len() > 1 {
+            return Ok(());
+        }
+
+        let _ = self.state.storage().delete(&format!("waiting:{}", peer_id)).await;
+        if let Some(data) = self.waiting_users.borrow_mut().remove(&peer_id) {
+            self.remove_from_index(&peer_id, &data.interests);
+        }
+        Ok(())
+    }
+
     async fn ensure_hydrated(&self) {
         if *self.hydrated.borrow() { return; }
         // NOTE: Do NOT set hydrated=true here. Another handler could interleave
@@ -864,7 +1058,7 @@ impl MatchmakerLobby {
         Response::from_json(&serde_json::json!({}))
     }
 
-    async fn handle_search(&self, peer_id: &str, ws: &WebSocket, interests: Vec<String>, gender: String, filter: String, is_verified: bool, verified_only: bool, interest_timeout: u32, chat_mode: String, device_id: String, tab_id: String) -> Result<()> {
+    async fn handle_search(&self, peer_id: &str, ws: &WebSocket, interests: Vec<String>, gender: String, filter: String, is_verified: bool, verified_only: bool, interest_timeout: u32, chat_mode: String, device_id: String, tab_id: String, blocked_peer_ids: Vec<String>) -> Result<()> {
         let storage = self.state.storage();
 
         if interests.len() > 20 || interests.iter().any(|i| i.len() > 50) {
@@ -901,7 +1095,9 @@ impl MatchmakerLobby {
         }
 
         let requester_verified_only = eff_verified && match_prefs.verified_only;
+        let effective_blocked_peer_ids = sanitize_blocked_peer_ids(blocked_peer_ids, peer_id);
         let now = now_ms();
+        let own_waited_ms = existing_queued_at.map(|q| now.saturating_sub(q)).unwrap_or(0);
 
         if !device_id.is_empty() {
             let waiting = self.waiting_users.borrow();
@@ -938,6 +1134,9 @@ impl MatchmakerLobby {
 
             for other_id in limited {
                 if let Some(other_data) = waiting.get(&other_id) {
+                    if effective_blocked_peer_ids.contains(&other_id) || other_data.blocked_peer_ids.iter().any(|id| id == peer_id) {
+                        continue;
+                    }
                     if other_data.chat_mode != chat_mode { continue; } // STRICT ISOLATION GUARD
                     if !Self::quick_compatibility_check(&eff_gender, &eff_filter, &other_data.gender, &other_data.filter) { continue; }
                     if !device_id.is_empty() && other_data.device_id == device_id { continue; }
@@ -976,7 +1175,7 @@ impl MatchmakerLobby {
         };
 
         // Loop through ALL sorted candidates — skip dead sockets, clean them up inline
-        for (partner_id, common_interests, partner_is_verified, _, _, _, _, _) in sorted_candidates {
+        for (partner_id, common_interests, partner_is_verified, _, _, partner_waited_ms, _, _) in sorted_candidates {
             let partner_sockets = self.state.get_websockets_with_tag(&partner_id);
             if let Some(partner_ws) = partner_sockets.first() {
                 {
@@ -1006,6 +1205,8 @@ impl MatchmakerLobby {
                 let _ = partner_ws.send_with_str(&serde_json::to_string(&MatchMessage::Match {
                     room_id, peer_id: partner_id.clone(), partner_id: peer_id.to_string(), partner_is_verified: eff_verified,
                 }).unwrap_or_default());
+                self.metrics.borrow_mut().matches_total += 1;
+                self.record_match_latency((own_waited_ms.saturating_add(partner_waited_ms)) / 2);
 
                 return Ok(());
             } else {
@@ -1024,6 +1225,7 @@ impl MatchmakerLobby {
             queued_at: existing_queued_at.unwrap_or(now), interest_timeout: match_prefs.interest_timeout,
             device_id,
             tab_id,
+            blocked_peer_ids: effective_blocked_peer_ids,
             trust_score: default_trust_score(), // TODO: fetch from reputation worker via service binding
             chat_mode: chat_mode.clone(),
         };
@@ -1039,20 +1241,85 @@ impl MatchmakerLobby {
 
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    let origin = req.headers().get("Origin").ok().flatten().unwrap_or_else(|| "*".to_string());
+    let origin = req.headers().get("Origin").ok().flatten().unwrap_or_default();
+    let referer = req.headers().get("Referer").ok().flatten().unwrap_or_default();
     let method = req.method();
     let path = req.path();
+    let url = req.url()?;
+
+    if !origin_allowed(&origin, &referer, &env) && !origin.is_empty() {
+        return Response::error("Forbidden", 403);
+    }
+
+    if should_inject_chaos(&env, &req) {
+        return Ok(apply_cors(
+            Response::from_json(&serde_json::json!({
+                "error": "Injected chaos failure",
+                "status": 503,
+                "timestamp": now_ms(),
+            }))?.with_status(503),
+            &origin,
+        ));
+    }
 
     if method == Method::Options {
         return Ok(apply_cors(Response::ok("").unwrap(), &origin));
     }
 
+    if method == Method::Get && path == "/_ops/shard-plan" {
+        let plan = resolve_lobby_plan(&env, &url, &path);
+        return Ok(apply_cors(Response::from_json(&serde_json::json!({
+            "plan": plan,
+            "primary": plan.first().cloned().unwrap_or_else(|| "lobby:global:text:0".to_string()),
+            "timestamp": now_ms(),
+        }))?, &origin));
+    }
+
     let response_result: Result<Response> = async {
-        if path.starts_with("/users/me") || path.starts_with("/match") || path == "/" {
+        if path.starts_with("/users/me") || path.starts_with("/match") || path == "/" || path == "/metrics" {
             let namespace = env.durable_object("MATCHMAKER_LOBBY")?;
-            let id = namespace.id_from_name("global_lobby")?;
-            let stub = id.get_stub()?;
-            stub.fetch_with_request(req).await
+            let plan = resolve_lobby_plan(&env, &url, &path);
+            let fallback_shard = "lobby:global:text:0".to_string();
+            let can_retry = matches!(method, Method::Get | Method::Head);
+            let request_url = req.url()?.to_string();
+            let request_headers = req.headers().clone();
+
+            if can_retry {
+                let mut last_err: Option<worker::Error> = None;
+                for (attempt_idx, shard) in plan.iter().enumerate() {
+                    let id = namespace.id_from_name(shard)?;
+                    let stub = id.get_stub()?;
+                    let retry_req = build_retry_request(&request_url, method.clone(), &request_headers)?;
+                    match stub.fetch_with_request(retry_req).await {
+                        Ok(mut response) => {
+                            let status = response.status_code();
+                            let _ = response.headers_mut().set("X-Matchmaker-Shard", shard);
+                            let _ = response
+                                .headers_mut()
+                                .set("X-Matchmaker-Shard-Attempt", &(attempt_idx + 1).to_string());
+                            let is_last_attempt = attempt_idx + 1 >= plan.len();
+                            if !should_retry_status(status, is_last_attempt) {
+                                return Ok(response);
+                            }
+                        }
+                        Err(err) => {
+                            last_err = Some(err);
+                        }
+                    }
+                }
+                if let Some(err) = last_err {
+                    Err(err)
+                } else {
+                    Response::error("No shard available", 503)
+                }
+            } else {
+                let shard = plan.first().cloned().unwrap_or(fallback_shard);
+                let id = namespace.id_from_name(&shard)?;
+                let stub = id.get_stub()?;
+                let mut response = stub.fetch_with_request(req).await?;
+                let _ = response.headers_mut().set("X-Matchmaker-Shard", &shard);
+                Ok(response)
+            }
         } else {
             Response::ok("BuzzU Matchmaker Server v2.0")
         }
@@ -1064,10 +1331,121 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     Ok(apply_cors(response, &origin))
 }
 
+fn resolve_lobby_plan(env: &Env, url: &Url, path: &str) -> Vec<String> {
+    let shard_count = env.var("MATCHMAKER_SHARDS")
+        .ok()
+        .and_then(|v| v.to_string().parse::<u32>().ok())
+        .unwrap_or(8)
+        .clamp(1, 128);
+    let replicas = env.var("MATCHMAKER_SHARD_REPLICAS")
+        .ok()
+        .and_then(|v| v.to_string().parse::<u32>().ok())
+        .unwrap_or(2)
+        .clamp(1, 4);
+    let peer_key = url.query_pairs()
+        .find(|(k, _)| k == "peer_id")
+        .map(|(_, v)| v.to_string())
+        .unwrap_or_else(|| format!("anon:{}", path));
+    let region = url.query_pairs()
+        .find(|(k, _)| k == "region")
+        .map(|(_, v)| sanitize_partition_key(&v))
+        .unwrap_or_else(|| "global".to_string());
+    let mode = url.query_pairs()
+        .find(|(k, _)| k == "chat_mode")
+        .map(|(_, v)| sanitize_partition_key(&v))
+        .unwrap_or_else(|| "text".to_string());
+    let mut plan = Vec::new();
+    for replica in 0..replicas {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        format!("{}:{}", peer_key, replica).hash(&mut hasher);
+        let shard = (hasher.finish() % shard_count as u64) as u32;
+        let name = format!("lobby:{}:{}:{}", region, mode, shard);
+        if !plan.iter().any(|existing| existing == &name) {
+            plan.push(name);
+        }
+    }
+    if plan.is_empty() {
+        plan.push("lobby:global:text:0".to_string());
+    }
+    plan
+}
+
+fn build_retry_request(url: &str, method: Method, source_headers: &Headers) -> Result<Request> {
+    let mut req = Request::new(url, method)?;
+    let headers = req.headers_mut()?;
+    for header_name in [
+        "Origin",
+        "Referer",
+        "Cookie",
+        "Authorization",
+        "Accept",
+        "User-Agent",
+        "X-Requested-With",
+        "Content-Type",
+        "Upgrade",
+        "Connection",
+        "Sec-WebSocket-Key",
+        "Sec-WebSocket-Version",
+        "Sec-WebSocket-Protocol",
+        "Sec-WebSocket-Extensions",
+    ] {
+        if let Ok(Some(value)) = source_headers.get(header_name) {
+            let _ = headers.set(header_name, &value);
+        }
+    }
+    Ok(req)
+}
+
+fn should_retry_status(status_code: u16, is_last_attempt: bool) -> bool {
+    status_code >= 500 && !is_last_attempt
+}
+
+fn sanitize_partition_key(input: &str) -> String {
+    let normalized: String = input
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let compact = normalized.trim_matches('-');
+    if compact.is_empty() {
+        "default".to_string()
+    } else {
+        compact.chars().take(32).collect()
+    }
+}
+
+fn should_inject_chaos(env: &Env, req: &Request) -> bool {
+    let enabled = env.var("CHAOS_ENABLED")
+        .ok()
+        .map(|v| v.to_string().to_lowercase())
+        .unwrap_or_default();
+    if enabled != "true" {
+        return false;
+    }
+    let chaos_header = req.headers().get("X-Chaos-Test").ok().flatten().unwrap_or_default();
+    if chaos_header.to_lowercase() != "true" {
+        return false;
+    }
+    let percentage = env.var("CHAOS_ERROR_RATE")
+        .ok()
+        .and_then(|v| v.to_string().parse::<u32>().ok())
+        .unwrap_or(5)
+        .min(100);
+    if percentage == 0 {
+        return false;
+    }
+    (now_ms() % 100) < percentage as u64
+}
+
 fn apply_cors(response: Response, origin: &str) -> Response {
     if response.status_code() == 101 { return response; }
     let headers = response.headers().clone();
-    let allow_origin = if origin == "*" || origin.is_empty() { "*" } else { origin };
+    let allow_origin = if origin.is_empty() { "*" } else { origin };
     let _ = headers.set("Access-Control-Allow-Origin", allow_origin);
     if allow_origin != "*" { let _ = headers.set("Access-Control-Allow-Credentials", "true"); }
     let _ = headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PATCH, DELETE, HEAD, UPGRADE");
@@ -1140,7 +1518,8 @@ fn hmac_sha256(secret: &[u8], message: &[u8]) -> String {
 fn create_token(peer_id: &str, secret: &str) -> String {
     let header = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
     let iat = (js_sys::Date::now() / 1000.0) as u64;
-    let payload_json = format!(r#"{{"userId":"{}","roles":["anonymous"],"iat":{}}}"#, peer_id, iat);
+    let exp = iat + token_ttl_seconds();
+    let payload_json = format!(r#"{{"userId":"{}","roles":["anonymous"],"iat":{},"exp":{}}}"#, peer_id, iat, exp);
     let payload = general_purpose::URL_SAFE_NO_PAD.encode(payload_json.as_bytes());
     let signing_input = format!("{}.{}", header, payload);
     let signature = hmac_sha256(secret.as_bytes(), signing_input.as_bytes());
@@ -1169,7 +1548,189 @@ fn decode_token(token: &str, secret: &str) -> Option<String> {
     let payload_bytes = general_purpose::URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
     let payload_json = String::from_utf8(payload_bytes).ok()?;
     #[derive(Deserialize)]
-    struct Payload { #[serde(rename = "userId")] user_id: String }
+    struct Payload {
+        #[serde(rename = "userId")]
+        user_id: String,
+        exp: Option<u64>,
+    }
     let p: Payload = serde_json::from_str(&payload_json).ok()?;
+    let now = (js_sys::Date::now() / 1000.0) as u64;
+    let exp = p.exp?;
+    if now > exp {
+        return None;
+    }
     Some(p.user_id)
+}
+
+fn token_ttl_seconds() -> u64 {
+    86400
+}
+
+fn websocket_auth_required(env: &Env, _url: &Url) -> bool {
+    let configured = env.var("WS_AUTH_REQUIRED")
+        .ok()
+        .map(|v| v.to_string().to_lowercase());
+
+    match configured.as_deref() {
+        Some("true") | Some("1") | Some("yes") => true,
+        Some("false") | Some("0") | Some("no") => false,
+        _ => false,
+    }
+}
+
+fn origin_allowed(origin: &str, referer: &str, env: &Env) -> bool {
+    if origin == "null" {
+        return false;
+    }
+    if let Some(origin_value) = pick_origin(origin, referer) {
+        if is_local_origin(&origin_value) || is_buzzu_origin(&origin_value) {
+            return true;
+        }
+        return configured_origins(env).iter().any(|allowed| allowed == &origin_value);
+    }
+    true
+}
+
+fn pick_origin(origin: &str, referer: &str) -> Option<String> {
+    if !origin.trim().is_empty() {
+        return normalize_origin(origin);
+    }
+    if referer.trim().is_empty() {
+        return None;
+    }
+    let parsed = Url::parse(referer).ok()?;
+    let host = parsed.host_str()?;
+    let mut base = format!("{}://{}", parsed.scheme(), host);
+    if let Some(port) = parsed.port() {
+        base.push(':');
+        base.push_str(&port.to_string());
+    }
+    normalize_origin(&base)
+}
+
+fn normalize_origin(value: &str) -> Option<String> {
+    let trimmed = value.trim().trim_end_matches('/').to_lowercase();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let parsed = Url::parse(&trimmed).ok()?;
+    let host = parsed.host_str()?;
+    let mut normalized = format!("{}://{}", parsed.scheme(), host);
+    if let Some(port) = parsed.port() {
+        normalized.push(':');
+        normalized.push_str(&port.to_string());
+    }
+    Some(normalized)
+}
+
+fn is_local_origin(origin: &str) -> bool {
+    origin.contains("://localhost")
+        || origin.contains("://127.0.0.1")
+        || origin.contains("://[::1]")
+}
+
+fn is_buzzu_origin(origin: &str) -> bool {
+    if let Ok(parsed) = Url::parse(origin) {
+        if let Some(host) = parsed.host_str() {
+            return host == "buzzu.xyz"
+                || host == "www.buzzu.xyz"
+                || host.ends_with(".buzzu.xyz")
+                || host == "buzzu.pages.dev"
+                || host.ends_with(".buzzu.pages.dev")
+                || host == "buzzu3.pages.dev"
+                || host.ends_with(".buzzu3.pages.dev");
+        }
+    }
+    false
+}
+
+fn configured_origins(env: &Env) -> Vec<String> {
+    env.var("ALLOWED_ORIGINS")
+        .ok()
+        .map(|v| v.to_string())
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(normalize_origin)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retries_only_for_server_errors_before_last_attempt() {
+        assert!(should_retry_status(500, false));
+        assert!(should_retry_status(503, false));
+        assert!(!should_retry_status(429, false));
+        assert!(!should_retry_status(200, false));
+        assert!(!should_retry_status(500, true));
+    }
+
+    #[test]
+    fn partition_key_is_sanitized_and_bounded() {
+        assert_eq!(sanitize_partition_key("US-East/Video"), "us-east-video");
+        assert_eq!(sanitize_partition_key("###"), "default");
+        assert_eq!(
+            sanitize_partition_key("abcdefghijklmnopqrstuvwxyz0123456789"),
+            "abcdefghijklmnopqrstuvwxyz012345"
+        );
+    }
+
+    #[test]
+    fn retry_request_preserves_selected_headers() {
+        let source = Headers::new();
+        source.set("Origin", "https://buzzu.xyz").expect("set origin");
+        source.set("Authorization", "Bearer test").expect("set auth");
+        source.set("X-Unused", "drop-me").expect("set unused");
+        source.set("Upgrade", "websocket").expect("set upgrade");
+
+        let retry_req = build_retry_request(
+            "https://example.workers.dev/match?peer_id=abc",
+            Method::Get,
+            &source,
+        )
+        .expect("retry request should build");
+
+        let headers = retry_req.headers();
+        assert_eq!(
+            headers.get("Origin").expect("origin read"),
+            Some("https://buzzu.xyz".to_string())
+        );
+        assert_eq!(
+            headers.get("Authorization").expect("auth read"),
+            Some("Bearer test".to_string())
+        );
+        assert_eq!(
+            headers.get("Upgrade").expect("upgrade read"),
+            Some("websocket".to_string())
+        );
+        assert_eq!(headers.get("X-Unused").expect("unused read"), None);
+        assert_eq!(retry_req.method(), Method::Get);
+    }
+
+    #[test]
+    fn sanitize_blocked_peer_ids_filters_invalid_and_self_entries() {
+        let raw = vec![
+            " peer_a ".to_string(),
+            "peer_a".to_string(),
+            "".to_string(),
+            "self_peer".to_string(),
+            "peer_b".to_string(),
+        ];
+        let sanitized = sanitize_blocked_peer_ids(raw, "self_peer");
+        assert_eq!(sanitized, vec!["peer_a".to_string(), "peer_b".to_string()]);
+    }
+
+    #[test]
+    fn search_message_accepts_missing_blocked_peer_ids() {
+        let raw = r#"{"type":"Search","interests":[]}"#;
+        let parsed = serde_json::from_str::<MatchMessage>(raw).expect("search should parse");
+        match parsed {
+            MatchMessage::Search { blocked_peer_ids, .. } => {
+                assert!(blocked_peer_ids.is_empty());
+            }
+            _ => panic!("expected search"),
+        }
+    }
 }

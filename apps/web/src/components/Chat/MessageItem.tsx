@@ -16,7 +16,13 @@ interface MessageItemProps {
   isEditingInline?: boolean;
   onSaveEdit?: (id: string, newContent: string) => void;
   onCancelEdit?: () => void;
-  onProfileClick?: (username: string, avatarSeed: string, avatarUrl?: string | null) => void;
+  onProfileClick?: (
+    username: string,
+    avatarSeed: string,
+    avatarUrl?: string | null,
+    peerId?: string
+  ) => void;
+  onVanishOpen?: (messageId: string) => void;
 }
 
 interface MenuPosition {
@@ -49,7 +55,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   isEditingInline = false,
   onSaveEdit,
   onCancelEdit,
-  onProfileClick
+  onProfileClick,
+  onVanishOpen
 }) => {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isMobileThreeDotsVisible, setIsMobileThreeDotsVisible] = useState(false);
@@ -69,6 +76,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   const avatarSrc = resolvedAvatarUrl || dicebearUrl;
   const fallbackAvatar = useMemo(() => buildFallbackAvatar(resolvedAvatarSeed || '', username), [resolvedAvatarSeed, username]);
   const [avatarSrcState, setAvatarSrcState] = useState(avatarSrc);
+  const replyAvatarSeed = message.replyToMessage?.avatarSeed || message.replyToMessage?.id || '';
+  const replyAvatarLabel = message.replyToMessage?.username || 'User';
+  const replyAvatarSrc = message.replyToMessage?.avatarUrl
+    || (replyAvatarSeed ? `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${replyAvatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80` : buildFallbackAvatar(replyAvatarSeed, replyAvatarLabel));
 
   useEffect(() => {
     if (isEditingInline && editInputRef.current) {
@@ -103,6 +114,19 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     } else {
       setIsMoreMenuOpen(false);
     }
+  };
+  const emitProfileClick = (
+    username: string,
+    avatarSeed: string,
+    avatarUrl?: string | null,
+    peerId?: string,
+  ) => {
+    if (!onProfileClick) return;
+    if (peerId !== undefined) {
+      onProfileClick(username, avatarSeed, avatarUrl, peerId);
+      return;
+    }
+    onProfileClick(username, avatarSeed, avatarUrl);
   };
 
   if (type === 'system') {
@@ -365,7 +389,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               <div
                 className="absolute z-0 left-2 w-10 select-none overflow-hidden pt-0.5 hover:cursor-pointer"
                 style={{ overflowWrap: 'break-word' }}
-                onClick={() => onProfileClick?.(username, resolvedAvatarSeed || '', resolvedAvatarUrl)}
+                onClick={() =>
+                  emitProfileClick(
+                    username,
+                    resolvedAvatarSeed || '',
+                    resolvedAvatarUrl,
+                    message.senderId,
+                  )
+                }
               >
                 <span className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full">
                   <img
@@ -392,7 +423,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                     className="relative inline align-baseline text-base leading-none sm:leading-snug font-bold cursor-pointer chat-username break-all break-words max-w-[150px] sm:max-w-xs truncate"
                     role="button"
                     tabIndex={0}
-                    onClick={() => onProfileClick?.(username, resolvedAvatarSeed || '', resolvedAvatarUrl)}
+                    onClick={() =>
+                      emitProfileClick(
+                        username,
+                        resolvedAvatarSeed || '',
+                        resolvedAvatarUrl,
+                        message.senderId,
+                      )
+                    }
                   >
                     {username}
                   </span>
@@ -400,18 +438,26 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 </span>
                 <time className="text-zinc-500 text-xs leading-snug tracking-tight align-baseline font-medium cursor-default select-none ml-1">
                   {timestamp}
-                  {message.isEdited && <span className="ml-1 opacity-70 italic font-normal text-[10px] block sm:inline-block leading-none">(edited)</span>}
                 </time>
               </h3>
               <div className="leading w-full flex-1">
                 {message.replyToMessage && (
                   <div className="-ml-16 pl-16 mb-0.5 mt-0">
-                    <div className="flex items-center gap-1.5 text-[11px] bg-muted/30 hover:bg-muted/50 px-2 py-0.5 rounded border-l-[1.5px] border-primary cursor-pointer w-fit max-w-[90%] md:max-w-[80%] transition-colors">
-                      <Reply className="h-[10px] w-[10px] sm:h-3 sm:w-3 text-primary shrink-0" />
-                      <span className="font-bold text-primary shrink-0 truncate max-w-[60px] sm:max-w-[80px]">
+                    <div className="flex items-center gap-1.5 text-[11px] cursor-pointer w-fit max-w-[90%] md:max-w-[80%] transition-colors">
+                      <div className="h-[1px] w-10 bg-muted-foreground/40"></div>
+                      <span className="relative flex shrink-0 overflow-hidden h-4 w-4 rounded-full">
+                        <img
+                          className="aspect-square h-full w-full"
+                          alt={replyAvatarLabel}
+                          src={replyAvatarSrc}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      </span>
+                      <span className="font-bold text-muted-foreground shrink-0 truncate max-w-[60px] sm:max-w-[80px]">
                         {message.replyToMessage.username}
                       </span>
-                      <span className="text-foreground/70 truncate italic min-w-0">
+                      <span className="text-muted-foreground truncate min-w-0 font-semibold">
                         {message.replyToMessage.content}
                       </span>
                     </div>
@@ -445,6 +491,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                           status={message.status}
                           progress={message.progress}
                           isGif={content.startsWith('![gif]')}
+                          isVanish={message.isVanish}
+                          vanishOpened={message.vanishOpened}
+                          onVanishOpen={() => onVanishOpen?.(message.id)}
                         />
                         {content.startsWith('![gif]') && (
                           <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider select-none pointer-events-none">
@@ -453,7 +502,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                         )}
                       </div>
                     ) : (
-                      content
+                      <>
+                        {content}
+                        {message.isEdited && <span className="ml-1 align-baseline text-[11px] font-medium italic text-zinc-500/60 select-none">(edited)</span>}
+                      </>
                     )}
                   </div>
                 )}

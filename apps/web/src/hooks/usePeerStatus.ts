@@ -13,6 +13,7 @@ export interface PeerStatusInfo {
 const IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 const HEARTBEAT_INTERVAL = 15 * 1000; // 15 seconds between heartbeats
 const HEARTBEAT_TIMEOUT = 30 * 1000; // 30 seconds to receive heartbeat response
+const OFFLINE_GRACE_PERIOD = 45 * 1000;
 
 interface HeartbeatData {
   type: 'heartbeat';
@@ -28,6 +29,7 @@ export function usePeerStatus(targetPeerId?: string): PeerStatusInfo {
   const lastActivityRef = useRef<number>(Date.now());
   const lastHeartbeatSentRef = useRef<number>(0);
   const lastHeartbeatReceivedRef = useRef<number>(0);
+  const lastConnectedRef = useRef<number>(0);
   const attachedChannelsRef = useRef<Set<RTCDataChannel>>(new Set());
   
   const partnerId = useSessionStore((state) => state.partnerId);
@@ -74,11 +76,13 @@ export function usePeerStatus(targetPeerId?: string): PeerStatusInfo {
 
   const handleHeartbeat = useCallback((data: HeartbeatData) => {
     if (data.type === 'heartbeat') {
-      lastHeartbeatReceivedRef.current = Date.now();
-      lastActivityRef.current = Date.now();
+      const now = Date.now();
+      lastHeartbeatReceivedRef.current = now;
+      lastActivityRef.current = now;
+      lastConnectedRef.current = now;
       setLastSeen(new Date().toISOString());
       setIsPeerConnected(true);
-      const timeSinceActivity = Date.now() - lastActivityRef.current;
+      const timeSinceActivity = now - lastActivityRef.current;
       setStatus(timeSinceActivity > IDLE_TIMEOUT ? 'idle' : 'online');
     }
   }, []);
@@ -98,17 +102,38 @@ export function usePeerStatus(targetPeerId?: string): PeerStatusInfo {
     }
 
     const checkPeerConnection = () => {
+      const now = Date.now();
       const peerConnections = (window as any).__peerConnections;
       if (!peerConnections || !peerConnections.has(effectivePeerId)) {
-        setIsPeerConnected(false);
-        setStatus('offline');
+        const lastSeenAt = Math.max(
+          lastConnectedRef.current,
+          lastHeartbeatReceivedRef.current,
+          lastActivityRef.current,
+        );
+        if (lastSeenAt > 0 && now - lastSeenAt <= OFFLINE_GRACE_PERIOD) {
+          setIsPeerConnected(true);
+          setStatus(now - lastActivityRef.current > IDLE_TIMEOUT ? 'idle' : 'online');
+        } else {
+          setIsPeerConnected(false);
+          setStatus('offline');
+        }
         return;
       }
 
       const pc = peerConnections.get(effectivePeerId) as RTCPeerConnection;
       if (!pc || pc.connectionState === 'closed' || pc.iceConnectionState === 'closed' || pc.iceConnectionState === 'disconnected') {
-        setIsPeerConnected(false);
-        setStatus('offline');
+        const lastSeenAt = Math.max(
+          lastConnectedRef.current,
+          lastHeartbeatReceivedRef.current,
+          lastActivityRef.current,
+        );
+        if (lastSeenAt > 0 && now - lastSeenAt <= OFFLINE_GRACE_PERIOD) {
+          setIsPeerConnected(true);
+          setStatus(now - lastActivityRef.current > IDLE_TIMEOUT ? 'idle' : 'online');
+        } else {
+          setIsPeerConnected(false);
+          setStatus('offline');
+        }
         return;
       }
 
@@ -116,23 +141,14 @@ export function usePeerStatus(targetPeerId?: string): PeerStatusInfo {
       setIsPeerConnected(isConnected);
 
       if (isConnected) {
-        const now = Date.now();
-        const timeSinceLastHeartbeat = now - lastHeartbeatReceivedRef.current;
+        lastConnectedRef.current = now;
         const timeSinceActivity = now - lastActivityRef.current;
 
         if (lastHeartbeatReceivedRef.current === 0) {
           lastHeartbeatReceivedRef.current = now;
-        } else if (timeSinceLastHeartbeat > HEARTBEAT_TIMEOUT) {
-          setIsPeerConnected(false);
-          setStatus('offline');
-          return;
         }
 
-        if (timeSinceActivity > IDLE_TIMEOUT) {
-          setStatus('idle');
-        } else {
-          setStatus('online');
-        }
+        setStatus(timeSinceActivity > IDLE_TIMEOUT ? 'idle' : 'online');
 
         if (now - lastHeartbeatSentRef.current > HEARTBEAT_INTERVAL) {
           sendHeartbeat(pc);
@@ -161,6 +177,7 @@ export function usePeerStatus(targetPeerId?: string): PeerStatusInfo {
       const now = Date.now();
       lastHeartbeatReceivedRef.current = now;
       lastActivityRef.current = now;
+      lastConnectedRef.current = now;
       setLastSeen(new Date().toISOString());
       setIsPeerConnected(true);
       setStatus('online');

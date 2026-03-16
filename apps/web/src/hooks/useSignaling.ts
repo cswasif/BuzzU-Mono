@@ -6,122 +6,228 @@ import {
 } from "../context/SignalingContext";
 import { useSessionStore } from "../stores/sessionStore";
 
-export function useSignaling() {
-  const context = useSignalingContext();
-  const { peerId, avatarSeed } = useSessionStore();
-  const typingStateRef = useRef<Record<string, boolean | undefined>>({});
+const SKIP_DEDUP_TTL_MS = 30_000;
 
-  // Legacy callback refs for backward compatibility
-  const offerCallbackRef = useRef<
-    ((offer: RTCSessionDescriptionInit, from: string) => void) | null
-  >(null);
-  const answerCallbackRef = useRef<
-    ((answer: RTCSessionDescriptionInit, from: string) => void) | null
-  >(null);
-  const iceCandidateCallbackRef = useRef<
-    ((candidate: RTCIceCandidateInit, from: string) => void) | null
-  >(null);
-  const peerJoinCallbackRef = useRef<((peerId: string) => void) | null>(null);
-  const peerLeaveCallbackRef = useRef<((peerId: string) => void) | null>(null);
-  const chatMessageCallbackRef = useRef<
-    ((message: ChatMessage, from: string) => void) | null
-  >(null);
-  const typingCallbackRef = useRef<
-    ((isTyping: boolean, from: string) => void) | null
-  >(null);
-  const keysRequestCallbackRef = useRef<((from: string) => void) | null>(null);
-  const keysResponseCallbackRef = useRef<
-    ((bundle: string, from: string) => void) | null
-  >(null);
-  const handshakeCallbackRef = useRef<
-    ((initiation: string, from: string) => void) | null
-  >(null);
-  const friendRequestCallbackRef = useRef<
-    | ((
+const randomHex = (bytes: number) => {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.getRandomValues === "function"
+  ) {
+    const arr = new Uint8Array(bytes);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+};
+
+const makeSkipId = () => `skip_${Date.now()}_${randomHex(8)}`;
+
+export function useSignaling() {
+  const isDev = import.meta.env.DEV;
+  const context = useSignalingContext();
+  const { peerId, avatarSeed, currentRoomId, partnerId } = useSessionStore();
+  const typingStateRef = useRef<Record<string, boolean | undefined>>({});
+  const screenShareStateRef = useRef<Record<string, { value: boolean; ts: number } | undefined>>({});
+  const voiceChatStateRef = useRef<Record<string, { value: boolean; ts: number } | undefined>>({});
+  const pendingSkipAckRef = useRef<Map<string, { targetPeerId: string; sentAt: number }>>(new Map());
+  const receivedSkipRef = useRef<Map<string, number>>(new Map());
+
+  const offerListenersRef = useRef<
+    Set<(offer: RTCSessionDescriptionInit, from: string) => void>
+  >(new Set());
+  const answerListenersRef = useRef<
+    Set<(answer: RTCSessionDescriptionInit, from: string) => void>
+  >(new Set());
+  const iceCandidateListenersRef = useRef<
+    Set<(candidate: RTCIceCandidateInit, from: string) => void>
+  >(new Set());
+  const peerJoinListenersRef = useRef<Set<(peerId: string) => void>>(new Set());
+  const peerLeaveListenersRef = useRef<
+    Set<(peerId: string, reason?: string, closeCode?: number) => void>
+  >(new Set());
+  const peerSkipListenersRef = useRef<Set<(from: string, reason?: string) => void>>(new Set());
+  const chatMessageListenersRef = useRef<
+    Set<(message: ChatMessage, from: string) => void>
+  >(new Set());
+  const typingListenersRef = useRef<
+    Set<(isTyping: boolean, from: string) => void>
+  >(new Set());
+  const keysRequestListenersRef = useRef<Set<(from: string) => void>>(new Set());
+  const keysResponseListenersRef = useRef<
+    Set<(bundle: string, from: string) => void>
+  >(new Set());
+  const handshakeListenersRef = useRef<
+    Set<(initiation: string, from: string) => void>
+  >(new Set());
+  const friendRequestListenersRef = useRef<
+    Set<(
       action: "send" | "accept" | "decline",
       from: string,
       username?: string,
       avatarSeed?: string,
       avatarUrl?: string | null,
-    ) => void)
-    | null
-  >(null);
-  const screenShareCallbackRef = useRef<
-    ((isSharing: boolean, from: string) => void) | null
-  >(null);
-  const voiceChatCallbackRef = useRef<
-    ((isMicOn: boolean, from: string) => void) | null
-  >(null);
-  const profileCallbackRef = useRef<
-    | ((
+    ) => void>
+  >(new Set());
+  const screenShareListenersRef = useRef<
+    Set<(isSharing: boolean, from: string) => void>
+  >(new Set());
+  const voiceChatListenersRef = useRef<
+    Set<(isMicOn: boolean, from: string) => void>
+  >(new Set());
+  const profileListenersRef = useRef<
+    Set<(
       from: string,
       username?: string,
       avatarSeed?: string,
       avatarUrl?: string | null,
-    ) => void)
-    | null
-  >(null);
-  const roomStatusCallbackRef = useRef<
-    ((status: string, activePeers?: number, maxPeers?: number) => void) | null
-  >(null);
-  const editMessageCallbackRef = useRef<
-    ((messageId: string, newContent: string, from: string) => void) | null
-  >(null);
-  const deleteMessageCallbackRef = useRef<
-    ((messageId: string, from: string) => void) | null
-  >(null);
-  const peerSkipCallbackRef = useRef<
-    ((from: string, reason?: string) => void) | null
-  >(null);
+    ) => void>
+  >(new Set());
+  const roomStatusListenersRef = useRef<
+    Set<(status: string, activePeers?: number, maxPeers?: number) => void>
+  >(new Set());
+  const editMessageListenersRef = useRef<
+    Set<(messageId: string, newContent: string, from: string) => void>
+  >(new Set());
+  const deleteMessageListenersRef = useRef<
+    Set<(messageId: string, from: string) => void>
+  >(new Set());
+
+  const subscribeListener = useCallback(<T>(listeners: Set<T>, cb: T) => {
+    listeners.add(cb);
+    return () => {
+      listeners.delete(cb);
+    };
+  }, []);
+
+  const notifyListeners = useCallback(
+    <TArgs extends unknown[]>(
+      listeners: Set<(...args: TArgs) => void>,
+      ...args: TArgs
+    ) => {
+      for (const listener of Array.from(listeners)) {
+        listener(...args);
+      }
+    },
+    [],
+  );
+
+  const pruneSkipMaps = useCallback(() => {
+    const cutoff = Date.now() - SKIP_DEDUP_TTL_MS;
+    for (const [skipId, ts] of receivedSkipRef.current) {
+      if (ts < cutoff) {
+        receivedSkipRef.current.delete(skipId);
+      }
+    }
+    for (const [skipId, pending] of pendingSkipAckRef.current) {
+      if (pending.sentAt < cutoff) {
+        pendingSkipAckRef.current.delete(skipId);
+      }
+    }
+  }, []);
+
+  const activeSessionId =
+    currentRoomId && partnerId && peerId
+      ? `${currentRoomId}:${partnerId}:${peerId}`
+      : undefined;
+
+  const isStaleSignalSession = useCallback(
+    (msg: SignalingMessage) => {
+      const requiresSessionCheck =
+        msg.type === "Offer" ||
+        msg.type === "Answer" ||
+        msg.type === "IceCandidate" ||
+        msg.type === "Skip" ||
+        msg.type === "SkipAck";
+      if (!requiresSessionCheck) return false;
+      if (
+        msg.room_id &&
+        currentRoomId &&
+        msg.room_id !== currentRoomId
+      ) {
+        return true;
+      }
+      if (
+        msg.session_id &&
+        activeSessionId &&
+        msg.session_id !== activeSessionId
+      ) {
+        return true;
+      }
+      return false;
+    },
+    [activeSessionId, currentRoomId],
+  );
 
   // Subscribe to context messages and trigger legacy callbacks
   useEffect(() => {
     const unsubscribers = [
       context.onMessage("Offer", (msg) => {
+        if (isStaleSignalSession(msg)) return;
         if (msg.from && msg.payload)
-          offerCallbackRef.current?.(JSON.parse(msg.payload), msg.from);
+          notifyListeners(offerListenersRef.current, JSON.parse(msg.payload), msg.from);
       }),
       context.onMessage("Answer", (msg) => {
+        if (isStaleSignalSession(msg)) return;
         if (msg.from && msg.payload)
-          answerCallbackRef.current?.(JSON.parse(msg.payload), msg.from);
+          notifyListeners(answerListenersRef.current, JSON.parse(msg.payload), msg.from);
       }),
       context.onMessage("IceCandidate", (msg) => {
+        if (isStaleSignalSession(msg)) return;
         if (msg.from && msg.payload)
-          iceCandidateCallbackRef.current?.(JSON.parse(msg.payload), msg.from);
+          notifyListeners(iceCandidateListenersRef.current, JSON.parse(msg.payload), msg.from);
       }),
       context.onMessage("Join", (msg) => {
         if (msg.peer_id && msg.peer_id !== peerId)
-          peerJoinCallbackRef.current?.(msg.peer_id);
+          notifyListeners(peerJoinListenersRef.current, msg.peer_id);
       }),
       context.onMessage("Leave", (msg) => {
-        if (msg.peer_id) peerLeaveCallbackRef.current?.(msg.peer_id);
+        if (msg.peer_id) {
+          notifyListeners(peerLeaveListenersRef.current, msg.peer_id, msg.reason, msg.closeCode);
+        }
       }),
       context.onMessage("Skip", (msg) => {
-        console.log(`[useSignaling] Received skip message from ${msg.from}, reason: ${msg.reason}`);
-        if (msg.from) peerSkipCallbackRef.current?.(msg.from, msg.reason);
+        if (isStaleSignalSession(msg)) return;
+        pruneSkipMaps();
+        if (msg.skipId) {
+          if (receivedSkipRef.current.has(msg.skipId)) {
+            return;
+          }
+          receivedSkipRef.current.set(msg.skipId, Date.now());
+        }
+        if (isDev) {
+          console.log(`[useSignaling] Received skip message from ${msg.from}, reason: ${msg.reason}`);
+        }
+        if (msg.from) notifyListeners(peerSkipListenersRef.current, msg.from, msg.reason);
+      }),
+      context.onMessage("SkipAck", (msg) => {
+        if (isStaleSignalSession(msg)) return;
+        if (msg.skipId) {
+          pendingSkipAckRef.current.delete(msg.skipId);
+        }
       }),
       context.onMessage("Chat", (msg) => {
         if (msg.from && msg.payload)
-          chatMessageCallbackRef.current?.(JSON.parse(msg.payload), msg.from);
+          notifyListeners(chatMessageListenersRef.current, JSON.parse(msg.payload), msg.from);
       }),
       context.onMessage("Typing", (msg) => {
         if (msg.from && typeof msg.typing === "boolean")
-          typingCallbackRef.current?.(msg.typing, msg.from);
+          notifyListeners(typingListenersRef.current, msg.typing, msg.from);
       }),
       context.onMessage("RequestKeys", (msg) => {
-        if (msg.from) keysRequestCallbackRef.current?.(msg.from);
+        if (msg.from) notifyListeners(keysRequestListenersRef.current, msg.from);
       }),
       context.onMessage("KeysResponse", (msg) => {
         if (msg.from && msg.bundle)
-          keysResponseCallbackRef.current?.(msg.bundle, msg.from);
+          notifyListeners(keysResponseListenersRef.current, msg.bundle, msg.from);
       }),
       context.onMessage("SignalHandshake", (msg) => {
         if (msg.from && msg.initiation)
-          handshakeCallbackRef.current?.(msg.initiation, msg.from);
+          notifyListeners(handshakeListenersRef.current, msg.initiation, msg.from);
       }),
       context.onMessage("FriendRequest", (msg) => {
         if (msg.from && msg.action) {
-          friendRequestCallbackRef.current?.(
+          notifyListeners(
+            friendRequestListenersRef.current,
             msg.action,
             msg.from,
             msg.username,
@@ -132,18 +238,21 @@ export function useSignaling() {
       }),
       context.onMessage("ScreenShare", (msg) => {
         if (msg.from && typeof msg.sharing === "boolean") {
-          screenShareCallbackRef.current?.(msg.sharing, msg.from);
+          notifyListeners(screenShareListenersRef.current, msg.sharing, msg.from);
         }
       }),
       context.onMessage("VoiceChat", (msg) => {
-        console.log("[useSignaling] Received VoiceChat message:", msg);
+        if (isDev) {
+          console.log("[useSignaling] Received VoiceChat message:", msg);
+        }
         if (msg.from && typeof msg.sharing === "boolean") {
-          voiceChatCallbackRef.current?.(msg.sharing, msg.from);
+          notifyListeners(voiceChatListenersRef.current, msg.sharing, msg.from);
         }
       }),
       context.onMessage("Profile", (msg) => {
         if (msg.from) {
-          profileCallbackRef.current?.(
+          notifyListeners(
+            profileListenersRef.current,
             msg.from,
             msg.username,
             msg.avatarSeed,
@@ -153,7 +262,8 @@ export function useSignaling() {
       }),
       context.onMessage("RoomStatus", (msg) => {
         if (msg.status) {
-          roomStatusCallbackRef.current?.(
+          notifyListeners(
+            roomStatusListenersRef.current,
             msg.status,
             msg.active_peers,
             msg.max_peers,
@@ -162,30 +272,34 @@ export function useSignaling() {
       }),
       context.onMessage("EditMessage", (msg) => {
         if (msg.from && msg.editId && msg.payload) {
-          editMessageCallbackRef.current?.(msg.editId, msg.payload, msg.from);
+          notifyListeners(editMessageListenersRef.current, msg.editId, msg.payload, msg.from);
         }
       }),
       context.onMessage("DeleteMessage", (msg) => {
         if (msg.from && msg.deleteId) {
-          deleteMessageCallbackRef.current?.(msg.deleteId, msg.from);
+          notifyListeners(deleteMessageListenersRef.current, msg.deleteId, msg.from);
         }
       }),
     ];
 
     return () => unsubscribers.forEach((unsub) => unsub());
-  }, [context, peerId]);
+  }, [context, isStaleSignalSession, notifyListeners, peerId, pruneSkipMaps, isDev]);
 
   // Wrapper methods
   const sendOffer = useCallback(
     (targetPeerId: string, offer: RTCSessionDescriptionInit) => {
+      const sessionTs = Date.now();
       context.sendMessage({
         type: "Offer",
         from: peerId,
         to: targetPeerId,
         payload: JSON.stringify(offer),
+        timestamp: sessionTs,
+        room_id: currentRoomId ?? undefined,
+        session_id: activeSessionId,
       });
     },
-    [context, peerId],
+    [activeSessionId, context, currentRoomId, peerId],
   );
 
   const sendAnswer = useCallback(
@@ -195,9 +309,12 @@ export function useSignaling() {
         from: peerId,
         to: targetPeerId,
         payload: JSON.stringify(answer),
+        timestamp: Date.now(),
+        room_id: currentRoomId ?? undefined,
+        session_id: activeSessionId,
       });
     },
-    [context, peerId],
+    [activeSessionId, context, currentRoomId, peerId],
   );
 
   const sendIceCandidate = useCallback(
@@ -207,9 +324,12 @@ export function useSignaling() {
         from: peerId,
         to: targetPeerId,
         payload: JSON.stringify(candidate),
+        timestamp: Date.now(),
+        room_id: currentRoomId ?? undefined,
+        session_id: activeSessionId,
       });
     },
-    [context, peerId],
+    [activeSessionId, context, currentRoomId, peerId],
   );
 
   const sendChatMessage = useCallback(
@@ -254,40 +374,58 @@ export function useSignaling() {
 
   const sendSkip = useCallback(
     (targetPeerId: string, reason: string = "skip") => {
-      console.log(`[useSignaling] Sending skip message from ${peerId} to ${targetPeerId}, reason: ${reason}`);
+      pruneSkipMaps();
+      const skipId = makeSkipId();
+      if (isDev) {
+        console.log(`[useSignaling] Sending skip message from ${peerId} to ${targetPeerId}, reason: ${reason}`);
+      }
       context.sendMessage({
         type: "Skip",
         from: peerId,
         to: targetPeerId,
         reason,
+        skipId,
+        room_id: currentRoomId ?? undefined,
+        session_id: activeSessionId,
+      });
+      pendingSkipAckRef.current.set(skipId, {
+        targetPeerId,
+        sentAt: Date.now(),
       });
       
       // Add a retry mechanism for skip messages to ensure delivery
       // This is critical for user experience - partner should get instant notification
       setTimeout(() => {
         // Retry once after 500ms if connection is still active
-        if (context.isConnected) {
-          console.log(`[useSignaling] Retrying skip message from ${peerId} to ${targetPeerId}`);
+        if (context.isConnected && pendingSkipAckRef.current.has(skipId)) {
+          if (isDev) {
+            console.log(`[useSignaling] Retrying skip message from ${peerId} to ${targetPeerId}`);
+          }
           context.sendMessage({
             type: "Skip",
             from: peerId,
             to: targetPeerId,
             reason,
+            skipId,
+            room_id: currentRoomId ?? undefined,
+            session_id: activeSessionId,
           });
         }
       }, 500);
     },
-    [context, peerId],
+    [activeSessionId, context, currentRoomId, peerId, pruneSkipMaps],
   );
 
   const publishKeys = useCallback(
     (bundle: any) => {
-      console.log(
-        "[useSignaling] [Signal Debug] Publishing keys, bundle length:",
-        bundle?.length,
-        "peerId:",
-        peerId,
-      );
+      if (isDev) {
+        console.log(
+          "[useSignaling] [Signal Debug] Publishing keys, bundle length:",
+          bundle?.length,
+          "peerId:",
+          peerId,
+        );
+      }
       const bundleStr =
         typeof bundle === "string" ? bundle : JSON.stringify(bundle);
       context.sendMessage({
@@ -296,37 +434,45 @@ export function useSignaling() {
         to: "",
         bundle: bundleStr,
       });
-      console.log("[useSignaling] [Signal Debug] PublishKeys message sent");
+      if (isDev) {
+        console.log("[useSignaling] [Signal Debug] PublishKeys message sent");
+      }
     },
     [context, peerId],
   );
 
   const requestKeys = useCallback(
     (targetPeerId: string) => {
-      console.log(
-        "[useSignaling] [Signal Debug] Requesting keys from:",
-        targetPeerId,
-        "peerId:",
-        peerId,
-      );
+      if (isDev) {
+        console.log(
+          "[useSignaling] [Signal Debug] Requesting keys from:",
+          targetPeerId,
+          "peerId:",
+          peerId,
+        );
+      }
       context.sendMessage({
         type: "RequestKeys",
         from: peerId,
         to: targetPeerId,
       });
-      console.log("[useSignaling] [Signal Debug] RequestKeys message sent");
+      if (isDev) {
+        console.log("[useSignaling] [Signal Debug] RequestKeys message sent");
+      }
     },
     [context, peerId],
   );
 
   const sendKeysResponse = useCallback(
     (targetPeerId: string, bundle: any) => {
-      console.log(
-        "[useSignaling] [Signal Debug] Sending keys response to:",
-        targetPeerId,
-        "bundle length:",
-        bundle?.length,
-      );
+      if (isDev) {
+        console.log(
+          "[useSignaling] [Signal Debug] Sending keys response to:",
+          targetPeerId,
+          "bundle length:",
+          bundle?.length,
+        );
+      }
       const bundleStr =
         typeof bundle === "string" ? bundle : JSON.stringify(bundle);
       context.sendMessage({
@@ -335,19 +481,23 @@ export function useSignaling() {
         to: targetPeerId,
         bundle: bundleStr,
       });
-      console.log("[useSignaling] [Signal Debug] KeysResponse message sent");
+      if (isDev) {
+        console.log("[useSignaling] [Signal Debug] KeysResponse message sent");
+      }
     },
     [context, peerId],
   );
 
   const sendHandshake = useCallback(
     (targetPeerId: string, initiation: any) => {
-      console.log(
-        "[useSignaling] [Signal Debug] Sending handshake to:",
-        targetPeerId,
-        "initiation length:",
-        initiation?.length,
-      );
+      if (isDev) {
+        console.log(
+          "[useSignaling] [Signal Debug] Sending handshake to:",
+          targetPeerId,
+          "initiation length:",
+          initiation?.length,
+        );
+      }
       const initiationStr =
         typeof initiation === "string"
           ? initiation
@@ -358,7 +508,9 @@ export function useSignaling() {
         to: targetPeerId,
         initiation: initiationStr,
       });
-      console.log("[useSignaling] [Signal Debug] SignalHandshake message sent");
+      if (isDev) {
+        console.log("[useSignaling] [Signal Debug] SignalHandshake message sent");
+      }
     },
     [context, peerId],
   );
@@ -371,12 +523,14 @@ export function useSignaling() {
       avatarSeed?: string,
       avatarUrl?: string | null,
     ) => {
-      console.log(
-        "[useSignaling] [Friend Request] Sending friend request to:",
-        targetPeerId,
-        "action:",
-        action,
-      );
+      if (isDev) {
+        console.log(
+          "[useSignaling] [Friend Request] Sending friend request to:",
+          targetPeerId,
+          "action:",
+          action,
+        );
+      }
       context.sendMessage({
         type: "FriendRequest",
         from: peerId,
@@ -386,19 +540,30 @@ export function useSignaling() {
         avatarSeed,
         avatarUrl: avatarUrl ?? null,
       });
-      console.log("[useSignaling] [Friend Request] FriendRequest message sent");
+      if (isDev) {
+        console.log("[useSignaling] [Friend Request] FriendRequest message sent");
+      }
     },
     [context, peerId],
   );
 
   const sendScreenShareState = useCallback(
     (targetPeerId: string, isSharing: boolean) => {
-      console.log(
-        "[useSignaling] Sending ScreenShare state to:",
-        targetPeerId,
-        "sharing:",
-        isSharing,
-      );
+      const signalKey = targetPeerId || "__room__";
+      const now = Date.now();
+      const previous = screenShareStateRef.current[signalKey];
+      if (previous && previous.value === isSharing && now - previous.ts < 1200) {
+        return;
+      }
+      screenShareStateRef.current[signalKey] = { value: isSharing, ts: now };
+      if (isDev) {
+        console.log(
+          "[useSignaling] Sending ScreenShare state to:",
+          targetPeerId,
+          "sharing:",
+          isSharing,
+        );
+      }
       context.sendMessage({
         type: "ScreenShare",
         from: peerId,
@@ -424,26 +589,39 @@ export function useSignaling() {
 
   const sendDeleteMessage = useCallback(
     (targetPeerId: string, messageId: string) => {
-      console.log("[useSignaling] sendDeleteMessage called - targetPeerId:", targetPeerId, "messageId:", messageId, "peerId:", peerId);
+      if (isDev) {
+        console.log("[useSignaling] sendDeleteMessage called - targetPeerId:", targetPeerId, "messageId:", messageId, "peerId:", peerId);
+      }
       context.sendMessage({
         type: "DeleteMessage",
         from: peerId,
         to: targetPeerId,
         deleteId: messageId,
       });
-      console.log("[useSignaling] DeleteMessage message sent");
+      if (isDev) {
+        console.log("[useSignaling] DeleteMessage message sent");
+      }
     },
     [context, peerId],
   );
 
   const sendVoiceChatState = useCallback(
     (targetPeerId: string, isMicOn: boolean) => {
-      console.log(
-        "[useSignaling] Sending VoiceChat state to:",
-        targetPeerId,
-        "micOn:",
-        isMicOn,
-      );
+      const signalKey = targetPeerId || "__room__";
+      const now = Date.now();
+      const previous = voiceChatStateRef.current[signalKey];
+      if (previous && previous.value === isMicOn && now - previous.ts < 1200) {
+        return;
+      }
+      voiceChatStateRef.current[signalKey] = { value: isMicOn, ts: now };
+      if (isDev) {
+        console.log(
+          "[useSignaling] Sending VoiceChat state to:",
+          targetPeerId,
+          "micOn:",
+          isMicOn,
+        );
+      }
       context.sendMessage({
         type: "VoiceChat",
         from: peerId,
@@ -493,48 +671,48 @@ export function useSignaling() {
     sendEditMessage,
     sendDeleteMessage,
     sendSkip,
-    // Callback setters
-    onOffer: (cb: any) => {
-      offerCallbackRef.current = cb;
+    // Callback subscriptions
+    onOffer: (cb: (offer: RTCSessionDescriptionInit, from: string) => void) => {
+      return subscribeListener(offerListenersRef.current, cb);
     },
-    onAnswer: (cb: any) => {
-      answerCallbackRef.current = cb;
+    onAnswer: (cb: (answer: RTCSessionDescriptionInit, from: string) => void) => {
+      return subscribeListener(answerListenersRef.current, cb);
     },
-    onIceCandidate: (cb: any) => {
-      iceCandidateCallbackRef.current = cb;
+    onIceCandidate: (cb: (candidate: RTCIceCandidateInit, from: string) => void) => {
+      return subscribeListener(iceCandidateListenersRef.current, cb);
     },
-    onPeerJoin: (cb: any) => {
-      peerJoinCallbackRef.current = cb;
+    onPeerJoin: (cb: (peerId: string) => void) => {
+      return subscribeListener(peerJoinListenersRef.current, cb);
     },
-    onPeerLeave: (cb: any) => {
-      peerLeaveCallbackRef.current = cb;
+    onPeerLeave: (cb: (peerId: string, reason?: string, closeCode?: number) => void) => {
+      return subscribeListener(peerLeaveListenersRef.current, cb);
     },
-    onPeerSkip: (cb: any) => {
-      peerSkipCallbackRef.current = cb;
+    onPeerSkip: (cb: (from: string, reason?: string) => void) => {
+      return subscribeListener(peerSkipListenersRef.current, cb);
     },
-    onChatMessage: (cb: any) => {
-      chatMessageCallbackRef.current = cb;
+    onChatMessage: (cb: (message: ChatMessage, from: string) => void) => {
+      return subscribeListener(chatMessageListenersRef.current, cb);
     },
-    onTyping: (cb: any) => {
-      typingCallbackRef.current = cb;
+    onTyping: (cb: (isTyping: boolean, from: string) => void) => {
+      return subscribeListener(typingListenersRef.current, cb);
     },
-    onKeysRequest: (cb: any) => {
-      keysRequestCallbackRef.current = cb;
+    onKeysRequest: (cb: (from: string) => void) => {
+      return subscribeListener(keysRequestListenersRef.current, cb);
     },
-    onKeysResponse: (cb: any) => {
-      keysResponseCallbackRef.current = cb;
+    onKeysResponse: (cb: (bundle: string, from: string) => void) => {
+      return subscribeListener(keysResponseListenersRef.current, cb);
     },
-    onHandshake: (cb: any) => {
-      handshakeCallbackRef.current = cb;
+    onHandshake: (cb: (initiation: string, from: string) => void) => {
+      return subscribeListener(handshakeListenersRef.current, cb);
     },
     onFriendRequest: (cb: (action: "send" | "accept" | "decline", from: string, username?: string, avatarSeed?: string, avatarUrl?: string | null) => void) => {
-      friendRequestCallbackRef.current = cb;
+      return subscribeListener(friendRequestListenersRef.current, cb);
     },
     onScreenShare: (cb: (isSharing: boolean, from: string) => void) => {
-      screenShareCallbackRef.current = cb;
+      return subscribeListener(screenShareListenersRef.current, cb);
     },
     onVoiceChat: (cb: (isMicOn: boolean, from: string) => void) => {
-      voiceChatCallbackRef.current = cb;
+      return subscribeListener(voiceChatListenersRef.current, cb);
     },
     onProfile: (
       cb: (
@@ -544,22 +722,22 @@ export function useSignaling() {
         avatarUrl?: string | null,
       ) => void,
     ) => {
-      profileCallbackRef.current = cb;
+      return subscribeListener(profileListenersRef.current, cb);
     },
     onRoomStatus: (
       cb: (status: string, activePeers?: number, maxPeers?: number) => void,
     ) => {
-      roomStatusCallbackRef.current = cb;
+      return subscribeListener(roomStatusListenersRef.current, cb);
     },
     onEditMessage: (
       cb: (messageId: string, newContent: string, from: string) => void,
     ) => {
-      editMessageCallbackRef.current = cb;
+      return subscribeListener(editMessageListenersRef.current, cb);
     },
     onDeleteMessage: (
       cb: (messageId: string, from: string) => void,
     ) => {
-      deleteMessageCallbackRef.current = cb;
+      return subscribeListener(deleteMessageListenersRef.current, cb);
     },
     // Media stream methods from context
     onRemoteStream: (callback: (stream: MediaStream) => void) => {

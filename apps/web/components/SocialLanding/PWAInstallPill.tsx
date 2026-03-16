@@ -15,12 +15,14 @@ export const PWAInstallPill = () => {
                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                    className="fixed bottom-24 right-6 md:bottom-8 md:right-8 z-[10000]"
+                    className="fixed right-6 md:right-8 z-[10000]"
+                    style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
                 >
                     <button
                         onClick={installApp}
-                        className="group flex items-center space-x-3 px-6 py-3 bg-white/10 hover:bg-white/15 border border-white/20 backdrop-blur-2xl rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300 active:scale-95 border-b-2 overflow-hidden relative"
+                        className="group flex items-center space-x-3 px-6 py-3 min-h-11 bg-white/10 hover:bg-white/15 border border-white/20 backdrop-blur-2xl rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300 active:scale-95 border-b-2 overflow-hidden relative"
                         style={{ borderBottomColor: colors.accent + '40' }}
+                        aria-label="Install BuzzU as an app"
                     >
                         {/* Premium Exotic Hover Background */}
                         <div className="absolute inset-0 bg-mesh-aurora opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0 pointer-events-none mix-blend-screen" />

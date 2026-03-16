@@ -9,8 +9,9 @@ import React, {
 import { useSessionStore } from "../stores/sessionStore";
 
 const SIGNALING_URL =
+  process.env.SIGNALING_URL ||
   import.meta.env.VITE_SIGNALING_URL ||
-  "wss://buzzu-signaling.md-wasif-faisal.workers.dev";
+  "wss://buzzu-signaling.buzzu.workers.dev";
 
 export interface SignalingMessage {
   type:
@@ -40,7 +41,8 @@ export interface SignalingMessage {
   | "KeyExchange"
   | "EditMessage"
   | "DeleteMessage"
-  | "Skip";
+  | "Skip"
+  | "SkipAck";
   from?: string;
   to?: string;
   room_id?: string;
@@ -54,6 +56,7 @@ export interface SignalingMessage {
   via?: string;
   hop_count?: number;
   timestamp?: number;
+  session_id?: string;
   candidates?: Array<{ peer_id: string; rtt_ms: number; reliability: number }>;
   action?: "send" | "accept" | "decline";
   sharing?: boolean;
@@ -68,6 +71,8 @@ export interface SignalingMessage {
   /** DeleteMessage: the ID of the message being deleted */
   deleteId?: string;
   reason?: string;
+  closeCode?: number;
+  skipId?: string;
 }
 
 export interface ChatMessage {
@@ -93,7 +98,7 @@ interface SignalingContextType {
     currentPeerId: string,
     options?: { roomType?: string; roomKey?: string; accessKey?: string },
   ) => void;
-  disconnect: () => void;
+  disconnect: (options?: { intent?: "skip" | "default" }) => void;
   sendMessage: (message: SignalingMessage) => void;
   onMessage: (
     type: SignalingMessage["type"],
@@ -122,6 +127,7 @@ export const useSignalingContext = () => {
 export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const isDev = import.meta.env.DEV;
   const [isConnected, setIsConnected] = useState(false);
   const [peersInRoom, setPeersInRoom] = useState<string[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -143,7 +149,7 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const connectedRoomIdRef = useRef<string | null>(null);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback((options?: { intent?: "skip" | "default" }) => {
     shouldReconnectRef.current = false;
     isConnectingRef.current = false;
     messageQueueRef.current = [];
@@ -155,7 +161,11 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
       console.log("[SignalingContext] Disconnecting WebSocket");
       wsRef.current.onclose = null;
       wsRef.current.onerror = null;
-      wsRef.current.close();
+      if (options?.intent === "skip") {
+        wsRef.current.close(4001, "intentional_skip");
+      } else {
+        wsRef.current.close();
+      }
       wsRef.current = null;
     }
     setIsConnected(false);
@@ -255,12 +265,15 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
             const typeCallbacks = callbacksRef.current.get(message.type);
             if (typeCallbacks) {
               if (
-                message.type === "PublishKeys" ||
-                message.type === "RequestKeys" ||
-                message.type === "KeysResponse" ||
-                message.type === "SignalHandshake" ||
-                message.type === "DeleteMessage" ||
-                message.type === "EditMessage"
+                isDev &&
+                (
+                  message.type === "PublishKeys" ||
+                  message.type === "RequestKeys" ||
+                  message.type === "KeysResponse" ||
+                  message.type === "SignalHandshake" ||
+                  message.type === "DeleteMessage" ||
+                  message.type === "EditMessage"
+                )
               ) {
                 console.log(
                   "[SignalingContext] [Signal Debug] Received",
@@ -338,7 +351,7 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const sendMessage = useCallback((message: SignalingMessage) => {
-    if (message.type === "Typing") {
+    if (isDev && message.type === "Typing") {
       console.log("[SignalingContext] Sending Typing message:", message);
     }
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -346,7 +359,7 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
     } else {
       messageQueueRef.current.push(message);
     }
-  }, []);
+  }, [isDev]);
 
   const onMessage = useCallback(
     (

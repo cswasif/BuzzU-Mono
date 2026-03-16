@@ -53,6 +53,7 @@ export function useConnectionResilience({
   const webLockAbortRef = useRef<AbortController | null>(null);
   const frozenTimestampRef = useRef<number | null>(null);
   const screenShareKeepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wakeLockRequestRef = useRef<Promise<void> | null>(null);
   const { isConnected: signalingConnected } = useSignalingContext();
   const context = useSignalingContext();
 
@@ -62,10 +63,14 @@ export function useConnectionResilience({
   // when it becomes visible again.
   const acquireWakeLock = useCallback(async () => {
     if (!('wakeLock' in navigator)) return;
+    if (document.visibilityState !== 'visible') return;
+    if (wakeLockRef.current || wakeLockRequestRef.current) return;
     try {
-      // Only acquire if we don't already have one
-      if (wakeLockRef.current) return;
-      wakeLockRef.current = await navigator.wakeLock.request('screen');
+      wakeLockRequestRef.current = navigator.wakeLock.request('screen').then((sentinel) => {
+        wakeLockRef.current = sentinel;
+      });
+      await wakeLockRequestRef.current;
+      if (!wakeLockRef.current) return;
       console.log('[Resilience] Screen Wake Lock acquired');
 
       // Wake locks are automatically released on visibility change.
@@ -74,9 +79,12 @@ export function useConnectionResilience({
         console.log('[Resilience] Screen Wake Lock released');
         wakeLockRef.current = null;
       });
-    } catch (err) {
-      // Wake Lock request can fail (e.g., low battery)
-      console.warn('[Resilience] Wake Lock request failed:', err);
+    } catch (err: any) {
+      if (err?.name !== 'NotAllowedError') {
+        console.warn('[Resilience] Wake Lock request failed:', err);
+      }
+    } finally {
+      wakeLockRequestRef.current = null;
     }
   }, []);
 
@@ -157,29 +165,46 @@ export function useConnectionResilience({
       // 6. Enhanced screen share stream recovery
       const ssState = useScreenShareStore.getState();
       if (ssState.isRemoteSharing && ssState.remoteStream) {
-        console.log('[Resilience] Enhanced remote screen share stream recovery');
-        // Force stream re-attachment by incrementing version
-        useScreenShareStore.getState().setRemoteSharing(ssState.remoteStream);
-        
-        // Ensure video elements are playing the screen share
-        setTimeout(() => {
-          document.querySelectorAll('video[srcobject]').forEach(video => {
-            const media = video as HTMLVideoElement;
-            if (media.srcObject instanceof MediaStream) {
+        const remoteVideoTracks = ssState.remoteStream.getVideoTracks();
+        const hasLiveTrack = remoteVideoTracks.some((track) => track.readyState === 'live');
+        const hasMutedTrack = remoteVideoTracks.some((track) => track.muted);
+        let hasAttachedScreenVideo = false;
+        let hasPausedScreenVideo = false;
+
+        document.querySelectorAll('video[srcobject]').forEach((video) => {
+          const media = video as HTMLVideoElement;
+          if (!(media.srcObject instanceof MediaStream)) return;
+          const stream = media.srcObject as MediaStream;
+          const isScreenShare = stream.getVideoTracks().some((track) =>
+            remoteVideoTracks.some((remoteTrack) => remoteTrack.id === track.id),
+          );
+          if (!isScreenShare) return;
+          hasAttachedScreenVideo = true;
+          if (media.paused && !media.ended) {
+            hasPausedScreenVideo = true;
+          }
+        });
+
+        const shouldNudge = !hasLiveTrack || hasMutedTrack || !hasAttachedScreenVideo || hasPausedScreenVideo;
+        if (shouldNudge) {
+          console.log('[Resilience] Enhanced remote screen share stream recovery');
+          useScreenShareStore.getState().setRemoteSharing(ssState.remoteStream);
+          setTimeout(() => {
+            document.querySelectorAll('video[srcobject]').forEach((video) => {
+              const media = video as HTMLVideoElement;
+              if (!(media.srcObject instanceof MediaStream)) return;
               const stream = media.srcObject as MediaStream;
-              const isScreenShare = stream.getVideoTracks().some(track => 
-                ssState.remoteStream?.getVideoTracks().some(rt => rt.id === track.id)
+              const isScreenShare = stream.getVideoTracks().some((track) =>
+                remoteVideoTracks.some((remoteTrack) => remoteTrack.id === track.id),
               );
-              
-              if (isScreenShare && media.paused) {
+              if (isScreenShare && media.paused && !media.ended) {
                 media.play().catch(() => {
-                  // Expected if still in background, but worth trying
                   console.log('[Resilience] Screen share video play failed (still background?)');
                 });
               }
-            }
-          });
-        }, 100); // Small delay to ensure DOM is ready
+            });
+          }, 100);
+        }
       }
 
       // 7. Local screen share recovery - ensure tracks are enabled

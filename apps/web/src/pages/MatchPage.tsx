@@ -6,7 +6,7 @@ import { useMatching } from '../hooks/useMatching';
 import { BuzzULogoIcon } from '../../components/SocialLanding/Icons';
 import { GenderDialog } from '../components/GenderDialog';
 
-const MATCHMAKER_URL = process.env.MATCHMAKER_URL || 'wss://buzzu-matchmaker.md-wasif-faisal.workers.dev';
+const MATCHMAKER_URL = process.env.MATCHMAKER_URL || 'wss://buzzu-matchmaker.buzzu.workers.dev';
 
 const SUGGESTED_INTERESTS = [
     'Gaming', 'Music', 'Movies', 'Anime', 'Coding', 'Sports',

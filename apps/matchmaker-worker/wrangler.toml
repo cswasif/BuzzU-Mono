@@ -15,4 +15,4 @@ tag = "v1"
 new_sqlite_classes = ["MatchmakerLobby"]
 
 #[vars]
-#SIGNALING_URL = "wss://buzzu-signaling.md-wasif-faisal.workers.dev"
+#SIGNALING_URL = "wss://buzzu-signaling.buzzu.workers.dev"

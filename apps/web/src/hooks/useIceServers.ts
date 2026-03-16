@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useOptimalStun, FALLBACK_STUN_SERVERS } from './useOptimalStun';
 
-const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || 'wss://buzzu-signaling.md-wasif-faisal.workers.dev';
+const SIGNALING_URL = process.env.SIGNALING_URL || import.meta.env.VITE_SIGNALING_URL || 'wss://buzzu-signaling.buzzu.workers.dev';
 const SIGNAL_BASE_URL = SIGNALING_URL.replace(/^ws(s)?:\/\//, 'http$1://');
 
 const randomFloat = () => {

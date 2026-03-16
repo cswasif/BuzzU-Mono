@@ -66,7 +66,7 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
     const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isPartnerTyping, setIsPartnerTyping] = useState(false);
-    const { sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, onTyping, onProfile, getDataChannel, onDataChannel, initWebRTC } = useDmSignaling();
+    const { sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, sendProfile, onTyping, onProfile, getDataChannel, onDataChannel, initWebRTC } = useDmSignaling();
 
     const currentMessages = activeDmFriend ? (dmMessages[activeDmFriend.id] || []) : [];
 
@@ -98,6 +98,15 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
             });
         });
     }, [activeDmFriend, onProfile, updatePeerProfile]);
+
+    useEffect(() => {
+        if (!activeDmFriend) return;
+        sendProfile(activeDmFriend.id, {
+            username: displayName || 'Anonymous',
+            avatarSeed,
+            avatarUrl: avatarUrl || null,
+        });
+    }, [activeDmFriend, avatarSeed, avatarUrl, displayName, sendProfile]);
 
     // Initialize WebRTC for file transfers when friend is active
     useEffect(() => {
@@ -337,7 +346,7 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
     return (
         <main className="w-full flex h-full flex-grow flex-col overflow-hidden">
             {/* ── DM Header Bar ── */}
-            <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm shrink-0">
+            <div className="flex lg:hidden items-center gap-3 px-4 py-2.5 bg-background/80 backdrop-blur-sm shrink-0">
                 <button
                     onClick={onBack}
                     className="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"

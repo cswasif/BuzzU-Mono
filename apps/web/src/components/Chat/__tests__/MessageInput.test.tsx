@@ -65,4 +65,53 @@ describe("MessageInput", () => {
     expect(onSend).toHaveBeenCalledWith("Hello", null);
     expect(textarea).toHaveValue("");
   });
+
+  it("exposes busy and live status while searching", () => {
+    render(
+      <MessageInput
+        {...baseProps}
+        connectionState="searching"
+      />,
+    );
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Searching for a partner");
+
+    const actionButton = screen.getByRole("button", { name: "Stop searching" });
+    expect(actionButton).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("exposes accessible labels for attach, gif and emoji actions", () => {
+    render(
+      <MessageInput
+        {...baseProps}
+        connectionState="connected"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Attach image" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open GIF picker" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open emoji picker" })).toBeInTheDocument();
+  });
+
+  it("renders vanish toggle only when handler is provided", () => {
+    const { rerender } = render(
+      <MessageInput
+        {...baseProps}
+        connectionState="connected"
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Enable one-time image mode" })).not.toBeInTheDocument();
+
+    rerender(
+      <MessageInput
+        {...baseProps}
+        connectionState="connected"
+        onToggleVanishMode={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Enable one-time image mode" })).toBeInTheDocument();
+  });
 });

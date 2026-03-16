@@ -726,15 +726,14 @@
   }
 
   @supports ((-webkit-appearance: none)) {
-
-    div:focus,
-    h1:focus,
-    p:focus,
-    main:focus,
-    span:focus,
-    nav:focus {
-      -webkit-focus-ring-color: transparent !important;
-      outline: none !important;
+    div:focus:not(:focus-visible),
+    h1:focus:not(:focus-visible),
+    p:focus:not(:focus-visible),
+    main:focus:not(:focus-visible),
+    span:focus:not(:focus-visible),
+    nav:focus:not(:focus-visible) {
+      -webkit-focus-ring-color: transparent;
+      outline: none;
     }
   }
 
@@ -893,37 +892,34 @@
 
   /* === ROBUST MODAL FIXES FOR /chat/new DIRECT ACCESS === */
   /* Fix white border on Radix UI modals */
-  [role="dialog"].fixed {
+  .landing-root-bg [role="dialog"].fixed {
     border-color: transparent !important;
     border-width: 0 !important;
     border: none !important;
   }
 
-  [role="dialog"].fixed *,
-  [role="dialog"].fixed *::before,
-  [role="dialog"].fixed *::after {
+  .landing-root-bg [role="dialog"].fixed.border,
+  .landing-root-bg [role="dialog"].fixed [class*="border"] {
     border-color: transparent !important;
-    border-width: 0 !important;
-    border: none !important;
   }
 
   /* Fix Start Text Chat button gradient */
-  button.from-indigo-600 {
+  .landing-root-bg button.from-indigo-600 {
     --tw-gradient-from: rgb(79, 70, 229) !important;
     background-color: rgb(79, 70, 229) !important;
   }
 
-  button.bg-gradient-to-r {
+  .landing-root-bg button.bg-gradient-to-r {
     background: linear-gradient(to right, rgb(79, 70, 229), rgb(4, 120, 87)) !important;
     color: #ffffff !important;
   }
 
-  button.bg-gradient-to-r * {
+  .landing-root-bg button.bg-gradient-to-r > * {
     color: #ffffff !important;
   }
 
   /* Fix interests modal - make it more compact */
-  .bg-panel.lg\\:mb-4 {
+  .bg-panel.lg\:mb-4 {
     max-height: 90vh !important;
     overflow-y: auto !important;
   }
@@ -980,7 +976,7 @@
       background-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.1) 40%, rgba(0, 0, 0, 0.6) 100%), var(--bg-image) !important;
       background-size: cover;
       background-position: center;
-      background-attachment: fixed;
+      background-attachment: scroll;
     }
 
     /* Remove all overlays */
@@ -1037,6 +1033,12 @@
       color: var(--theme-text) !important;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
       /* Gentle shadow to support theme colors on photos */
+    }
+
+    .r-sdzlij .css-1jxf684,
+    [data-testid="signupButton"] .css-1jxf684 {
+      color: #111827 !important;
+      text-shadow: none !important;
     }
 
     /* Specific weights for headers */
@@ -1507,5 +1509,45 @@
 
   .animate-shimmer {
     animation: shimmer 2s infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fade-in-up,
+    .cinematic-grain,
+    .landing-root-bg[data-theme='aura'],
+    .landing-root-bg[data-theme='lavender'],
+    .side-filter-overlay,
+    .animate-shimmer {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    .btn-hover-accent,
+    .btn-hover-white,
+    .btn-hover-black,
+    .btn-hover-translucent-black,
+    .mute-btn {
+      transition: none !important;
+    }
+
+    .btn-hover-outline:active,
+    .btn-hover-accent:active,
+    .mute-btn:hover {
+      transform: none !important;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .mute-btn {
+      background: Canvas !important;
+      color: CanvasText !important;
+      border-color: ButtonText !important;
+      forced-color-adjust: auto;
+    }
+
+    .btn-hover-outline,
+    .btn-hover-accent {
+      border: 1px solid ButtonText !important;
+    }
   }
 }

@@ -26,7 +26,7 @@ import { usePWA } from '../hooks/usePWA';
  *   /chat/dm/:friendId → DmChatArea (DM with specific friend)
  */
 export default function DashboardLayout() {
-    const { initSession, theme, setTheme, isInChat, currentRoomId, chatMode } = useSessionStore();
+    const { initSession, theme, setTheme, currentRoomId, isInChat, partnerId } = useSessionStore();
     const location = useLocation();
     const { isInstallable, installApp, needRefresh, updateApp, closeUpdateTrigger, offlineReady } = usePWA();
 
@@ -57,11 +57,23 @@ export default function DashboardLayout() {
         isOpen: boolean; username: string; avatarSeed: string; peerId: string;
     } | null>(null);
 
-    const shouldKeepChatAlive =
-        chatMode === 'text' &&
-        isInChat &&
-        !!currentRoomId &&
-        location.pathname.startsWith('/chat/dm/');
+    const [persistentRoomId, setPersistentRoomId] = useState<string | null>(currentRoomId);
+    useEffect(() => {
+        if (currentRoomId) {
+            setPersistentRoomId(currentRoomId);
+            return;
+        }
+        if (!isInChat || !partnerId) {
+            setPersistentRoomId(null);
+        }
+    }, [currentRoomId, isInChat, partnerId]);
+
+    const activeRoomId = currentRoomId || persistentRoomId;
+    const isDmRoute = location.pathname.startsWith('/chat/dm/');
+    const isRoomChatRoute = /^\/chat\/(?:new|text)\/[^/]+/.test(location.pathname);
+    const shouldRenderPersistentChat =
+        !!activeRoomId &&
+        (isDmRoute || isRoomChatRoute);
 
     const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
@@ -160,13 +172,18 @@ export default function DashboardLayout() {
                         )}
 
                         {/* Route content — this is where child pages render */}
-                        <Outlet context={{ setHideChrome, setShowInterestsModal }} />
-                        {shouldKeepChatAlive && (
-                            <div className="hidden">
-                                <ChatArea roomId={currentRoomId ?? undefined} />
+                        <Outlet
+                            context={{
+                                setHideChrome,
+                                setShowInterestsModal,
+                                suppressEmbeddedChat: shouldRenderPersistentChat,
+                            }}
+                        />
+                        {shouldRenderPersistentChat && (
+                            <div className={isDmRoute ? 'hidden' : 'flex-1 min-w-0'}>
+                                <ChatArea roomId={activeRoomId ?? undefined} />
                             </div>
                         )}
-
                         {/* Right sidebar */}
                         {!hideChrome && (
                             <RightSidebar
@@ -201,6 +218,7 @@ export default function DashboardLayout() {
                     <ProfileModal
                         isOpen={true}
                         onClose={() => setProfileModal(null)}
+                        peerId={profileModal.peerId}
                         username={profileModal.username}
                         avatarSeed={profileModal.avatarSeed}
                         requestStatus="friends"
@@ -219,14 +237,17 @@ export default function DashboardLayout() {
                 )}
 
                 {isInstallable && !dismissedInstallPrompt && (
-                    <div className="fixed bottom-4 right-4 z-[70] max-w-[min(94vw,24rem)] rounded-xl border border-border/70 bg-panel/95 p-3 shadow-2xl backdrop-blur">
+                    <div
+                        className="fixed right-4 z-[70] max-w-[min(94vw,24rem)] rounded-xl border border-border/70 bg-panel/95 p-3 shadow-2xl backdrop-blur"
+                        style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+                    >
                         <p className="text-sm font-semibold text-panel-foreground">Install BuzzU app</p>
                         <p className="mt-1 text-xs text-muted-foreground">Get faster launch and a full-screen mobile experience.</p>
                         <div className="mt-3 flex items-center justify-end gap-2">
                             <button
                                 type="button"
                                 onClick={() => setDismissedInstallPrompt(true)}
-                                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/20"
+                                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/20 min-h-11"
                                 aria-label="Dismiss install prompt"
                             >
                                 Not now
@@ -234,7 +255,7 @@ export default function DashboardLayout() {
                             <button
                                 type="button"
                                 onClick={installApp}
-                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90"
+                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 min-h-11"
                                 aria-label="Install BuzzU app"
                             >
                                 Install
@@ -244,7 +265,10 @@ export default function DashboardLayout() {
                 )}
 
                 {needRefresh && !dismissedUpdatePrompt && (
-                    <div className="fixed bottom-4 left-4 z-[70] max-w-[min(94vw,24rem)] rounded-xl border border-border/70 bg-panel/95 p-3 shadow-2xl backdrop-blur">
+                    <div
+                        className="fixed left-4 z-[70] max-w-[min(94vw,24rem)] rounded-xl border border-border/70 bg-panel/95 p-3 shadow-2xl backdrop-blur"
+                        style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+                    >
                         <p className="text-sm font-semibold text-panel-foreground">Update available</p>
                         <p className="mt-1 text-xs text-muted-foreground">A newer version is ready. Reload to apply improvements.</p>
                         <div className="mt-3 flex items-center justify-end gap-2">
@@ -254,7 +278,7 @@ export default function DashboardLayout() {
                                     setDismissedUpdatePrompt(true);
                                     closeUpdateTrigger();
                                 }}
-                                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/20"
+                                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/20 min-h-11"
                                 aria-label="Dismiss update prompt"
                             >
                                 Later
@@ -262,7 +286,7 @@ export default function DashboardLayout() {
                             <button
                                 type="button"
                                 onClick={updateApp}
-                                className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black hover:opacity-90"
+                                className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black hover:opacity-90 min-h-11"
                                 aria-label="Reload to update app"
                             >
                                 Reload

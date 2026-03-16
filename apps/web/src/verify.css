@@ -7,8 +7,8 @@
     font-display: swap;
     font-weight: 100;
     src:
-        url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-100-normal-ZwMKEyG7.woff2') format("woff2"),
-        url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-100-normal-CuNerm5Z.woff') format("woff");
+        url('/assets/dm-sans-latin-100-normal-ZwMKEyG7.woff2') format("woff2"),
+        url('/assets/dm-sans-latin-100-normal-CuNerm5Z.woff') format("woff");
 }
 
 @font-face {
@@ -16,7 +16,7 @@
     font-style: normal;
     font-display: swap;
     font-weight: 200;
-    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-200-normal-Db5rW57f.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-200-normal-Bn3cuIU8.woff') format("woff");
+    src: url('/assets/dm-sans-latin-200-normal-Db5rW57f.woff2') format("woff2"), url('/assets/dm-sans-latin-200-normal-Bn3cuIU8.woff') format("woff");
 }
 
 @font-face {
@@ -24,7 +24,7 @@
     font-style: normal;
     font-display: swap;
     font-weight: 300;
-    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-300-normal-C46oWILc.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-300-normal-CsNfKS1n.woff') format("woff");
+    src: url('/assets/dm-sans-latin-300-normal-C46oWILc.woff2') format("woff2"), url('/assets/dm-sans-latin-300-normal-CsNfKS1n.woff') format("woff");
 }
 
 @font-face {
@@ -32,7 +32,7 @@
     font-style: normal;
     font-display: swap;
     font-weight: 400;
-    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-400-normal-CW0RaeGs.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-400-normal-BwCSEQnW.woff') format("woff");
+    src: url('/assets/dm-sans-latin-400-normal-CW0RaeGs.woff2') format("woff2"), url('/assets/dm-sans-latin-400-normal-BwCSEQnW.woff') format("woff");
 }
 
 @font-face {
@@ -40,7 +40,7 @@
     font-style: normal;
     font-display: swap;
     font-weight: 500;
-    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-500-normal-B9HHJjqV.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-500-normal-Dr3UlScf.woff') format("woff");
+    src: url('/assets/dm-sans-latin-500-normal-B9HHJjqV.woff2') format("woff2"), url('/assets/dm-sans-latin-500-normal-Dr3UlScf.woff') format("woff");
 }
 
 @font-face {
@@ -48,7 +48,7 @@
     font-style: normal;
     font-display: swap;
     font-weight: 600;
-    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-600-normal-Aqo67rzb.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-600-normal-BmdmIIQ2.woff') format("woff");
+    src: url('/assets/dm-sans-latin-600-normal-Aqo67rzb.woff2') format("woff2"), url('/assets/dm-sans-latin-600-normal-BmdmIIQ2.woff') format("woff");
 }
 
 @font-face {
@@ -56,7 +56,7 @@
     font-style: normal;
     font-display: swap;
     font-weight: 700;
-    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-700-normal-DvUfVpUG.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-700-normal-CUSSCpQX.woff') format("woff");
+    src: url('/assets/dm-sans-latin-700-normal-DvUfVpUG.woff2') format("woff2"), url('/assets/dm-sans-latin-700-normal-CUSSCpQX.woff') format("woff");
 }
 
 @font-face {
@@ -64,7 +64,7 @@
     font-style: normal;
     font-display: swap;
     font-weight: 800;
-    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-800-normal-C2H8778U.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-800-normal-BwbkPQqB.woff') format("woff");
+    src: url('/assets/dm-sans-latin-800-normal-C2H8778U.woff2') format("woff2"), url('/assets/dm-sans-latin-800-normal-BwbkPQqB.woff') format("woff");
 }
 
 @font-face {
@@ -72,7 +72,7 @@
     font-style: normal;
     font-display: swap;
     font-weight: 900;
-    src: url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-900-normal-BmOyECvA.woff2') format("woff2"), url('https://proxy.extractcss.dev/https://app.chitchat.gg/assets/dm-sans-latin-900-normal-Bm36EmVp.woff') format("woff");
+    src: url('/assets/dm-sans-latin-900-normal-BmOyECvA.woff2') format("woff2"), url('/assets/dm-sans-latin-900-normal-Bm36EmVp.woff') format("woff");
 }
 
 /* Map variables to logical colors */

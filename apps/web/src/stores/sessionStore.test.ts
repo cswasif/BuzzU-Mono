@@ -129,6 +129,22 @@ describe('sessionStore', () => {
       useSessionStore.getState().initSession();
       expect(useSessionStore.getState().peerId).toBe(peerId);
     });
+
+    it('preserves active room on reload at chat landing route', () => {
+      window.history.pushState({}, '', '/chat/new');
+      const navSpy = vi
+        .spyOn(window.performance, 'getEntriesByType')
+        .mockReturnValue([{ type: 'reload' } as PerformanceNavigationTiming]);
+
+      useSessionStore.getState().joinRoom('room_keep', 'partner_keep', false);
+      useSessionStore.getState().initSession();
+
+      const state = useSessionStore.getState();
+      expect(state.currentRoomId).toBe('room_keep');
+      expect(state.isInChat).toBe(true);
+      expect(state.partnerId).toBe('partner_keep');
+      navSpy.mockRestore();
+    });
   });
 
   describe('friends', () => {
@@ -191,6 +207,23 @@ describe('sessionStore', () => {
       useSessionStore.getState().deleteDmMessage('f1', 'msg_1');
       expect(useSessionStore.getState().dmMessages['f1']).toHaveLength(0);
     });
+
+    it('tracks and clears per-friend unread DM counts', () => {
+      useSessionStore.getState().incrementDmUnread('friend_1');
+      useSessionStore.getState().incrementDmUnread('friend_1', 2);
+      expect(useSessionStore.getState().dmUnreadCounts['friend_1']).toBe(3);
+      expect(useSessionStore.getState().hasNewDmMessage).toBe(true);
+
+      useSessionStore.getState().clearDmUnread('friend_1');
+      expect(useSessionStore.getState().dmUnreadCounts['friend_1']).toBeUndefined();
+      expect(useSessionStore.getState().hasNewDmMessage).toBe(false);
+    });
+
+    it('clears unread count for the DM when it is opened', () => {
+      useSessionStore.getState().incrementDmUnread('friend_2', 4);
+      useSessionStore.getState().setDmFriend({ id: 'friend_2', username: 'Friend 2', avatarSeed: 'friend_2', avatarUrl: null });
+      expect(useSessionStore.getState().dmUnreadCounts['friend_2']).toBeUndefined();
+    });
   });
 
   describe('resetSession', () => {
@@ -199,6 +232,7 @@ describe('sessionStore', () => {
       useSessionStore.getState().setGender('F');
       useSessionStore.getState().setInterests(['coding', 'music']);
       useSessionStore.getState().joinRoom('room_x', 'partner_y', true);
+      useSessionStore.getState().incrementDmUnread('partner_y', 2);
 
       useSessionStore.getState().resetSession();
       const state = useSessionStore.getState();
@@ -207,6 +241,8 @@ describe('sessionStore', () => {
       expect(state.interests).toEqual([]);
       expect(state.currentRoomId).toBeNull();
       expect(state.isInChat).toBe(false);
+      expect(state.hasNewDmMessage).toBe(false);
+      expect(state.dmUnreadCounts).toEqual({});
     });
   });
 });

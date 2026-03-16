@@ -3,7 +3,7 @@
  * Connects the frontend to the buzzu-reputation worker.
  */
 
-const REPUTATION_URL = import.meta.env.VITE_REPUTATION_URL || 'https://buzzu-reputation.md-wasif-faisal.workers.dev';
+const REPUTATION_URL = process.env.REPUTATION_URL || import.meta.env.VITE_REPUTATION_URL || 'https://buzzu-reputation.buzzu.workers.dev';
 
 /**
  * Hash a peer ID using SHA-256 for privacy-preserving storage in the reputation worker.

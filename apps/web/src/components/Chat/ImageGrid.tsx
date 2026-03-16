@@ -4,6 +4,7 @@ import { Message } from './types';
 
 interface ImageGridProps {
     messages: Message[];
+    onVanishOpen?: (messageId: string) => void;
 }
 
 /**
@@ -14,13 +15,15 @@ interface ImageGridProps {
  * 4 images → 2×2 grid
  * 5+ images → 2-column masonry with "+N" overlay on last
  */
-export const ImageGrid: React.FC<ImageGridProps> = ({ messages }) => {
+export const ImageGrid: React.FC<ImageGridProps> = ({ messages, onVanishOpen }) => {
     const images = messages.map(m => ({
         src: m.content.match(/\((.*?)\)/)?.[1] || '',
         status: m.status,
         progress: m.progress,
         id: m.id,
-        isGif: m.content.startsWith('![gif]')
+        isGif: m.content.startsWith('![gif]'),
+        isVanish: !!m.isVanish,
+        vanishOpened: !!m.vanishOpened,
     }));
 
     const count = images.length;
@@ -36,6 +39,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ messages }) => {
                     status={images[0].status}
                     progress={images[0].progress}
                     isGif={images[0].isGif}
+                    isVanish={images[0].isVanish}
+                    vanishOpened={images[0].vanishOpened}
+                    onVanishOpen={() => onVanishOpen?.(images[0].id)}
                     maxHeight="300px"
                 />
             </div>
@@ -52,6 +58,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ messages }) => {
                         status={img.status}
                         progress={img.progress}
                         isGif={img.isGif}
+                        isVanish={img.isVanish}
+                        vanishOpened={img.vanishOpened}
+                        onVanishOpen={() => onVanishOpen?.(img.id)}
                         maxHeight="200px"
                         className="!rounded-none w-full h-full"
                     />
@@ -69,6 +78,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ messages }) => {
                         status={images[0].status}
                         progress={images[0].progress}
                         isGif={images[0].isGif}
+                        isVanish={images[0].isVanish}
+                        vanishOpened={images[0].vanishOpened}
+                        onVanishOpen={() => onVanishOpen?.(images[0].id)}
                         maxHeight="300px"
                         className="!rounded-none w-full h-full"
                     />
@@ -78,6 +90,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ messages }) => {
                     status={images[1].status}
                     progress={images[1].progress}
                     isGif={images[1].isGif}
+                    isVanish={images[1].isVanish}
+                    vanishOpened={images[1].vanishOpened}
+                    onVanishOpen={() => onVanishOpen?.(images[1].id)}
                     maxHeight="148px"
                     className="!rounded-none w-full"
                 />
@@ -86,6 +101,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ messages }) => {
                     status={images[2].status}
                     progress={images[2].progress}
                     isGif={images[2].isGif}
+                    isVanish={images[2].isVanish}
+                    vanishOpened={images[2].vanishOpened}
+                    onVanishOpen={() => onVanishOpen?.(images[2].id)}
                     maxHeight="148px"
                     className="!rounded-none w-full"
                 />
@@ -103,6 +121,9 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ messages }) => {
                         status={img.status}
                         progress={img.progress}
                         isGif={img.isGif}
+                        isVanish={img.isVanish}
+                        vanishOpened={img.vanishOpened}
+                        onVanishOpen={() => onVanishOpen?.(img.id)}
                         maxHeight="180px"
                         className="!rounded-none w-full"
                     />

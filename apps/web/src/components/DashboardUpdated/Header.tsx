@@ -18,11 +18,11 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
       <div className="flex h-full flex-none items-center justify-center lg:hidden !pointer-events-auto">
         <span className="mt-1 flex px-2">
           <div className="relative">
-            <span onClick={onMenuClick} className="cursor-pointer block p-2 -ml-2">
+            <button type="button" onClick={onMenuClick} className="cursor-pointer block p-2 -ml-2" aria-label="Open menu">
               <svg width="24" height="24" viewBox="0 0 24 24" className="text-foreground" aria-hidden="true" stroke="currentColor">
                 <path strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h18M3 18h18" />
               </svg>
-            </span>
+            </button>
           </div>
         </span>
       </div>
@@ -38,7 +38,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           <span className="font-bold tracking-tight text-brightness">BuzzU</span>
         </a>
       </div>
-      <span className="text-md truncate font-bold normal-case ml-4 cursor-default px-2 text-brightness" role="button" tabIndex={0}>New Chat</span>
+      <span className="text-md truncate font-bold normal-case ml-4 cursor-default px-2 text-brightness">New Chat</span>
       <div className="flex flex-1 justify-end gap-1 md:gap-2">
         <div data-orientation="vertical" role="none" className="shrink-0 bg-border w-[1px] h-4 self-center"></div>
         <button
@@ -47,6 +47,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           aria-haspopup="dialog"
           aria-expanded="false"
           aria-controls="radix-_r_0_"
+          aria-label="Open friend requests"
           data-state="closed"
           onClick={onFriendRequestsClick}
         >
@@ -66,6 +67,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
           aria-haspopup="dialog"
           aria-expanded="false"
           aria-controls="radix-_r_2_"
+          aria-label="Open inbox"
           data-state="closed"
           onClick={onInboxClick}
         >
@@ -75,6 +77,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onHistoryClick, onFriendRe
         </button>
         <button
           className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10 rounded-full"
+          type="button"
+          aria-label="Open chat history"
           data-state="closed"
           onClick={onHistoryClick}
         >

@@ -62,8 +62,8 @@ const themes: Record<Theme, ThemeColors> = {
     line: '#cfd9de',
     buttonBorder: '#cfd9de',
     buttonHoverBg: 'rgba(15, 20, 25, 0.1)',
-    accent: '#ee81ee', // Magenta/Pink
-    accentHoverBg: 'rgba(238, 129, 238, 0.1)',
+    accent: '#9b2fae', // Magenta/Pink
+    accentHoverBg: 'rgba(155, 47, 174, 0.1)',
   },
   // Dark Mode with Lavender Accent
   lavender: {

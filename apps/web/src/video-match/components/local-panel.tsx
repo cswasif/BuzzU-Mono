@@ -117,7 +117,7 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
           <div className="absolute z-40 items-center px-3.5 py-2.5 lg:px-5 lg:py-4 top-0 right-0">
             <div className="flex flex-col items-center justify-center md:items-end">
               {/* Report button - collapsed circle */}
-              <button onClick={onReport} className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden rounded-full size-[50px] p-0 opacity-90 bg-red-600/95 hover:bg-red-600 group/report transition-all duration-500 relative z-40 mb-5 text-white">
+              <button aria-label="Report user" onClick={onReport} className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden rounded-full size-[50px] p-0 opacity-90 bg-red-600/95 hover:bg-red-600 group/report transition-all duration-500 relative z-40 mb-5 text-white">
                 <div className="flex items-center justify-center w-full">
                   <ReportFlagIcon />
                 </div>
@@ -126,6 +126,7 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
               {/* Skip button - collapsed circle, disabled */}
               <button
                 disabled
+                aria-label="Skip unavailable while connecting"
                 className="inline-flex cursor-not-allowed items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden rounded-full p-0 opacity-90 bg-neutral-900/75 size-[50px] transition-all duration-500 relative max-lg:hidden disabled:opacity-50"
               >
                 <div className="flex items-center justify-center w-full">
@@ -217,7 +218,7 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
           <div className="absolute z-40 items-center px-3.5 py-2.5 lg:px-5 lg:py-4 top-0 right-0">
             <div className="flex flex-col items-center justify-center md:items-end">
               {/* Report button */}
-              <button onClick={onReport} className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden rounded-full p-0 opacity-90 bg-red-600/95 hover:bg-red-600 group/report transition-all duration-500 w-[100px] h-[50px] relative z-40 mb-5 text-white">
+              <button aria-label="Report user" onClick={onReport} className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden rounded-full p-0 opacity-90 bg-red-600/95 hover:bg-red-600 group/report transition-all duration-500 w-[100px] h-[50px] relative z-40 mb-5 text-white">
                 <div className="flex items-center justify-start w-full px-4">
                   <ReportFlagIcon />
                   <span className="text-white ml-2">Report</span>
@@ -227,6 +228,7 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
               {/* Skip button - desktop only */}
               <button
                 onClick={onSkip}
+                aria-label="Skip to next match"
                 className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden rounded-full p-0 opacity-90 bg-neutral-900/75 hover:bg-neutral-900/95 transition-all duration-500 w-[90px] h-[50px] relative max-lg:hidden"
               >
                 <div className="flex items-center justify-start w-full px-4">
@@ -263,6 +265,7 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
               {/* Audio mute toggle */}
               <button
                 onClick={toggleMute}
+                aria-label={isMuted ? "Unmute remote audio" : "Mute remote audio"}
                 className="flex items-center justify-center size-9 rounded-full bg-black/30 hover:bg-black/50 transition-colors text-white"
                 title={isMuted ? "Unmute" : "Mute"}
               >

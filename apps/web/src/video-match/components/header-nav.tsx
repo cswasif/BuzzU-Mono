@@ -33,6 +33,7 @@ export function HeaderNav({ isSearching, isMatched, onEndChat, onMore }: HeaderN
           <button
             onClick={onEndChat}
             title="End Chat"
+            aria-label="End chat"
             className="inline-flex cursor-pointer items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-9 rounded-full text-white/80 hover:text-white hover:bg-black/10 p-0 max-lg:h-[50px] !size-10"
           >
             <CloseIcon />

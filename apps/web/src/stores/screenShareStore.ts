@@ -46,7 +46,7 @@ export interface ScreenShareState {
   /** Called from useScreenShare hook when sharing stops */
   clearLocalSharing: () => void;
   /** Called from useWebRTC ontrack when remote screen share detected */
-  setRemoteSharing: (stream: MediaStream) => void;
+  setRemoteSharing: (stream: MediaStream | null) => void;
   /** Called when remote screen share ends */
   clearRemoteSharing: () => void;
   /** Reset only remote sharing state (preserves local screen capture across skips) */

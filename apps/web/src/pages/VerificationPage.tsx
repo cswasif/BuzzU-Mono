@@ -108,12 +108,10 @@ export const VerificationPage: React.FC = () => {
         window.google.accounts.id.initialize({
             client_id: GOOGLE_CLIENT_ID,
             callback: handleCallbackResponse,
-            auto_select: true,
+            auto_select: false,
             ux_mode: 'redirect',
             login_uri: window.location.origin + '/verify',
         });
-
-        window.google.accounts.id.prompt();
 
         if (googleBtnRef.current) {
             const parentWidth = googleBtnRef.current.clientWidth || 320;
@@ -154,7 +152,7 @@ export const VerificationPage: React.FC = () => {
     };
 
     return (
-        <div className="text-foreground bg-background h-[100dvh] font-sans">
+        <div className="text-foreground bg-background h-[100dvh] font-sans" aria-busy={isLoading || verifying || undefined}>
             <div data-rht-toaster="" style={{ position: 'fixed', zIndex: 9999, inset: '16px', pointerEvents: 'none' }}></div>
 
             <button
@@ -189,6 +187,7 @@ export const VerificationPage: React.FC = () => {
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.3, ease: 'easeOut' }}
                         className="absolute z-10 flex-row rounded-xl bg-card shadow-2xl sm:w-full sm:max-w-md overflow-hidden"
+                        aria-busy={isLoading || verifying || undefined}
                         style={{
                             width: isLoading ? 'auto' : undefined,
                             height: isLoading ? 'auto' : undefined,
@@ -204,6 +203,7 @@ export const VerificationPage: React.FC = () => {
                                 {isLoading ? (
                                     <motion.div key="loader" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="flex justify-center py-8 w-full min-w-[200px]">
                                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                        <span className="sr-only" role="status" aria-live="polite">Loading verification options</span>
                                     </motion.div>
                                 ) : (
                                     <motion.div key="content" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="flex flex-col py-1 px-2 gap-1.5">
@@ -216,8 +216,8 @@ export const VerificationPage: React.FC = () => {
 
                                         <div className="flex flex-col items-center gap-4 w-full mt-4">
 
-                                            {verifying && <p className="text-sm text-amber-500 animate-pulse font-medium">Verifying your account...</p>}
-                                            {verifyError && <p className="text-sm text-red-500 font-medium bg-red-500/10 p-2 rounded-md border border-red-500/20">{verifyError}</p>}
+                                            {verifying && <p role="status" aria-live="polite" className="text-sm text-amber-500 animate-pulse font-medium">Verifying your account...</p>}
+                                            {verifyError && <p role="alert" className="text-sm text-red-500 font-medium bg-red-500/10 p-2 rounded-md border border-red-500/20">{verifyError}</p>}
 
                                             {/* Exact style from your verify template overlaid with Google's native functionality */}
                                             <div className="relative w-full flex justify-center h-[44px] rounded-[4px] overflow-hidden group">
