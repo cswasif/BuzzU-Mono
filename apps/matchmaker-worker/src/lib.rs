@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::cell::RefCell;
 use sha2::{Sha256, Digest};
 use std::hash::{Hash, Hasher};
+use getrandom::getrandom;
 
 // -- Free-Tier Guardrails -----------------------------------------------
 // Single DO = single-threaded actor. All state is local.
@@ -24,12 +25,16 @@ const DEFAULT_BREAKER_OPEN_MS: u64 = 15_000;
 const DEFAULT_BREAKER_P95_MS: u64 = 1_500;
 const DEFAULT_BREAKER_MIN_SAMPLES: usize = 25;
 const DEFAULT_METRIC_WINDOW_SIZE: usize = 128;
+const DRAND_DEFAULT_BASE_URL: &str = "https://api.drand.sh";
+const DRAND_DEFAULT_CHAIN_HASH: &str = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum MatchMessage {
     Search {
         interests: Vec<String>,
+        #[serde(default = "default_with_interests")]
+        with_interests: bool,
         #[serde(default)]
         gender: String,
         #[serde(default = "default_filter")]
@@ -59,6 +64,10 @@ pub enum MatchMessage {
     Waiting {
         position: usize,
     },
+    Presence {
+        text_active: usize,
+        video_active: usize,
+    },
     Error {
         message: String,
     },
@@ -67,6 +76,15 @@ pub enum MatchMessage {
 fn default_filter() -> String { "both".to_string() }
 fn default_interest_timeout() -> u32 { 10 }
 fn default_chat_mode() -> String { "text".to_string() }
+fn default_with_interests() -> bool { true }
+fn normalize_chat_mode(mode: &str) -> String {
+    let normalized = sanitize_partition_key(mode);
+    if normalized == "video" {
+        "video".to_string()
+    } else {
+        "text".to_string()
+    }
+}
 
 fn sanitize_blocked_peer_ids(ids: Vec<String>, self_peer_id: &str) -> Vec<String> {
     let mut unique = HashSet::new();
@@ -146,9 +164,12 @@ pub struct WaitingUserData {
     pub trust_score: f64,
     #[serde(default = "default_chat_mode")]
     pub chat_mode: String,
+    #[serde(default = "default_connection_id")]
+    pub connection_id: String,
 }
 
 fn default_trust_score() -> f64 { 50.0 }
+fn default_connection_id() -> String { String::new() }
 
 /// Shadow queue threshold — users below this only match with each other
 const SHADOW_TRUST_THRESHOLD: f64 = 20.0;
@@ -312,6 +333,10 @@ struct PeerWsAttachment {
     peer_id: String,
     msg_count: u32,
     window_start: u64,
+    #[serde(default = "default_chat_mode")]
+    chat_mode: String,
+    #[serde(default = "default_connection_id")]
+    connection_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -338,6 +363,18 @@ struct BreakerState {
     open_until_ms: u64,
     reason: String,
     recent_match_latencies_ms: VecDeque<u64>,
+}
+
+#[derive(Debug, Clone)]
+struct DrandCacheState {
+    seed: u64,
+    expires_at_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct DrandLatestResponse {
+    round: u64,
+    randomness: String,
 }
 
 impl Default for MatchmakerMetrics {
@@ -372,6 +409,7 @@ pub struct MatchmakerLobby {
     hydrated: RefCell<bool>,
     metrics: RefCell<MatchmakerMetrics>,
     breaker: RefCell<BreakerState>,
+    drand_cache: RefCell<Option<DrandCacheState>>,
 }
 
 impl DurableObject for MatchmakerLobby {
@@ -384,6 +422,7 @@ impl DurableObject for MatchmakerLobby {
             hydrated: RefCell::new(false),
             metrics: RefCell::new(MatchmakerMetrics::default()),
             breaker: RefCell::new(BreakerState::default()),
+            drand_cache: RefCell::new(None),
         }
     }
 
@@ -398,7 +437,11 @@ impl DurableObject for MatchmakerLobby {
         let response_result = async {
             self.metrics.borrow_mut().requests_total += 1;
             let upgrade = req.headers().get("Upgrade")?;
-            if upgrade.map(|u| u == "websocket").unwrap_or(false) {
+            if upgrade
+                .as_deref()
+                .map(|u| u.eq_ignore_ascii_case("websocket"))
+                .unwrap_or(false)
+            {
                 let WebSocketPair { client, server } = WebSocketPair::new()?;
                 let origin = req.headers().get("Origin")?.unwrap_or_default();
                 let referer = req.headers().get("Referer")?.unwrap_or_default();
@@ -419,9 +462,11 @@ impl DurableObject for MatchmakerLobby {
                         .map(|(_, v)| v.to_string())
                         .unwrap_or_default();
                     if token.is_empty() {
-                        return Response::error("Missing token", 401);
+                        get_peer_id_from_cookie(&req, &jwt_secret)?
+                            .ok_or_else(|| worker::Error::from("Missing token"))?
+                    } else {
+                        decode_token(&token, &jwt_secret).ok_or_else(|| worker::Error::from("Invalid token"))?
                     }
-                    decode_token(&token, &jwt_secret).ok_or_else(|| worker::Error::from("Invalid token"))?
                 } else {
                     String::new()
                 };
@@ -443,17 +488,27 @@ impl DurableObject for MatchmakerLobby {
                     return Response::error("Invalid peer ID", 400);
                 }
 
+                let chat_mode = normalize_chat_mode(
+                    &url.query_pairs()
+                        .find(|(k, _)| k == "chat_mode")
+                        .map(|(_, v)| v.to_string())
+                        .unwrap_or_else(|| "text".to_string())
+                );
+                let mode_tag = format!("mode:{}", chat_mode);
+
                 // Evict duplicate sockets for this peer (prevents ghost connections)
                 for old_ws in self.state.get_websockets_with_tag(&peer_id) {
                     let _ = old_ws.close(Some(4000), Some("Duplicate connection — replaced by new tab"));
                 }
 
-                self.state.accept_websocket_with_tags(&server, &[&peer_id, "lobby"]);
+                self.state.accept_websocket_with_tags(&server, &[&peer_id, "lobby", mode_tag.as_str()]);
 
                 let attachment = PeerWsAttachment {
                     peer_id: peer_id.clone(),
                     msg_count: 0,
                     window_start: now_ms(),
+                    chat_mode,
+                    connection_id: uuid::Uuid::new_v4().to_string(),
                 };
                 server.serialize_attachment(&attachment)?;
 
@@ -462,6 +517,7 @@ impl DurableObject for MatchmakerLobby {
                 }
 
                 self.ensure_alarm().await;
+                self.broadcast_presence();
                 return Response::from_websocket(client);
             }
 
@@ -470,9 +526,13 @@ impl DurableObject for MatchmakerLobby {
                 .find(|(k, _)| k == "peer_id")
                 .map(|(_, v)| v.to_string());
 
-            let jwt_secret = resolve_jwt_secret(&self.env, &url)?;
+            let jwt_secret = resolve_jwt_secret(&self.env, &url).ok();
 
-            let cookie_peer_result = get_peer_id_from_cookie(&req, &jwt_secret);
+            let cookie_peer_result = if let Some(secret) = jwt_secret.as_deref() {
+                get_peer_id_from_cookie(&req, secret)
+            } else {
+                Ok(None)
+            };
 
             let peer_id = match (&cookie_peer_result, &query_peer_id) {
                 (Ok(Some(c)), Some(q)) if c != q => {
@@ -559,6 +619,7 @@ impl DurableObject for MatchmakerLobby {
                     blocked_peer_ids: vec![],
                     trust_score: default_trust_score(), // TODO: fetch from reputation worker via service binding
                     chat_mode: "text".to_string(), // Default fallback for raw REST trigger
+                    connection_id: String::new(),
                 };
                 let _ = storage.put(&wait_key, &waiting_data).await;
                 self.waiting_users.borrow_mut().insert(peer_id.to_string(), waiting_data.clone());
@@ -594,8 +655,15 @@ impl DurableObject for MatchmakerLobby {
                 return Response::error("Not Found", 404);
             };
 
-            if query_peer_id.is_some() && cookie_peer_result.ok().flatten().is_none() {
-                let token = create_token(&peer_id, &jwt_secret);
+            if query_peer_id.is_some()
+                && cookie_peer_result
+                    .as_ref()
+                    .ok()
+                    .and_then(|value| value.as_ref())
+                    .is_none()
+                && jwt_secret.is_some()
+            {
+                let token = create_token(&peer_id, jwt_secret.as_deref().unwrap_or_default());
                 let is_secure = url.scheme() == "https";
                 let host = url.host_str().unwrap_or("buzzu.xyz");
                 let domain = if host.contains('.') {
@@ -637,7 +705,13 @@ impl DurableObject for MatchmakerLobby {
 
         let mut attachment: PeerWsAttachment = ws.deserialize_attachment::<PeerWsAttachment>()
             .ok().flatten()
-            .unwrap_or(PeerWsAttachment { peer_id: String::new(), msg_count: 0, window_start: now_ms() });
+            .unwrap_or(PeerWsAttachment {
+                peer_id: String::new(),
+                msg_count: 0,
+                window_start: now_ms(),
+                chat_mode: "text".to_string(),
+                connection_id: String::new(),
+            });
 
         let now = now_ms();
         if now - attachment.window_start > 60_000 {
@@ -660,7 +734,7 @@ impl DurableObject for MatchmakerLobby {
 
         if let Ok(msg) = serde_json::from_str::<MatchMessage>(&text) {
             match msg {
-                MatchMessage::Search { interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id, blocked_peer_ids } => {
+                MatchMessage::Search { interests, with_interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id, blocked_peer_ids } => {
                     if self.should_reject_new_search() {
                         self.metrics.borrow_mut().queue_rejections_total += 1;
                         let _ = ws.send_with_str(&serde_json::to_string(&MatchMessage::Error {
@@ -669,7 +743,7 @@ impl DurableObject for MatchmakerLobby {
                         return Ok(());
                     }
                     self.ensure_hydrated().await;
-                    self.handle_search(&peer_id, &ws, interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id, blocked_peer_ids).await?;
+                    self.handle_search(&peer_id, &ws, interests, with_interests, gender, filter, is_verified, verified_only, interest_timeout, chat_mode, device_id, tab_id, blocked_peer_ids, attachment.connection_id.clone()).await?;
                 }
                 _ => {}
             }
@@ -697,6 +771,79 @@ impl DurableObject for MatchmakerLobby {
 }
 
 impl MatchmakerLobby {
+    fn hash_u64(bytes: &[u8]) -> u64 {
+        let digest = Sha256::digest(bytes);
+        let mut out = [0u8; 8];
+        out.copy_from_slice(&digest[..8]);
+        u64::from_be_bytes(out)
+    }
+
+    fn fallback_entropy_seed() -> u64 {
+        let mut bytes = [0u8; 8];
+        if getrandom(&mut bytes).is_ok() {
+            return u64::from_be_bytes(bytes);
+        }
+        Self::hash_u64(format!("{}:{}", now_ms(), uuid::Uuid::new_v4()).as_bytes())
+    }
+
+    async fn fetch_drand_seed(&self) -> Option<u64> {
+        let chain_hash = self
+            .env
+            .var("DRAND_CHAIN_HASH")
+            .ok()
+            .map(|v| v.to_string())
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| DRAND_DEFAULT_CHAIN_HASH.to_string());
+        let endpoint = self
+            .env
+            .var("DRAND_API_URL")
+            .ok()
+            .map(|v| v.to_string())
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| format!("{}/{}/public/latest", DRAND_DEFAULT_BASE_URL, chain_hash));
+        let request = Request::new(&endpoint, Method::Get).ok()?;
+        let mut response = Fetch::Request(request).send().await.ok()?;
+        if response.status_code() < 200 || response.status_code() >= 300 {
+            return None;
+        }
+        let payload = response.text().await.ok()?;
+        let parsed: DrandLatestResponse = serde_json::from_str(&payload).ok()?;
+        Some(Self::hash_u64(
+            format!("{}:{}", parsed.round, parsed.randomness).as_bytes(),
+        ))
+    }
+
+    async fn matchmaking_entropy_seed(&self) -> u64 {
+        let now = now_ms();
+        let cache_ttl_ms = self
+            .env
+            .var("DRAND_CACHE_TTL_MS")
+            .ok()
+            .and_then(|v| v.to_string().parse::<u64>().ok())
+            .unwrap_or(15_000)
+            .max(1_000);
+        if let Some(cache) = self.drand_cache.borrow().as_ref() {
+            if cache.expires_at_ms > now {
+                return cache.seed;
+            }
+        }
+        let seed = self
+            .fetch_drand_seed()
+            .await
+            .unwrap_or_else(Self::fallback_entropy_seed);
+        *self.drand_cache.borrow_mut() = Some(DrandCacheState {
+            seed,
+            expires_at_ms: now.saturating_add(cache_ttl_ms),
+        });
+        seed
+    }
+
+    fn candidate_tiebreak(entropy_seed: u64, requester_peer_id: &str, candidate_peer_id: &str) -> u64 {
+        Self::hash_u64(
+            format!("{}:{}:{}", entropy_seed, requester_peer_id, candidate_peer_id).as_bytes(),
+        )
+    }
+
     fn breaker_config(&self) -> (usize, u64, u64, usize) {
         let queue_limit = self.env.var("MM_BREAKER_QUEUE_LIMIT").ok()
             .and_then(|v| v.to_string().parse::<usize>().ok())
@@ -776,6 +923,7 @@ impl MatchmakerLobby {
     async fn handle_metrics(&self) -> Result<Response> {
         let queue_depth = self.waiting_users.borrow().len();
         let now = now_ms();
+        let (text_active, video_active) = self.active_mode_counts();
         let breaker_state = self.breaker.borrow();
         let breaker_snapshot = BreakerSnapshot {
             open: now < breaker_state.open_until_ms,
@@ -790,6 +938,10 @@ impl MatchmakerLobby {
             "breaker": breaker_snapshot,
             "queueDepth": queue_depth,
             "activeSockets": self.state.get_websockets().len(),
+            "activeByMode": {
+                "text": text_active,
+                "video": video_active,
+            },
             "timestamp": now,
         }))
     }
@@ -797,6 +949,8 @@ impl MatchmakerLobby {
     async fn handle_socket_gone(&self, ws: WebSocket) -> Result<()> {
         let peer_id: String = ws.deserialize_attachment::<PeerWsAttachment>()
             .ok().flatten().map(|a| a.peer_id).unwrap_or_default();
+        let connection_id: String = ws.deserialize_attachment::<PeerWsAttachment>()
+            .ok().flatten().map(|a| a.connection_id).unwrap_or_default();
         if peer_id.is_empty() {
             return Ok(());
         }
@@ -805,11 +959,57 @@ impl MatchmakerLobby {
             return Ok(());
         }
 
-        let _ = self.state.storage().delete(&format!("waiting:{}", peer_id)).await;
-        if let Some(data) = self.waiting_users.borrow_mut().remove(&peer_id) {
-            self.remove_from_index(&peer_id, &data.interests);
+        let should_remove_waiting = self
+            .waiting_users
+            .borrow()
+            .get(&peer_id)
+            .map(|data| {
+                data.connection_id.is_empty()
+                    || connection_id.is_empty()
+                    || data.connection_id == connection_id
+            })
+            .unwrap_or(true);
+
+        if should_remove_waiting {
+            let _ = self.state.storage().delete(&format!("waiting:{}", peer_id)).await;
+            if let Some(data) = self.waiting_users.borrow_mut().remove(&peer_id) {
+                self.remove_from_index(&peer_id, &data.interests);
+            }
         }
+        self.broadcast_presence();
         Ok(())
+    }
+
+    fn count_unique_peers_for_tag(&self, tag: &str) -> usize {
+        self.state
+            .get_websockets_with_tag(tag)
+            .iter()
+            .filter_map(|ws| ws.deserialize_attachment::<PeerWsAttachment>().ok().flatten())
+            .map(|a| a.peer_id)
+            .collect::<HashSet<_>>()
+            .len()
+    }
+
+    fn active_mode_counts(&self) -> (usize, usize) {
+        let text_active = self.count_unique_peers_for_tag("mode:text");
+        let video_active = self.count_unique_peers_for_tag("mode:video");
+        (text_active, video_active)
+    }
+
+    fn presence_message_json(&self) -> String {
+        let (text_active, video_active) = self.active_mode_counts();
+        serde_json::to_string(&MatchMessage::Presence {
+            text_active,
+            video_active,
+        })
+            .unwrap_or_else(|_| "{\"type\":\"Presence\",\"text_active\":0,\"video_active\":0}".to_string())
+    }
+
+    fn broadcast_presence(&self) {
+        let payload = self.presence_message_json();
+        for ws in self.state.get_websockets_with_tag("lobby") {
+            let _ = ws.send_with_str(&payload);
+        }
     }
 
     async fn ensure_hydrated(&self) {
@@ -897,11 +1097,10 @@ impl MatchmakerLobby {
             let _ = storage.delete(&format!("waiting:{}", peer_id)).await;
 
             let tagged = self.state.get_websockets_with_tag(peer_id);
-            for ws in tagged {
+            if let Some(ws) = tagged.into_iter().next() {
                 let _ = ws.send_with_str(&serde_json::to_string(&MatchMessage::Error {
                     message: "Queue timeout. Please search again.".to_string(),
                 }).unwrap_or_default());
-                break;
             }
         }
 
@@ -1058,7 +1257,7 @@ impl MatchmakerLobby {
         Response::from_json(&serde_json::json!({}))
     }
 
-    async fn handle_search(&self, peer_id: &str, ws: &WebSocket, interests: Vec<String>, gender: String, filter: String, is_verified: bool, verified_only: bool, interest_timeout: u32, chat_mode: String, device_id: String, tab_id: String, blocked_peer_ids: Vec<String>) -> Result<()> {
+    async fn handle_search(&self, peer_id: &str, ws: &WebSocket, interests: Vec<String>, with_interests: bool, gender: String, filter: String, is_verified: bool, verified_only: bool, interest_timeout: u32, chat_mode: String, device_id: String, tab_id: String, blocked_peer_ids: Vec<String>, connection_id: String) -> Result<()> {
         let storage = self.state.storage();
 
         if interests.len() > 20 || interests.iter().any(|i| i.len() > 50) {
@@ -1068,8 +1267,16 @@ impl MatchmakerLobby {
             return Ok(());
         }
 
-        if let Ok(Some(active_match)) = storage.get::<ActiveMatch>(&format!("active_match:{}", peer_id)).await {
-            if !active_match.closure.closed { return Ok(()); }
+        if let Ok(Some(mut active_match)) = storage.get::<ActiveMatch>(&format!("active_match:{}", peer_id)).await {
+            if !active_match.closure.closed {
+                active_match.closure.closed = true;
+                storage.put(&format!("active_match:{}", peer_id), &active_match).await?;
+                for user in &active_match.users {
+                    if user.user_id != peer_id {
+                        let _ = storage.put(&format!("active_match:{}", user.user_id), &active_match).await;
+                    }
+                }
+            }
         }
 
         let profile = storage.get::<UserProfile>(&format!("profile:{}", peer_id)).await.ok().flatten();
@@ -1077,9 +1284,18 @@ impl MatchmakerLobby {
             with_interests: true, gender_filter: None, interest_timeout, verified_only,
         });
 
-        let mut eff_interests = if !interests.is_empty() { interests }
-            else if match_prefs.with_interests { profile.as_ref().map(|p| p.interests.clone()).unwrap_or_default() }
-            else { vec![] };
+        let effective_interest_timeout = interest_timeout.min(600);
+        let mut eff_interests = if with_interests {
+            if !interests.is_empty() {
+                interests
+            } else if match_prefs.with_interests {
+                profile.as_ref().map(|p| p.interests.clone()).unwrap_or_default()
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
         eff_interests = normalize_interests(&eff_interests);
 
         let eff_verified = profile.as_ref().map(|p| p.age_verified).unwrap_or(is_verified);
@@ -1094,7 +1310,7 @@ impl MatchmakerLobby {
             self.remove_from_index(peer_id, &existing.interests);
         }
 
-        let requester_verified_only = eff_verified && match_prefs.verified_only;
+        let requester_verified_only = eff_verified && verified_only;
         let effective_blocked_peer_ids = sanitize_blocked_peer_ids(blocked_peer_ids, peer_id);
         let now = now_ms();
         let own_waited_ms = existing_queued_at.map(|q| now.saturating_sub(q)).unwrap_or(0);
@@ -1109,6 +1325,29 @@ impl MatchmakerLobby {
                 return Ok(());
             }
         }
+
+        let waiting_data = WaitingUserData {
+            interests: eff_interests.clone(),
+            gender: eff_gender.clone(),
+            filter: eff_filter.clone(),
+            is_verified: eff_verified,
+            verified_only,
+            queued_at: existing_queued_at.unwrap_or(now),
+            interest_timeout: effective_interest_timeout,
+            device_id: device_id.clone(),
+            tab_id: tab_id.clone(),
+            blocked_peer_ids: effective_blocked_peer_ids.clone(),
+            trust_score: default_trust_score(),
+            chat_mode: chat_mode.clone(),
+            connection_id: connection_id.clone(),
+        };
+
+        self.waiting_users
+            .borrow_mut()
+            .insert(peer_id.to_string(), waiting_data.clone());
+        self.add_to_index(peer_id, &waiting_data.interests);
+        storage.put(&format!("waiting:{}", peer_id), &waiting_data).await?;
+        let entropy_seed = self.matchmaking_entropy_seed().await;
 
         // OPTIMIZED MATCHING via interest index
         let sorted_candidates = {
@@ -1125,8 +1364,7 @@ impl MatchmakerLobby {
             } else { waiting.keys().cloned().collect() };
 
             let limited: Vec<_> = candidate_ids.into_iter().filter(|id| id != peer_id).take(MAX_CANDIDATES_TO_EVALUATE).collect();
-            // Tuple: (id, shared_interests, partner_verified, shared_count, jaccard, waited_ms, verified_priority, trust_score)
-            let mut candidates: Vec<(String, Vec<String>, bool, usize, i64, u64, u8, f64)> = Vec::new();
+            let mut candidates: Vec<(String, Vec<String>, bool, usize, i64, u64, u8, f64, u64, String)> = Vec::new();
 
             // Determine requester's trust level for shadow queue
             let requester_trust = self.waiting_users.borrow().get(peer_id).map(|d| d.trust_score).unwrap_or(50.0);
@@ -1158,7 +1396,8 @@ impl MatchmakerLobby {
                     let jaccard = if union_count == 0 { 0 } else { ((shared_count as f32 / union_count as f32) * 1000.0) as i64 };
                     let vp = if eff_verified && other_data.is_verified { 1u8 } else { 0 };
                     let shared: Vec<String> = own_set.intersection(&other_set).cloned().collect();
-                    candidates.push((other_id.clone(), shared, other_data.is_verified, shared_count, jaccard, waited_ms, vp, other_data.trust_score));
+                    let tie = Self::candidate_tiebreak(entropy_seed, peer_id, &other_id);
+                    candidates.push((other_id.clone(), shared, other_data.is_verified, shared_count, jaccard, waited_ms, vp, other_data.trust_score, tie, other_data.connection_id.clone()));
                 }
             }
 
@@ -1170,14 +1409,27 @@ impl MatchmakerLobby {
                     .then_with(|| b.4.cmp(&a.4))
                     .then_with(|| b.7.partial_cmp(&a.7).unwrap_or(std::cmp::Ordering::Equal))
                     .then_with(|| b.5.cmp(&a.5))
+                    .then_with(|| b.8.cmp(&a.8))
             });
             candidates
         };
 
         // Loop through ALL sorted candidates — skip dead sockets, clean them up inline
-        for (partner_id, common_interests, partner_is_verified, _, _, partner_waited_ms, _, _) in sorted_candidates {
+        for (partner_id, common_interests, partner_is_verified, _, _, partner_waited_ms, _, _, _, partner_connection_id) in sorted_candidates {
             let partner_sockets = self.state.get_websockets_with_tag(&partner_id);
-            if let Some(partner_ws) = partner_sockets.first() {
+            let partner_ws = if partner_connection_id.is_empty() {
+                partner_sockets.into_iter().next()
+            } else {
+                partner_sockets.into_iter().find(|socket| {
+                    socket
+                        .deserialize_attachment::<PeerWsAttachment>()
+                        .ok()
+                        .flatten()
+                        .map(|a| a.connection_id == partner_connection_id)
+                        .unwrap_or(false)
+                })
+            };
+            if let Some(partner_ws) = partner_ws {
                 {
                     let mut waiting = self.waiting_users.borrow_mut();
                     if let Some(d) = waiting.remove(peer_id) { self.remove_from_index(peer_id, &d.interests); }
@@ -1218,21 +1470,7 @@ impl MatchmakerLobby {
             }
         }
 
-        // No match - add to queue
-        let waiting_data = WaitingUserData {
-            interests: eff_interests, gender: eff_gender, filter: eff_filter,
-            is_verified: eff_verified, verified_only: match_prefs.verified_only,
-            queued_at: existing_queued_at.unwrap_or(now), interest_timeout: match_prefs.interest_timeout,
-            device_id,
-            tab_id,
-            blocked_peer_ids: effective_blocked_peer_ids,
-            trust_score: default_trust_score(), // TODO: fetch from reputation worker via service binding
-            chat_mode: chat_mode.clone(),
-        };
-        self.waiting_users.borrow_mut().insert(peer_id.to_string(), waiting_data.clone());
-        self.add_to_index(peer_id, &waiting_data.interests);
-        storage.put(&format!("waiting:{}", peer_id), &waiting_data).await?;
-
+        // No match - stay in queue
         let queue_size = self.waiting_users.borrow().len();
         let _ = ws.send_with_str(&serde_json::to_string(&MatchMessage::Waiting { position: queue_size }).unwrap_or_default());
         Ok(())
@@ -1248,7 +1486,11 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let url = req.url()?;
 
     if !origin_allowed(&origin, &referer, &env) && !origin.is_empty() {
-        return Response::error("Forbidden", 403);
+        return Ok(apply_cors(
+            Response::error("Forbidden", 403)
+                .unwrap_or_else(|_| Response::ok("Forbidden").unwrap()),
+            &origin,
+        ));
     }
 
     if should_inject_chaos(&env, &req) {
@@ -1278,6 +1520,25 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let response_result: Result<Response> = async {
         if path.starts_with("/users/me") || path.starts_with("/match") || path == "/" || path == "/metrics" {
             let namespace = env.durable_object("MATCHMAKER_LOBBY")?;
+            let is_websocket_upgrade = method == Method::Get
+                && path.starts_with("/match")
+                && req
+                    .headers()
+                    .get("Upgrade")
+                    .ok()
+                    .flatten()
+                    .map(|value| value.eq_ignore_ascii_case("websocket"))
+                    .unwrap_or(false);
+
+            if is_websocket_upgrade {
+                let shard = resolve_websocket_lobby_shard(&env, &url);
+                let id = namespace.id_from_name(&shard)?;
+                let stub = id.get_stub()?;
+                let mut response = stub.fetch_with_request(req).await?;
+                let _ = response.headers_mut().set("X-Matchmaker-Shard", &shard);
+                return Ok(response);
+            }
+
             let plan = resolve_lobby_plan(&env, &url, &path);
             let fallback_shard = "lobby:global:text:0".to_string();
             let can_retry = matches!(method, Method::Get | Method::Head);
@@ -1368,6 +1629,22 @@ fn resolve_lobby_plan(env: &Env, url: &Url, path: &str) -> Vec<String> {
         plan.push("lobby:global:text:0".to_string());
     }
     plan
+}
+
+fn resolve_websocket_lobby_shard(env: &Env, url: &Url) -> String {
+    let shard_count = env.var("MATCHMAKER_SHARDS")
+        .ok()
+        .and_then(|v| v.to_string().parse::<u32>().ok())
+        .unwrap_or(8)
+        .clamp(1, 128);
+    let mode = url.query_pairs()
+        .find(|(k, _)| k == "chat_mode")
+        .map(|(_, v)| sanitize_partition_key(&v))
+        .unwrap_or_else(|| "text".to_string());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    mode.hash(&mut hasher);
+    let shard = (hasher.finish() % shard_count as u64) as u32;
+    format!("lobby:global:{}:{}", mode, shard)
 }
 
 fn build_retry_request(url: &str, method: Method, source_headers: &Headers) -> Result<Request> {
@@ -1638,7 +1915,9 @@ fn is_buzzu_origin(origin: &str) -> bool {
                 || host == "buzzu.pages.dev"
                 || host.ends_with(".buzzu.pages.dev")
                 || host == "buzzu3.pages.dev"
-                || host.ends_with(".buzzu3.pages.dev");
+                || host.ends_with(".buzzu3.pages.dev")
+                || host == "buzzu.wasif.app"
+                || host.ends_with(".buzzu.wasif.app");
         }
     }
     false

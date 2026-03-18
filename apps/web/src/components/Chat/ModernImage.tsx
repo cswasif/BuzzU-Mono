@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Maximize2, XCircle } from 'lucide-react';
+import { useSessionStore } from '../../stores/sessionStore';
 
 interface ModernImageProps {
     src: string;
@@ -27,7 +28,8 @@ export const ModernImage: React.FC<ModernImageProps> = ({
     vanishOpened = false,
     onVanishOpen
 }) => {
-    const [isRevealed, setIsRevealed] = useState(isGif);
+    const blurImages = useSessionStore((state) => state.blurImages);
+    const [isRevealed, setIsRevealed] = useState(() => isGif || !blurImages);
     const [isHovered, setIsHovered] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [hasConsumedVanish, setHasConsumedVanish] = useState(vanishOpened);
@@ -38,6 +40,14 @@ export const ModernImage: React.FC<ModernImageProps> = ({
             setHasConsumedVanish(true);
         }
     }, [vanishOpened]);
+
+    useEffect(() => {
+        if (isVanish && !hasConsumedVanish) {
+            setIsRevealed(false);
+            return;
+        }
+        setIsRevealed(isGif || !blurImages);
+    }, [blurImages, isGif, isVanish, hasConsumedVanish]);
 
     useEffect(() => {
         if (!isVanish) {

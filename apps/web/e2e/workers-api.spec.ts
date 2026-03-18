@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 
-const SIGNALING_URL = "https://buzzu-signaling.buzzu.workers.dev";
-const MATCHMAKER_URL = "https://buzzu-matchmaker.buzzu.workers.dev";
-const REPUTATION_URL = "https://buzzu-reputation.buzzu.workers.dev";
+const SIGNALING_URL = "https://buzzu-signaling.cswasif.workers.dev";
+const MATCHMAKER_URL = "https://buzzu-matchmaker.cswasif.workers.dev";
+const REPUTATION_URL = "https://buzzu-reputation.cswasif.workers.dev";
 
 test.describe("Worker API contracts", () => {
   test("signaling root exposes expected service banner", async ({ request }) => {

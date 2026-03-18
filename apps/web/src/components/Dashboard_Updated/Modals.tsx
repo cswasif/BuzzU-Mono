@@ -253,17 +253,49 @@ const DeleteAccountModal: React.FC<{
 
 // --- Interests Modal ---
 export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
-    const { interests, setInterests, verifiedOnly, setVerifiedOnly, genderFilter, setGenderFilter, isVerified } = useSessionStore();
-    const [matchEnabled, setMatchEnabled] = useState(true);
+    const {
+        interests,
+        setInterests,
+        verifiedOnly,
+        setVerifiedOnly,
+        genderFilter,
+        setGenderFilter,
+        isVerified,
+        matchWithInterests,
+        setMatchWithInterests,
+        interestTimeoutSec,
+        setInterestTimeoutSec,
+    } = useSessionStore();
     const [selectedDuration, setSelectedDuration] = useState('10s');
     const [newInterest, setNewInterest] = useState('');
 
+    useEffect(() => {
+        const next = interestTimeoutSec <= 5
+            ? '5s'
+            : interestTimeoutSec <= 10
+                ? '10s'
+                : interestTimeoutSec <= 30
+                    ? '30s'
+                    : '10m';
+        setSelectedDuration(next);
+    }, [interestTimeoutSec]);
+
+    const addInterest = (raw: string) => {
+        const trimmed = raw.trim();
+        if (!trimmed) {
+            return;
+        }
+        const normalized = trimmed.toLowerCase();
+        const exists = interests.some((interest) => interest.trim().toLowerCase() === normalized);
+        if (!exists && interests.length < 20) {
+            setInterests([...interests, trimmed]);
+        }
+        setNewInterest('');
+    };
+
     const handleAddInterest = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' && newInterest.trim()) {
-            if (!interests.includes(newInterest.trim())) {
-                setInterests([...interests, newInterest.trim()]);
-            }
-            setNewInterest('');
+        if (e.key === 'Enter') {
+            addInterest(newInterest);
         }
     };
 
@@ -292,17 +324,17 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
                     <button
                         type="button"
                         role="switch"
-                        aria-checked={matchEnabled}
-                        data-state={matchEnabled ? "checked" : "unchecked"}
+                        aria-checked={matchWithInterests}
+                        data-state={matchWithInterests ? "checked" : "unchecked"}
                         value="on"
                         className="peer inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
-                        style={{ backgroundColor: matchEnabled ? 'hsl(var(--primary))' : 'hsl(var(--input))' }}
-                        onClick={() => setMatchEnabled(!matchEnabled)}
+                        style={{ backgroundColor: matchWithInterests ? 'hsl(var(--primary))' : 'hsl(var(--input))' }}
+                        onClick={() => setMatchWithInterests(!matchWithInterests)}
                     >
                         <span
-                            data-state={matchEnabled ? "checked" : "unchecked"}
+                            data-state={matchWithInterests ? "checked" : "unchecked"}
                             className="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform"
-                            style={{ transform: matchEnabled ? 'translateX(20px)' : 'translateX(0px)' }}
+                            style={{ transform: matchWithInterests ? 'translateX(20px)' : 'translateX(0px)' }}
                         />
                     </button>
                 </div>
@@ -327,23 +359,6 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
                     </button>
                 </div>
 
-                <div className="w-full flex flex-col font-semibold bg-card p-2 rounded-md gap-2">
-                    <span className="text-sm">Gender Filter</span>
-                    <div className="flex flex-row gap-2">
-                        {['both', 'male', 'female'].map((filter) => (
-                            <button
-                                key={filter}
-                                onClick={() => setGenderFilter(filter)}
-                                className={`flex-1 px-2 py-1.5 text-xs rounded-md transition-colors border ${genderFilter === filter
-                                    ? 'bg-primary text-primary-foreground border-primary'
-                                    : 'bg-muted text-muted-foreground border-border hover:bg-accent'
-                                    }`}
-                            >
-                                {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                            </button>
-                        ))}
-                    </div>
-                </div>
                 <div>
                     <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-border/20 bg-card p-3">
                         {interests.map(interest => (
@@ -370,6 +385,14 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
                             onChange={(e) => setNewInterest(e.target.value)}
                             onKeyDown={handleAddInterest}
                         />
+                        <button
+                            type="button"
+                            className="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                            disabled={!newInterest.trim()}
+                            onClick={() => addInterest(newInterest)}
+                        >
+                            Add
+                        </button>
                     </div>
                     <div className="flex flex-col gap-2.5 pt-2.5 pr-2 bg-card py-3 rounded-md px-2">
                         <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex items-center gap-1 space-y-1" htmlFor="necessary">
@@ -387,7 +410,7 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
                                 { id: '5s', label: '5 sec', value: '5s' },
                                 { id: '10s', label: '10 sec', value: '10s' },
                                 { id: '30s', label: '30 sec', value: '30s' },
-                                { id: '10m', label: 'Forever', value: '10m' }
+                                { id: '10m', label: '10 min', value: '10m' }
                             ].map((option) => (
                                 <div key={option.id} className="flex-shrink-0 flex-wrap">
                                     <button
@@ -399,7 +422,10 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
                                         className="aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 peer sr-only"
                                         id={option.id}
                                         tabIndex={-1}
-                                        onClick={() => setSelectedDuration(option.value)}
+                                        onClick={() => {
+                                            setSelectedDuration(option.value);
+                                            setInterestTimeoutSec(option.value === '5s' ? 5 : option.value === '10s' ? 10 : option.value === '30s' ? 30 : 600);
+                                        }}
                                     >
                                         <span data-state={selectedDuration === option.value ? "checked" : "unchecked"} className="flex items-center justify-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-circle h-2.5 w-2.5 fill-current text-current" aria-hidden="true">
@@ -410,7 +436,10 @@ export const InterestsModal: React.FC<ModalProps> = ({ onClose }) => {
                                     <label
                                         className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 cursor-pointer peer-data-[state=checked]:text-primary-foreground peer-data-[state=checked]:bg-primary [&:has([data-state=checked])]:bg-primary [&:has([data-state=checked])]:text-primary-foreground"
                                         htmlFor={option.id}
-                                        onClick={() => setSelectedDuration(option.value)}
+                                        onClick={() => {
+                                            setSelectedDuration(option.value);
+                                            setInterestTimeoutSec(option.value === '5s' ? 5 : option.value === '10s' ? 10 : option.value === '30s' ? 30 : 600);
+                                        }}
                                     >
                                         {option.label}
                                     </label>
@@ -437,6 +466,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
     const {
         displayName, setDisplayName,
         theme, setTheme,
+        convertEmoticons, setConvertEmoticons,
+        blurImages, setBlurImages,
+        notificationSoundEnabled, setNotificationSoundEnabled,
+        pushNotificationsEnabled, setPushNotificationsEnabled,
+        linkPreviewsEnabled, setLinkPreviewsEnabled,
+        friendRequestsEnabled, setFriendRequestsEnabled,
+        badgeVisibility, setBadgeVisibility,
+        interestsVisibility, setInterestsVisibility,
         interests, avatarSeed, avatarUrl, setAvatarUrl,
         bannerType, setBannerType,
         bannerColor, setBannerColor,
@@ -609,16 +646,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
     }, []);
 
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [showInlineInterestsModal, setShowInlineInterestsModal] = useState(false);
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-
-    // Preferences State (Local for now, until added to sessionStore)
-    const [convertEmoticons, setConvertEmoticons] = useState(true);
-    const [blurImages, setBlurImages] = useState(true);
-    const [notificationSound, setNotificationSound] = useState(true);
-    const [pushNotifications, setPushNotifications] = useState(false);
-    const [friendRequests, setFriendRequests] = useState(true);
-    const [badgeVisibility, setBadgeVisibility] = useState('Everyone');
-    const [interestsVisibility, setInterestsVisibility] = useState('Friends');
 
     const handleSaveUsername = () => {
         setDisplayName(tempUsername);
@@ -628,6 +657,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
     const handleDeleteAccount = async () => {
         await deepCleanAccountData();
     };
+    const handleOpenInterests = useCallback(() => {
+        if (onOpenInterests) {
+            onOpenInterests();
+            return;
+        }
+        setShowInlineInterestsModal(true);
+    }, [onOpenInterests]);
 
     const renderSwitch = (checked: boolean, onChange: (val: boolean) => void) => (
         <button
@@ -661,9 +697,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
         </button>
     );
 
-    const visibilityOptions = ['Everyone', 'Friends', 'Nobody'];
+    const visibilityOptions = ['Everyone', 'Friends', 'Nobody'] as const;
 
-    const renderDropdown = (id: string, value: string, onChange: (val: string) => void, options: string[]) => (
+    const renderDropdown = <T extends string>(id: string, value: T, onChange: (val: T) => void, options: readonly T[]) => (
         <div className="relative">
             <button
                 className="flex h-9 items-center justify-between rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-[140px]"
@@ -721,6 +757,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                         );
                     })}
                 </div>
+            )}
+        </div>
+    );
+    const renderInterestsSummary = () => (
+        <div className="flex w-full flex-col gap-2">
+            <label className="text-xs text-muted-foreground">
+                {interests.length > 0 ? `You have ${interests.length} interests` : 'You have 0 interests'}
+            </label>
+            {interests.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                    {interests.slice(0, 6).map((interest) => (
+                        <span key={interest} className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-foreground">
+                            {interest}
+                        </span>
+                    ))}
+                    {interests.length > 6 && (
+                        <span className="rounded-full bg-muted/80 px-2.5 py-1 text-[11px] text-muted-foreground">
+                            +{interests.length - 6} more
+                        </span>
+                    )}
+                </div>
+            ) : (
+                <span className="text-[11px] text-muted-foreground">Add interests to improve your matches.</span>
             )}
         </div>
     );
@@ -902,8 +961,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
 
                                         <label className="text-sm font-bold text-card-foreground"> INTERESTS (ON)</label>
                                         <div className="relative flex w-full flex-row items-center justify-between gap-1">
-                                            <label className="text-xs text-muted-foreground">You have {interests.length} interests</label>
-                                            <button onClick={onOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
+                                            {renderInterestsSummary()}
+                                            <button onClick={handleOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
                                         </div>
                                     </div>
                                 </div>
@@ -950,7 +1009,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                 <span>Friend Requests</span>
                                                 <span className="font-normal leading-snug text-muted-foreground">Allow strangers to send you friend requests.</span>
                                             </label>
-                                            {renderSwitch(friendRequests, setFriendRequests)}
+                                            {renderSwitch(friendRequestsEnabled, setFriendRequestsEnabled)}
                                         </div>
                                     </div>
                                 </div>
@@ -976,10 +1035,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                         <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
                                         <div className="flex items-center justify-between space-x-2">
                                             <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                <span>Link Preview</span>
+                                                <span className="font-normal leading-snug text-muted-foreground">Show rich previews for shared links in chat.</span>
+                                            </label>
+                                            {renderSwitch(linkPreviewsEnabled, setLinkPreviewsEnabled)}
+                                        </div>
+                                        <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+                                        <div className="flex items-center justify-between space-x-2">
+                                            <label className="text-sm font-medium leading-none flex flex-col space-y-1">
                                                 <span>Notification Sound</span>
                                                 <span className="font-normal leading-snug text-muted-foreground">Toggle the notification sound for new messages.</span>
                                             </label>
-                                            {renderSwitch(notificationSound, setNotificationSound)}
+                                            {renderSwitch(notificationSoundEnabled, setNotificationSoundEnabled)}
                                         </div>
                                         <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
                                         <div className="flex items-center justify-between space-x-2">
@@ -987,7 +1054,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                 <span>Push Notifications</span>
                                                 <span className="font-normal leading-snug text-muted-foreground">Receive site notifications.</span>
                                             </label>
-                                            {renderSwitch(pushNotifications, setPushNotifications)}
+                                            {renderSwitch(pushNotificationsEnabled, setPushNotificationsEnabled)}
                                         </div>
                                         <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
                                         <div className="flex items-center justify-between space-x-2">
@@ -1171,8 +1238,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
 
                                             <label className="text-sm font-bold text-card-foreground"> INTERESTS (ON)</label>
                                             <div className="relative flex w-full flex-row items-center justify-between gap-1 pr-6">
-                                                <label className="text-xs text-muted-foreground">You have {interests.length} interests</label>
-                                                <button onClick={onOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
+                                                {renderInterestsSummary()}
+                                                <button onClick={handleOpenInterests} className="inline-flex disabled:select-none items-center justify-center text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 rounded-md px-3">Edit</button>
                                             </div>
                                         </div>
                                     )}
@@ -1217,7 +1284,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                     <span>Friend Requests</span>
                                                     <span className="font-normal leading-snug text-muted-foreground">Allow strangers to send you friend requests.</span>
                                                 </label>
-                                                {renderSwitch(friendRequests, setFriendRequests)}
+                                                {renderSwitch(friendRequestsEnabled, setFriendRequestsEnabled)}
                                             </div>
                                         </div>
                                     )}
@@ -1242,10 +1309,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                             <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
                                             <div className="flex items-center justify-between space-x-2">
                                                 <label className="text-sm font-medium leading-none flex flex-col space-y-1">
+                                                    <span>Link Preview</span>
+                                                    <span className="font-normal leading-snug text-muted-foreground">Show rich previews for shared links in chat.</span>
+                                                </label>
+                                                {renderSwitch(linkPreviewsEnabled, setLinkPreviewsEnabled)}
+                                            </div>
+                                            <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
+                                            <div className="flex items-center justify-between space-x-2">
+                                                <label className="text-sm font-medium leading-none flex flex-col space-y-1">
                                                     <span>Notification Sound</span>
                                                     <span className="font-normal leading-snug text-muted-foreground">Toggle the notification sound for new messages.</span>
                                                 </label>
-                                                {renderSwitch(notificationSound, setNotificationSound)}
+                                                {renderSwitch(notificationSoundEnabled, setNotificationSoundEnabled)}
                                             </div>
                                             <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
                                             <div className="flex items-center justify-between space-x-2">
@@ -1253,7 +1328,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                                                     <span>Push Notifications</span>
                                                     <span className="font-normal leading-snug text-muted-foreground">Receive site notifications.</span>
                                                 </label>
-                                                {renderSwitch(pushNotifications, setPushNotifications)}
+                                                {renderSwitch(pushNotificationsEnabled, setPushNotificationsEnabled)}
                                             </div>
                                             <div className="shrink-0 bg-border h-[1px] w-full my-2.5"></div>
                                             <div className="flex items-center justify-between space-x-2">
@@ -1304,6 +1379,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenInt
                     onClose={() => setShowAvatarCropModal(false)}
                     onCropComplete={handleCropComplete}
                 />
+                {showInlineInterestsModal && (
+                    <InterestsModal onClose={() => setShowInlineInterestsModal(false)} />
+                )}
             </div>
         </>
     );

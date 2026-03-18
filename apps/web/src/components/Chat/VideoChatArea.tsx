@@ -77,9 +77,9 @@ export function VideoChatArea() {
 
     const { createPeerConnection, closePeerConnection, initiateCall, setLocalStream } = useWebRTC();
     const { partnerId, peerId, currentRoomId, isVerified, partnerIsVerified, partnerAvatarUrl, partnerName, partnerAvatarSeed, displayName,
-        friendRequestsSent, friendRequestsReceived, friendList,
+        friendRequestsSent, friendRequestsReceived, friendList, friendRequestsEnabled, badgeVisibility,
         sendFriendRequest: sendFriendRequestAction, acceptFriendRequest, declineFriendRequest, handleReceivedFriendRequest
-        , avatarSeed, avatarUrl, leaveRoom, setPartnerAvatarUrl, setPartnerProfile, updatePeerProfile, addMatchToHistory, setChatMode } = useSessionStore();
+        , avatarSeed, avatarUrl, leaveRoom, setPartnerAvatarUrl, setPartnerProfile, updatePeerProfile, addMatchToHistory, setChatMode, notificationSoundEnabled, interests, interestsVisibility, joinedAt } = useSessionStore();
 
     // Effect to ensure correct matching queue
     useEffect(() => {
@@ -99,8 +99,12 @@ export function VideoChatArea() {
             username: displayName || 'Anonymous',
             avatarSeed,
             avatarUrl: avatarUrl || null,
+            interests,
+            interestsVisibility,
+            badgeVisibility,
+            joinedAt,
         });
-    }, [sendProfileUpdate, partnerId, displayName, avatarSeed, avatarUrl]);
+    }, [sendProfileUpdate, partnerId, displayName, avatarSeed, avatarUrl, interests, interestsVisibility, badgeVisibility, joinedAt]);
     const {
         isReady: isCryptoReady,
         encryptMessage,
@@ -144,7 +148,17 @@ export function VideoChatArea() {
 
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-    const [selectedProfile, setSelectedProfile] = useState<{ username: string; avatarSeed: string; avatarUrl?: string | null; isVerified?: boolean } | null>(null);
+    const [selectedProfile, setSelectedProfile] = useState<{
+        peerId?: string;
+        username: string;
+        avatarSeed: string;
+        avatarUrl?: string | null;
+        isVerified?: boolean;
+        interests?: string[];
+        interestsVisibility?: "Everyone" | "Friends" | "Nobody";
+        badgeVisibility?: "Everyone" | "Friends" | "Nobody";
+        joinedAt?: string | null;
+    } | null>(null);
 
     // For text overlay
     const [messages, setMessages] = useState<Message[]>([]);
@@ -448,9 +462,11 @@ export function VideoChatArea() {
         }));
 
         register(onChatMessage(async (message, from) => {
-            try {
-                new Audio('/sounds/message.mp3').play().catch(() => { });
-            } catch (e) { }
+            if (notificationSoundEnabled) {
+                try {
+                    new Audio('/sounds/message.mp3').play().catch(() => { });
+                } catch (e) { }
+            }
 
             if (import.meta.env.DEV) console.log('[VideoChatArea] Received chat message:', message, 'from:', from);
 
@@ -557,6 +573,10 @@ export function VideoChatArea() {
         register(onFriendRequest((action, from, username, avatarSeed, avatarUrl) => {
             console.log('[VideoChatArea] Received friend request action:', action, 'from:', from);
             if (action === 'send') {
+                if (!friendRequestsEnabled) {
+                    sendFriendRequestSignaling(from, 'decline');
+                    return;
+                }
                 handleReceivedFriendRequest({
                     id: from,
                     username: username || 'Partner',
@@ -570,18 +590,30 @@ export function VideoChatArea() {
             }
         }));
 
-        register(onProfile((from, username, avatarSeed, incomingAvatarUrl) => {
+        register(onProfile((from, username, avatarSeed, incomingAvatarUrl, metadata) => {
             updatePeerProfile(from, {
                 username: username || undefined,
                 avatarSeed: avatarSeed || undefined,
                 avatarUrl: incomingAvatarUrl,
             });
+            if (from === partnerId) {
+                setSelectedProfile((current) => {
+                    if (!current || current.peerId !== partnerId) return current;
+                    return {
+                        ...current,
+                        interests: metadata?.interests,
+                        interestsVisibility: metadata?.interestsVisibility,
+                        badgeVisibility: metadata?.badgeVisibility,
+                        joinedAt: metadata?.joinedAt ?? null,
+                    };
+                });
+            }
         }));
 
         return () => {
             unsubscribers.forEach((unsubscribe) => unsubscribe());
         };
-    }, [onPeerLeave, onPeerSkip, onPeerJoin, finalizePartnerSkip, onChatMessage, onTyping, partnerId, disconnectSignaling, partnerIsVerified, isCryptoReady, decryptMessage, onKeysRequest, onKeysResponse, onHandshake, generatePreKeyBundle, sendKeysResponse, initiateSignalSession, respondToSignalSession, sendHandshake, onFriendRequest, onProfile, closePeerConnection, stopMatching, leaveRoom, setMatchData]);
+    }, [onPeerLeave, onPeerSkip, onPeerJoin, finalizePartnerSkip, onChatMessage, onTyping, partnerId, disconnectSignaling, partnerIsVerified, isCryptoReady, decryptMessage, onKeysRequest, onKeysResponse, onHandshake, generatePreKeyBundle, sendKeysResponse, initiateSignalSession, respondToSignalSession, sendHandshake, onFriendRequest, onProfile, closePeerConnection, stopMatching, leaveRoom, setMatchData, friendRequestsEnabled, notificationSoundEnabled]);
 
     useEffect(() => {
         if (!signalingConnected) return;
@@ -686,6 +718,9 @@ export function VideoChatArea() {
     };
 
     const handleSendMessage = useCallback(async (content: string, replyToMessage?: Message | null) => {
+        const shouldExposeVerifiedBadge =
+            badgeVisibility === 'Everyone' ||
+            (badgeVisibility === 'Friends' && !!partnerId && friendList.some(friend => friend.id === partnerId));
         const message = {
             id: makeId(),
             username: 'Me',
@@ -693,7 +728,7 @@ export function VideoChatArea() {
             avatarUrl: avatarUrl || null,
             timestamp: now(),
             content,
-            isVerified: isVerified,
+            isVerified: isVerified && shouldExposeVerifiedBadge,
             replyToMessage: replyToMessage || null,
         };
 
@@ -741,7 +776,7 @@ export function VideoChatArea() {
                 // SECURITY: Never send plaintext alongside encrypted content
                 content: isEncrypted ? '[encrypted]' : plaintextContent,
                 encryptedContent,
-                isVerified: isVerified,
+                isVerified: isVerified && shouldExposeVerifiedBadge,
                 replyToMessage: replyToMessage ? {
                     id: replyToMessage.id,
                     content: isEncrypted ? '[encrypted]' : replyToMessage.content,
@@ -749,7 +784,7 @@ export function VideoChatArea() {
             });
         }
         setReplyingTo(null);
-    }, [sendChatMessage, partnerId, displayName, isVerified, isCryptoReady, encryptMessage, isSignalReady, avatarSeed, avatarUrl]);
+    }, [sendChatMessage, partnerId, displayName, isVerified, isCryptoReady, encryptMessage, isSignalReady, avatarSeed, avatarUrl, badgeVisibility, friendList]);
 
     const handleTyping = useCallback((isTyping: boolean) => {
         if (partnerId && sendTypingState) {
@@ -759,7 +794,13 @@ export function VideoChatArea() {
 
     const handleProfileClick = (username: string, avatarSeed: string, avatarUrl?: string | null, isVerified?: boolean) => {
         const currentAvatarUrl = username === partnerName ? partnerAvatarUrl : (avatarUrl || null);
-        setSelectedProfile({ username, avatarSeed, avatarUrl: currentAvatarUrl, isVerified });
+        setSelectedProfile({
+            peerId: partnerId || undefined,
+            username,
+            avatarSeed,
+            avatarUrl: currentAvatarUrl,
+            isVerified,
+        });
         setIsProfileModalOpen(true);
     };
 
@@ -893,7 +934,6 @@ export function VideoChatArea() {
                         >
                             <PartnerSkippedView
                                 onReport={() => setIsReportModalOpen(true)}
-                                onGetPremium={() => console.log('Premium clicked')}
                                 isSelfSkip={connectionState === 'self_skipped'}
                             />
                         </motion.div>
@@ -1187,6 +1227,11 @@ export function VideoChatArea() {
                 avatarSeed={selectedProfile?.avatarSeed || ''}
                 avatarUrl={selectedProfile?.avatarUrl || null}
                 isVerified={selectedProfile?.isVerified}
+                peerId={selectedProfile?.peerId}
+                interests={selectedProfile?.interests}
+                interestsVisibility={selectedProfile?.interestsVisibility}
+                badgeVisibility={selectedProfile?.badgeVisibility}
+                joinedAt={selectedProfile?.joinedAt}
                 onAddFriend={handleAddFriend}
                 onAcceptFriend={handleAcceptFriendRequest}
                 onDeclineFriend={handleDeclineFriendRequest}

@@ -397,11 +397,7 @@ impl SignalSession {
         };
 
         if need_dh_ratchet {
-            // Perform receiving DH ratchet step
-            self.their_ratchet_public = Some(their_ratchet_pub_bytes);
-            self.prev_send_count = self.send_count;
-            self.send_count = 0;
-            
+            // Perform receiving DH ratchet step in a tentative state.
             let their_pub = PublicKey::from(their_ratchet_pub_bytes);
             let our_priv = StaticSecret::from(self.our_ratchet_private);
             let dh_output = our_priv.diffie_hellman(&their_pub);
@@ -410,23 +406,28 @@ impl SignalSession {
             let (new_root, recv_chain_key) = kdf_rk(&self.root_key, dh_output.as_bytes());
             self.root_key = new_root;
             self.recv_chain = Chain { key: recv_chain_key, index: 0 };
-            
-            // Mark that our next send needs a DH ratchet step too
+            self.their_ratchet_public = Some(their_ratchet_pub_bytes);
+            self.prev_send_count = self.send_count;
+            self.send_count = 0;
             self.dh_ratchet_needed = true;
         }
 
+        // Reject stale/duplicate messages before mutating chain state.
+        if msg_index < self.recv_chain.index {
+            return Err(JsError::new("Stale or duplicate message index").into());
+        }
+
         // Advance recv chain to the correct index (handle skipped messages)
-        while self.recv_chain.index < msg_index {
-            let (next_key, _skipped_msg_key) = kdf_ck(&self.recv_chain.key);
-            self.recv_chain.key = next_key;
-            self.recv_chain.index += 1;
+        let mut trial_chain = self.recv_chain.clone();
+        while trial_chain.index < msg_index {
+            let (next_key, _skipped_msg_key) = kdf_ck(&trial_chain.key);
+            trial_chain.key = next_key;
+            trial_chain.index += 1;
             // Note: In a full implementation we'd save skipped_msg_key for out-of-order decryption
         }
 
-        // Derive the message key for this index
-        let (next_chain_key, message_key) = kdf_ck(&self.recv_chain.key);
-        self.recv_chain.key = next_chain_key;
-        self.recv_chain.index += 1;
+        // Derive the message key for this index from trial state.
+        let (next_chain_key, message_key) = kdf_ck(&trial_chain.key);
 
         // AES-256-GCM decrypt
         let key = Key::<Aes256Gcm>::from_slice(&message_key);
@@ -443,6 +444,11 @@ impl SignalSession {
         cipher.decrypt(nonce, aes_gcm::aead::Payload {
             msg: ciphertext,
             aad: &aad,
+        }).map(|plaintext| {
+            // Commit chain advancement only on successful authentication/decryption.
+            self.recv_chain.key = next_chain_key;
+            self.recv_chain.index = trial_chain.index + 1;
+            plaintext
         }).map_err(|e| JsError::new(&format!("Decryption failed: {}", e)).into())
     }
 
@@ -542,4 +548,60 @@ pub fn x3dh_initiate(
     let mut okm = [0u8; 32];
     h.expand(b"BuzzU_Signal_X3DH", &mut okm).expect("HKDF expansion failed");
     okm
+}
+
+#[cfg(all(test, target_arch = "wasm32"))]
+mod tests {
+    use super::*;
+
+    fn make_bundle_json(protocol: &SignalProtocol) -> String {
+        let identity_pub = PublicKey::from(&protocol.identity_dh_key);
+        let identity_sign_pub = protocol.identity_sign_key.verifying_key();
+        let signed_pre_pub = PublicKey::from(&protocol.signed_prekey);
+        let signature = protocol.identity_sign_key.sign(signed_pre_pub.as_bytes());
+
+        let bundle = PreKeyBundle {
+            identity_key: general_purpose::STANDARD.encode(identity_pub.as_bytes()),
+            signed_prekey: general_purpose::STANDARD.encode(signed_pre_pub.as_bytes()),
+            signed_prekey_signature: general_purpose::STANDARD.encode(signature.to_bytes()),
+            onetime_prekey: Some(general_purpose::STANDARD.encode(identity_sign_pub.as_bytes())),
+            ratchet_key: Some(general_purpose::STANDARD.encode(signed_pre_pub.as_bytes())),
+        };
+
+        serde_json::to_string(&bundle).unwrap()
+    }
+
+    fn establish_pair() -> (SignalSession, SignalSession) {
+        let bob = SignalProtocol::new();
+        let mut alice = SignalProtocol::new();
+        let bundle_json = make_bundle_json(&bob);
+        let alice_session = alice.initiate_session(&bundle_json).unwrap();
+        let initiation = alice.get_last_initiation().unwrap();
+        let bob_session = bob.respond_to_session(&initiation).unwrap();
+        (alice_session, bob_session)
+    }
+
+    #[test]
+    fn tampered_message_does_not_advance_recv_chain() {
+        let (mut alice, mut bob) = establish_pair();
+        let m1 = alice.encrypt(b"hello").unwrap();
+        let mut tampered = m1.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 0x01;
+
+        assert!(bob.decrypt(&tampered).is_err());
+        let decrypted = bob.decrypt(&m1).unwrap();
+        assert_eq!(decrypted, b"hello");
+    }
+
+    #[test]
+    fn duplicate_message_rejected_without_breaking_next_message() {
+        let (mut alice, mut bob) = establish_pair();
+        let m1 = alice.encrypt(b"one").unwrap();
+        let m2 = alice.encrypt(b"two").unwrap();
+
+        assert_eq!(bob.decrypt(&m1).unwrap(), b"one");
+        assert!(bob.decrypt(&m1).is_err());
+        assert_eq!(bob.decrypt(&m2).unwrap(), b"two");
+    }
 }

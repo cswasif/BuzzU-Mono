@@ -32,3 +32,35 @@ describe("useFileTransfer duplicate metadata handling", () => {
     expect(receivedBlob.type).toBe("image/webp");
   });
 });
+
+describe("useFileTransfer send resilience", () => {
+  it("retries once on transient data-channel network errors", async () => {
+    const { result } = renderHook(() => useFileTransfer());
+    let firstAttempt = true;
+
+    const channel = {
+      readyState: "open",
+      bufferedAmount: 0,
+      bufferedAmountLowThreshold: 0,
+      send: vi.fn(() => {
+        if (firstAttempt) {
+          firstAttempt = false;
+          throw new Error("NetworkError: Failed to execute 'send' on 'RTCDataChannel'");
+        }
+      }),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as RTCDataChannel;
+
+    const file = new File([new Uint8Array([1, 2, 3, 4])], "photo.png", {
+      type: "image/png",
+    });
+
+    await act(async () => {
+      await result.current.sendFile(channel, file);
+    });
+
+    expect(channel.send).toHaveBeenCalled();
+    expect((channel.send as any).mock.calls.length).toBeGreaterThanOrEqual(4);
+  });
+});

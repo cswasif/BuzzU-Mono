@@ -17,6 +17,9 @@ export type DataChannelControlMessage =
   | { type: "delete_message"; messageId: string }
   | { type: "edit_message"; messageId: string; content: string }
   | { type: "chat_message"; message: IncomingChatMessage }
+  | { type: "chat_ack"; messageId: string }
+  | { type: "p2p_probe"; probeId: string; sentAt: number }
+  | { type: "p2p_probe_ack"; probeId: string; sentAt: number; ackAt: number }
   | { type: "skip_signal"; at?: number };
 
 export function parseDataChannelControlMessage(
@@ -55,6 +58,24 @@ export function parseDataChannelControlMessage(
       return { type, message: incoming as IncomingChatMessage };
     }
     return null;
+  }
+  if (type === "chat_ack" && typeof message.messageId === "string") {
+    return { type, messageId: message.messageId };
+  }
+  if (
+    type === "p2p_probe" &&
+    typeof message.probeId === "string" &&
+    typeof message.sentAt === "number"
+  ) {
+    return { type, probeId: message.probeId, sentAt: message.sentAt };
+  }
+  if (
+    type === "p2p_probe_ack" &&
+    typeof message.probeId === "string" &&
+    typeof message.sentAt === "number" &&
+    typeof message.ackAt === "number"
+  ) {
+    return { type, probeId: message.probeId, sentAt: message.sentAt, ackAt: message.ackAt };
   }
   if (type === "skip_signal") {
     return { type, at: typeof message.at === "number" ? message.at : undefined };

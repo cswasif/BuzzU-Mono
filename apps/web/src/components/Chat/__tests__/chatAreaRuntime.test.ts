@@ -36,6 +36,26 @@ describe("chatAreaRuntime", () => {
       });
       expect(
         parseDataChannelControlMessage(
+          JSON.stringify({ type: "chat_ack", messageId: "m4" }),
+        ),
+      ).toEqual({ type: "chat_ack", messageId: "m4" });
+      expect(
+        parseDataChannelControlMessage(
+          JSON.stringify({ type: "p2p_probe", probeId: "p1", sentAt: 10 }),
+        ),
+      ).toEqual({ type: "p2p_probe", probeId: "p1", sentAt: 10 });
+      expect(
+        parseDataChannelControlMessage(
+          JSON.stringify({
+            type: "p2p_probe_ack",
+            probeId: "p2",
+            sentAt: 11,
+            ackAt: 12,
+          }),
+        ),
+      ).toEqual({ type: "p2p_probe_ack", probeId: "p2", sentAt: 11, ackAt: 12 });
+      expect(
+        parseDataChannelControlMessage(
           JSON.stringify({ type: "skip_signal", at: 123 }),
         ),
       ).toEqual({ type: "skip_signal", at: 123 });

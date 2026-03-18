@@ -986,3 +986,33 @@ function useObservableState<T>(
 ---
 
 *Generated for BuzzU — a decentralized anonymous video/text chat platform using Cloudflare Workers for signaling.*
+
+## 2026-03-14 Production Incident Addendum
+
+### Scope
+- Reviewed runtime traces from:
+  - `localhost-1773448546108.log`
+  - `localhost-1773448987207.log`
+- Benchmarked behavior against production patterns from:
+  - `feross/simple-peer`
+  - `peers/peerjs`
+  - `matrix-org/matrix-js-sdk`
+
+### Confirmed Critical Findings
+- **P1 Reliability**: DM WebSocket heartbeat sent raw `"ping"` frames that are protocol-incompatible with structured signaling traffic, causing repeated close/reconnect loops (observed close code `4000`) and unstable DM/chat coexistence.
+- **P1 Resource Leak**: On DM socket close, observer cleanup callbacks were not released before reconnecting, creating duplicate observers/subscriptions and noisy repeated sync churn.
+- **P2 Availability Risk**: Reconnect used fixed delay and could produce reconnection storms under repeated network churn instead of exponential backoff with jitter.
+- **P2 Lifecycle Risk**: Matched chat keepalive and route lifecycle needed strict ownership semantics to avoid orphaned/stale peer connection behavior during DM navigation.
+
+### Implemented Hardening
+- Switched DM keepalive to structured `Ping`/`Pong` signaling messages with timeout enforcement.
+- Added heartbeat deadline timers and stale-connection self-healing close path.
+- Added bounded reconnect strategy using exponential backoff + jitter.
+- Added explicit intent-aware close handling to suppress reconnect on intentional shutdown.
+- Added deterministic cleanup of DM observer callbacks and timers on close/unmount/removal.
+- Added regression tests for DM heartbeat protocol behavior.
+
+### Operational Quality Gates
+- Type/lint gate: pass (`tsc --noEmit`).
+- Targeted tests for DM/chat state and session behavior: pass.
+- New protocol tests validate structured heartbeat and pong response behavior.

@@ -16,10 +16,27 @@ import { Message } from "./types";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { EmojiPicker } from "./EmojiPicker";
 import { GifPicker } from "./GifPicker";
+import { useSessionStore } from "../../stores/sessionStore";
 // IGif import removed because we are switching to Klipy
 
 function cn(...classes: (string | boolean | undefined)[]) {
   return classes.filter(Boolean).join(" ");
+}
+
+const EMOTICON_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/(^|\s):\)(?=\s|$)/g, "$1😃"],
+  [/(^|\s):D(?=\s|$)/g, "$1😄"],
+  [/(^|\s);\)(?=\s|$)/g, "$1😉"],
+  [/(^|\s):\((?=\s|$)/g, "$1🙁"],
+  [/(^|\s):P(?=\s|$)/gi, "$1😛"],
+  [/(^|\s)<3(?=\s|$)/g, "$1❤️"],
+];
+
+function applyEmoticonPreference(content: string, enabled: boolean) {
+  if (!enabled) {
+    return content;
+  }
+  return EMOTICON_REPLACEMENTS.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), content);
 }
 
 interface MessageInputProps {
@@ -77,9 +94,14 @@ export function MessageInput({
   isDirectConnectMode = false,
   isCompactGifPicker = false,
 }: MessageInputProps) {
+  const convertEmoticons = useSessionStore((state) => state.convertEmoticons);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const gifButtonRef = useRef<HTMLButtonElement>(null);
+  const shouldRestoreFullscreenRef = useRef(false);
+  const fullscreenRestoreTargetRef = useRef<Element | null>(null);
+  const [showFullscreenRestoreButton, setShowFullscreenRestoreButton] = useState(false);
   const [skipState, setSkipState] = useState<"initial" | "confirming">(
     "initial",
   );
@@ -208,7 +230,7 @@ export function MessageInput({
     e.preventDefault();
     const val = textareaRef.current?.value.trim();
     if (val && connectionState === "connected") {
-      onSend(val, replyingTo);
+      onSend(applyEmoticonPreference(val, convertEmoticons), replyingTo);
       clearTypingState();
       if (textareaRef.current) {
         textareaRef.current.value = "";
@@ -225,7 +247,7 @@ export function MessageInput({
       e.preventDefault();
       const val = textareaRef.current?.value.trim();
       if (val && connectionState === "connected") {
-        onSend(val, replyingTo);
+        onSend(applyEmoticonPreference(val, convertEmoticons), replyingTo);
         clearTypingState();
         if (textareaRef.current) {
           textareaRef.current.value = "";
@@ -257,6 +279,94 @@ export function MessageInput({
       }, 2000);
     }
   };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (connectionState !== "connected") return;
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageFiles = items
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => !!file);
+    if (imageFiles.length === 0) return;
+    e.preventDefault();
+    if (onSelectFiles) onSelectFiles(imageFiles);
+  };
+
+  const requestTargetFullscreen = useCallback(async () => {
+    const target = fullscreenRestoreTargetRef.current as
+      | (Element & {
+          requestFullscreen?: () => Promise<void>;
+          webkitRequestFullscreen?: () => Promise<void>;
+        })
+      | null;
+    if (!target) return false;
+    if (document.fullscreenElement) return true;
+    try {
+      if (target.requestFullscreen) {
+        await target.requestFullscreen();
+        return true;
+      }
+      if (target.webkitRequestFullscreen) {
+        await target.webkitRequestFullscreen();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const restoreFullscreenAfterPicker = useCallback(async () => {
+    if (!shouldRestoreFullscreenRef.current) return;
+    const restored = await requestTargetFullscreen();
+    shouldRestoreFullscreenRef.current = false;
+    if (restored) {
+      setShowFullscreenRestoreButton(false);
+      fullscreenRestoreTargetRef.current = null;
+      return;
+    }
+    if (fullscreenRestoreTargetRef.current) {
+      setShowFullscreenRestoreButton(true);
+    }
+  }, [requestTargetFullscreen]);
+
+  const handleManualFullscreenRestore = useCallback(async () => {
+    const restored = await requestTargetFullscreen();
+    if (restored) {
+      setShowFullscreenRestoreButton(false);
+      fullscreenRestoreTargetRef.current = null;
+    }
+  }, [requestTargetFullscreen]);
+
+  const handleOpenImagePicker = useCallback(() => {
+    setShowFullscreenRestoreButton(false);
+    const activeFullscreenElement = document.fullscreenElement;
+    if (activeFullscreenElement) {
+      shouldRestoreFullscreenRef.current = true;
+      fullscreenRestoreTargetRef.current = activeFullscreenElement;
+    } else {
+      shouldRestoreFullscreenRef.current = false;
+      fullscreenRestoreTargetRef.current = null;
+    }
+    imageInputRef.current?.click();
+  }, []);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        void restoreFullscreenAfterPicker();
+      }
+    };
+    const onWindowFocus = () => {
+      void restoreFullscreenAfterPicker();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onWindowFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onWindowFocus);
+    };
+  }, [restoreFullscreenAfterPicker]);
 
   return (
     <div className="relative flex w-full flex-row bg-popover">
@@ -340,15 +450,19 @@ export function MessageInput({
             <div className="flex flex-row gap-1.5">
               <div className="textarea flex-1 overflow-auto rounded-lg relative flex flex-row h-full items-center gap-1 bg-card dark:bg-placeholder py-0 px-2 outline-none">
                 <input
+                  ref={imageInputRef}
                   type="file"
                   multiple
-                  accept="image/png,image/jpg,image/jpeg,image/webp"
+                  accept="image/*"
                   className="hidden"
                   id="image-upload"
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
                     if (files.length > 0 && onSelectFiles) onSelectFiles(files);
                     e.target.value = ""; // Reset for same file selection
+                    requestAnimationFrame(() => {
+                      void restoreFullscreenAfterPicker();
+                    });
                   }}
                 />
 
@@ -358,9 +472,7 @@ export function MessageInput({
                   className="self-center text-zinc-600 dark:text-inherit hover:text-zinc-700 dark:hover:text-current p-1 disabled:opacity-50"
                   disabled={connectionState !== "connected"}
                   aria-label="Attach image"
-                  onClick={() =>
-                    document.getElementById("image-upload")?.click()
-                  }
+                  onClick={handleOpenImagePicker}
                 >
                   <svg
                     stroke="currentColor"
@@ -416,6 +528,7 @@ export function MessageInput({
                   rows={1}
                   disabled={connectionState !== "connected"}
                   onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
                   onChange={handleInputChange}
                   className="max-h-28 text-base md:text-sm px-1 py-3 outline-none lg:max-h-96 bg-inherit resize-none w-full scrollbar-t placeholder:truncate placeholder:text-placeholder-foreground/80 dark:placeholder:text-placeholder-foreground/50 disabled:opacity-50 disabled:cursor-not-allowed fixed-input-height"
                   name="message"
@@ -479,6 +592,18 @@ export function MessageInput({
                     ? "Connected"
                     : "Idle"}
             </span>
+            {showFullscreenRestoreButton && (
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleManualFullscreenRestore}
+                  className="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                  aria-label="Restore fullscreen"
+                >
+                  Restore fullscreen
+                </button>
+              </div>
+            )}
           </form>
         </div>
 

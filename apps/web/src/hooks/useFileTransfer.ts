@@ -6,6 +6,26 @@ interface FileTransferOptions {
     onError?: (error: Error) => void;
 }
 
+const CHUNK_SIZE = 16384;
+const BUFFER_HIGH_WATERMARK = 1024 * 1024;
+const BUFFER_LOW_WATERMARK = 65536;
+const SEND_RETRY_DELAY_MS = 150;
+const BUFFER_WAIT_TIMEOUT_MS = 8000;
+
+function toError(err: unknown): Error {
+    if (err instanceof Error) return err;
+    return new Error(typeof err === 'string' ? err : 'Unknown error');
+}
+
+function isRetryableSendError(err: unknown): boolean {
+    const message = toError(err).message.toLowerCase();
+    return message.includes('network') || message.includes('failed to execute') || message.includes('datachannel');
+}
+
+function canUseReadableStream(file: File): boolean {
+    return typeof file.stream === 'function';
+}
+
 export function useFileTransfer(options: FileTransferOptions = {}) {
     const [isTransferring, setIsTransferring] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -45,6 +65,56 @@ export function useFileTransfer(options: FileTransferOptions = {}) {
         localProgress?.(0);
 
         try {
+            const waitForBufferedAmountLow = async () => {
+                if (dataChannel.bufferedAmount <= BUFFER_HIGH_WATERMARK) return;
+                await new Promise<void>((resolve, reject) => {
+                    let settled = false;
+                    const cleanup = () => {
+                        dataChannel.removeEventListener('bufferedamountlow', onLow);
+                        dataChannel.removeEventListener('close', onClose);
+                        dataChannel.removeEventListener('error', onError);
+                        clearTimeout(timeout);
+                    };
+                    const settle = (fn: () => void) => {
+                        if (settled) return;
+                        settled = true;
+                        cleanup();
+                        fn();
+                    };
+                    const onLow = () => settle(resolve);
+                    const onClose = () => settle(() => reject(new Error('DataChannel closed during file transfer')));
+                    const onError = () => settle(() => reject(new Error('DataChannel errored during file transfer')));
+                    const timeout = setTimeout(() => {
+                        settle(() => reject(new Error('Timed out waiting for data channel buffer')));
+                    }, BUFFER_WAIT_TIMEOUT_MS);
+                    dataChannel.addEventListener('bufferedamountlow', onLow);
+                    dataChannel.addEventListener('close', onClose);
+                    dataChannel.addEventListener('error', onError);
+                });
+            };
+
+            const sendPacket = async (packet: string | ArrayBuffer, label: string) => {
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                    if (dataChannel.readyState !== 'open') {
+                        throw new Error(`DataChannel is not open while sending ${label}`);
+                    }
+                    try {
+                        if (typeof packet === 'string') {
+                            dataChannel.send(packet);
+                        } else {
+                            dataChannel.send(new Uint8Array(packet));
+                        }
+                        return;
+                    } catch (err) {
+                        if (attempt === 0 && isRetryableSendError(err)) {
+                            await new Promise((resolve) => setTimeout(resolve, SEND_RETRY_DELAY_MS));
+                            continue;
+                        }
+                        throw new Error(`Failed to send ${label}: ${toError(err).message}`);
+                    }
+                }
+            };
+
             // 1. Send Metadata Packet
             const metadata = {
                 type: 'metadata',
@@ -53,39 +123,45 @@ export function useFileTransfer(options: FileTransferOptions = {}) {
                 mime: file.type,
                 vanish: isVanish
             };
-            dataChannel.send(JSON.stringify(metadata));
+            await sendPacket(JSON.stringify(metadata), 'metadata');
 
             // 2. Stream File in Chunks
-            const CHUNK_SIZE = 16384; // 16KB
-            const reader = file.stream().getReader();
             let offset = 0;
 
             // Ensure threshold is set for backpressure
-            dataChannel.bufferedAmountLowThreshold = 65536; // 64KB
+            dataChannel.bufferedAmountLowThreshold = BUFFER_LOW_WATERMARK;
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+            if (canUseReadableStream(file)) {
+                const reader = file.stream().getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done || !value) break;
 
-                for (let i = 0; i < value.length; i += CHUNK_SIZE) {
-                    const chunk = value.slice(i, i + CHUNK_SIZE);
-
-                    // Backpressure control
-                    if (dataChannel.bufferedAmount > 1024 * 1024) { // 1MB threshold
-                        await new Promise<void>((resolve) => {
-                            const onLow = () => {
-                                dataChannel.removeEventListener('bufferedamountlow', onLow);
-                                resolve();
-                            };
-                            dataChannel.addEventListener('bufferedamountlow', onLow);
-                        });
+                    for (let i = 0; i < value.length; i += CHUNK_SIZE) {
+                        const chunk = value.slice(i, i + CHUNK_SIZE);
+                        await waitForBufferedAmountLow();
+                        await sendPacket(chunk.buffer as ArrayBuffer, 'chunk');
+                        offset += chunk.length;
+                        const currentProgress = file.size > 0 ? (offset / file.size) * 100 : 100;
+                        const clampedProgress = Math.min(100, currentProgress);
+                        setProgress(clampedProgress);
+                        localProgress?.(clampedProgress);
+                        optionsRef.current.onProgress?.(clampedProgress);
                     }
-
-                    dataChannel.send(chunk);
+                }
+            } else {
+                const arrayBuffer =
+                    typeof file.arrayBuffer === 'function'
+                        ? await file.arrayBuffer()
+                        : await new Response(file).arrayBuffer();
+                const bytes = new Uint8Array(arrayBuffer);
+                for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+                    const chunk = bytes.slice(i, i + CHUNK_SIZE);
+                    await waitForBufferedAmountLow();
+                    await sendPacket(chunk.buffer as ArrayBuffer, 'chunk');
                     offset += chunk.length;
                     const currentProgress = file.size > 0 ? (offset / file.size) * 100 : 100;
                     const clampedProgress = Math.min(100, currentProgress);
-
                     setProgress(clampedProgress);
                     localProgress?.(clampedProgress);
                     optionsRef.current.onProgress?.(clampedProgress);
@@ -93,7 +169,7 @@ export function useFileTransfer(options: FileTransferOptions = {}) {
             }
 
             // 3. Send Done Marker
-            dataChannel.send(JSON.stringify({ type: 'done' }));
+            await sendPacket(JSON.stringify({ type: 'done' }), 'done marker');
             console.log('[useFileTransfer] File sent successfully');
 
             setIsTransferring(false);
@@ -103,8 +179,9 @@ export function useFileTransfer(options: FileTransferOptions = {}) {
             console.error('[useFileTransfer] Send error:', err);
             setIsTransferring(false);
             isTransferringRef.current = false;
-            optionsRef.current.onError?.(err instanceof Error ? err : new Error('Send failed'));
-            throw err;
+            const normalizedError = toError(err);
+            optionsRef.current.onError?.(normalizedError);
+            throw normalizedError;
         }
     }, []);
 

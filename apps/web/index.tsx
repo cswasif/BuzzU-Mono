@@ -17,6 +17,7 @@ const DashboardLayout = React.lazy(() => import('./src/layouts/DashboardLayout')
 const ChatNewPage = React.lazy(() => import('./src/pages/ChatNewPage'));
 const VideoPage = React.lazy(() => import('./src/pages/VideoPage'));
 const DmChatPage = React.lazy(() => import('./src/pages/DmChatPage'));
+const LandingInfoPage = React.lazy(() => import('./src/pages/LandingInfoPage'));
 const appLoadingFallback = (
   <div className="min-h-screen w-full bg-background text-foreground flex items-center justify-center px-4">
     <div className="inline-flex items-center rounded-lg border border-border/40 bg-card px-4 py-3">
@@ -34,6 +35,24 @@ const App = () => (
             <React.Suspense fallback={appLoadingFallback}>
               <Routes>
                 <Route path="/" element={<SocialLanding />} />
+                <Route path="/about" element={<LandingInfoPage />} />
+                <Route path="/download" element={<LandingInfoPage />} />
+                <Route path="/help" element={<LandingInfoPage />} />
+                <Route path="/terms" element={<LandingInfoPage />} />
+                <Route path="/privacy" element={<LandingInfoPage />} />
+                <Route path="/cookies" element={<LandingInfoPage />} />
+                <Route path="/accessibility" element={<LandingInfoPage />} />
+                <Route path="/ads-info" element={<LandingInfoPage />} />
+                <Route path="/blog" element={<LandingInfoPage />} />
+                <Route path="/careers" element={<LandingInfoPage />} />
+                <Route path="/brand" element={<LandingInfoPage />} />
+                <Route path="/advertising" element={<LandingInfoPage />} />
+                <Route path="/marketing" element={<LandingInfoPage />} />
+                <Route path="/developers" element={<LandingInfoPage />} />
+                <Route path="/news" element={<LandingInfoPage />} />
+                <Route path="/safety" element={<LandingInfoPage />} />
+                <Route path="/guidelines" element={<LandingInfoPage />} />
+                <Route path="/settings" element={<LandingInfoPage />} />
                 <Route path="/verify" element={<VerificationPage />} />
                 <Route path="/match" element={<MatchPage />} />
 

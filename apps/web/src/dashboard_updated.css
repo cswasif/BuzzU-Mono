@@ -978,21 +978,3 @@ em-emoji-picker {
     }
 }
 
-/* ============================================================
-   PWA FULLSCREEN — Safe Area Inset Padding
-   When `viewport-fit=cover` is set and the PWA uses `fullscreen`
-   display mode, content extends behind notches, rounded corners,
-   and the iOS home indicator. These rules add padding so content
-   stays visible and touchable.
-   ============================================================ */
-
-/* PWA standalone / fullscreen detection */
-@media all and (display-mode: fullscreen), all and (display-mode: standalone) {
-    body {
-        /* Pad the edges to avoid content behind notch/status bar */
-        padding-top: env(safe-area-inset-top);
-        padding-bottom: env(safe-area-inset-bottom);
-        padding-left: env(safe-area-inset-left);
-        padding-right: env(safe-area-inset-right);
-    }
-}

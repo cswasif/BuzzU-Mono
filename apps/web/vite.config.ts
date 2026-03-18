@@ -20,7 +20,9 @@ const googleAuthMiddleware = () => ({
           const params = new URLSearchParams(body);
           const credential = params.get("credential");
           if (credential) {
-            res.writeHead(303, { Location: `/verify#token=${credential}` });
+            res.writeHead(303, {
+              Location: `/verify#token=${encodeURIComponent(credential)}`,
+            });
             res.end();
           } else {
             next();
@@ -37,8 +39,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
   const normalizeWorkersUrl = (url: string) =>
     url
-      .replace(".md-wasif-faisal.workers.dev", ".buzzu.workers.dev")
-      .replace(".bd-torrent-optimizer.workers.dev", ".buzzu.workers.dev");
+      .replace(".md-wasif-faisal.workers.dev", ".cswasif.workers.dev")
+      .replace(".bd-torrent-optimizer.workers.dev", ".cswasif.workers.dev")
+      .replace(".buzzu.workers.dev", ".cswasif.workers.dev");
   return {
     server: {
       port: 3000,
@@ -197,23 +200,24 @@ export default defineConfig(({ mode }) => {
       "process.env.SIGNALING_URL": JSON.stringify(
         normalizeWorkersUrl(
           env.SIGNALING_URL ||
-          "wss://buzzu-signaling.buzzu.workers.dev",
+          "wss://buzzu-signaling.cswasif.workers.dev",
         ),
       ),
       "process.env.MATCHMAKER_URL": JSON.stringify(
         normalizeWorkersUrl(
           env.MATCHMAKER_URL ||
-          "wss://buzzu-matchmaker.buzzu.workers.dev",
+          "wss://buzzu-matchmaker.cswasif.workers.dev",
         ),
       ),
       "process.env.REPUTATION_URL": JSON.stringify(
         normalizeWorkersUrl(
           env.REPUTATION_URL ||
-          "https://buzzu-reputation.buzzu.workers.dev",
+          "https://buzzu-reputation.cswasif.workers.dev",
         ),
       ),
       // KLIPY_API_KEY must be set via .env.local or Cloudflare Pages secrets — no hardcoded fallback.
       "process.env.KLIPY_API_KEY": JSON.stringify(env.KLIPY_API_KEY || ""),
+      "process.env.KIPPY_API_KEY": JSON.stringify(env.KIPPY_API_KEY || ""),
     },
     build: {
       sourcemap: false,

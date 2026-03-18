@@ -31,10 +31,12 @@ A high-fidelity, premium landing page built with **React**, **Vite**, and **Fram
    ```
 
 3. **Environment Setup**:
-   Create a `.env.local` file and add your GEMINI_API_KEY if needed:
+   Create a `.env.local` file and configure:
    ```env
+   VITE_GOOGLE_CLIENT_ID=your_google_web_client_id.apps.googleusercontent.com
    GEMINI_API_KEY=your_api_key_here
    ```
+   You can copy from `.env.example` and update values.
 
 4. **Run the development server**:
    ```bash

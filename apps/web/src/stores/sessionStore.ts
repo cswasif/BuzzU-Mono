@@ -50,12 +50,22 @@ export interface SessionState {
 
     // Preferences
     interests: string[];
+    matchWithInterests: boolean;
+    interestTimeoutSec: number;
     gender: string; // 'M' | 'F' | 'U'
     genderFilter: string; // 'male' | 'female' | 'both'
     genderModalDismissed: boolean;
     verifiedOnly: boolean;
     chatMode: 'video' | 'text';
     theme: 'dark' | 'light';
+    convertEmoticons: boolean;
+    blurImages: boolean;
+    notificationSoundEnabled: boolean;
+    pushNotificationsEnabled: boolean;
+    linkPreviewsEnabled: boolean;
+    friendRequestsEnabled: boolean;
+    badgeVisibility: 'Everyone' | 'Friends' | 'Nobody';
+    interestsVisibility: 'Everyone' | 'Friends' | 'Nobody';
     isBracuUser: boolean;
     selectedInstitution: string;
     adminAccessKey: string;
@@ -88,12 +98,22 @@ export interface SessionState {
     initSession: () => void;
     setDisplayName: (name: string) => void;
     setInterests: (interests: string[]) => void;
+    setMatchWithInterests: (enabled: boolean) => void;
+    setInterestTimeoutSec: (seconds: number) => void;
     setGender: (gender: string) => void;
     setGenderFilter: (filter: string) => void;
     setGenderModalDismissed: (dismissed: boolean) => void;
     setVerifiedOnly: (verifiedOnly: boolean) => void;
     setChatMode: (mode: 'video' | 'text') => void;
     setTheme: (theme: 'dark' | 'light') => void;
+    setConvertEmoticons: (enabled: boolean) => void;
+    setBlurImages: (enabled: boolean) => void;
+    setNotificationSoundEnabled: (enabled: boolean) => void;
+    setPushNotificationsEnabled: (enabled: boolean) => void;
+    setLinkPreviewsEnabled: (enabled: boolean) => void;
+    setFriendRequestsEnabled: (enabled: boolean) => void;
+    setBadgeVisibility: (value: 'Everyone' | 'Friends' | 'Nobody') => void;
+    setInterestsVisibility: (value: 'Everyone' | 'Friends' | 'Nobody') => void;
     setAvatarUrl: (avatarUrl: string | null) => void;
     setIsBracuUser: (isBracuUser: boolean) => void;
     setSelectedInstitution: (institution: string) => void;
@@ -182,7 +202,7 @@ export function sendMatchmakerDisconnect(peerId: string | null | undefined, opti
     lastDisconnectAt = now;
     lastDisconnectPeerId = peerId;
 
-    const baseUrl = (process.env.MATCHMAKER_URL || import.meta.env.VITE_MATCHMAKER_URL || 'wss://buzzu-matchmaker.buzzu.workers.dev').replace(/^ws/, 'http');
+    const baseUrl = (process.env.MATCHMAKER_URL || import.meta.env.VITE_MATCHMAKER_URL || 'wss://buzzu-matchmaker.cswasif.workers.dev').replace(/^ws/, 'http');
     const url = `${baseUrl}/match/disconnect?peer_id=${peerId}`;
     if (options?.useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
         try {
@@ -215,12 +235,22 @@ export const useSessionStore = create<SessionState>()(
             verifiedEmail: null,
             idToken: null,
             interests: [],
+            matchWithInterests: true,
+            interestTimeoutSec: 10,
             gender: 'U',
             genderFilter: 'both',
             genderModalDismissed: false,
             verifiedOnly: false,
             chatMode: 'video',
             theme: 'dark',
+            convertEmoticons: true,
+            blurImages: true,
+            notificationSoundEnabled: true,
+            pushNotificationsEnabled: false,
+            linkPreviewsEnabled: false,
+            friendRequestsEnabled: true,
+            badgeVisibility: 'Everyone',
+            interestsVisibility: 'Friends',
             isBracuUser: false,
             selectedInstitution: 'all',
             adminAccessKey: '',
@@ -341,12 +371,22 @@ export const useSessionStore = create<SessionState>()(
 
             setDisplayName: (name) => set({ displayName: name }),
             setInterests: (interests) => set({ interests }),
+            setMatchWithInterests: (enabled) => set({ matchWithInterests: enabled }),
+            setInterestTimeoutSec: (seconds) => set({ interestTimeoutSec: Math.max(0, Math.min(600, Math.round(seconds))) }),
             setGender: (gender) => set({ gender }),
             setGenderFilter: (filter) => set({ genderFilter: filter }),
             setGenderModalDismissed: (dismissed) => set({ genderModalDismissed: dismissed }),
             setVerifiedOnly: (verifiedOnly) => set({ verifiedOnly }),
             setChatMode: (mode) => set({ chatMode: mode }),
             setTheme: (theme) => set({ theme }),
+            setConvertEmoticons: (enabled) => set({ convertEmoticons: enabled }),
+            setBlurImages: (enabled) => set({ blurImages: enabled }),
+            setNotificationSoundEnabled: (enabled) => set({ notificationSoundEnabled: enabled }),
+            setPushNotificationsEnabled: (enabled) => set({ pushNotificationsEnabled: enabled }),
+            setLinkPreviewsEnabled: (enabled) => set({ linkPreviewsEnabled: enabled }),
+            setFriendRequestsEnabled: (enabled) => set({ friendRequestsEnabled: enabled }),
+            setBadgeVisibility: (value) => set({ badgeVisibility: value }),
+            setInterestsVisibility: (value) => set({ interestsVisibility: value }),
             setAvatarUrl: (avatarUrl) => set({ avatarUrl }),
             setIsBracuUser: (isBracuUser) => set({ isBracuUser }),
             setSelectedInstitution: (institution) => set({ selectedInstitution: institution }),
@@ -409,10 +449,20 @@ export const useSessionStore = create<SessionState>()(
                     verifiedEmail: null,
                     idToken: null,
                     interests: [],
+                    matchWithInterests: true,
+                    interestTimeoutSec: 10,
                     gender: 'U',
                     genderFilter: 'both',
                     genderModalDismissed: false,
                     verifiedOnly: false,
+                    convertEmoticons: true,
+                    blurImages: true,
+                    notificationSoundEnabled: true,
+                    pushNotificationsEnabled: false,
+                    linkPreviewsEnabled: false,
+                    friendRequestsEnabled: true,
+                    badgeVisibility: 'Everyone',
+                    interestsVisibility: 'Friends',
                     currentRoomId: null,
                     isInChat: false,
                     partnerId: null,
@@ -706,12 +756,22 @@ export const useSessionStore = create<SessionState>()(
                 avatarUrl: state.avatarUrl,
                 joinedAt: state.joinedAt,
                 interests: state.interests,
+                matchWithInterests: state.matchWithInterests,
+                interestTimeoutSec: state.interestTimeoutSec,
                 gender: state.gender,
                 genderFilter: state.genderFilter,
                 genderModalDismissed: state.genderModalDismissed,
                 verifiedOnly: state.verifiedOnly,
                 chatMode: state.chatMode,
                 theme: state.theme,
+                convertEmoticons: state.convertEmoticons,
+                blurImages: state.blurImages,
+                notificationSoundEnabled: state.notificationSoundEnabled,
+                pushNotificationsEnabled: state.pushNotificationsEnabled,
+                linkPreviewsEnabled: state.linkPreviewsEnabled,
+                friendRequestsEnabled: state.friendRequestsEnabled,
+                badgeVisibility: state.badgeVisibility,
+                interestsVisibility: state.interestsVisibility,
                 isBracuUser: state.isBracuUser,
                 selectedInstitution: state.selectedInstitution,
                 adminAccessKey: state.adminAccessKey,

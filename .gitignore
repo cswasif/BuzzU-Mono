@@ -40,6 +40,7 @@ apps/web/buzzu_vibes_1000.txt
 apps/web/extract_songs.cjs
 apps/web/chitchat-dashboard/
 apps/web/x-_-twitter-clone/
+apps/web/archive/
 
 # WASM build tooling installers
 packages/wasm/vs_buildtools.exe

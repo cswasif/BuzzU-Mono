@@ -11,6 +11,7 @@ import type { RoomType } from '../Chat/ChatArea';
 import { JoinRoomModal } from './JoinRoomModal';
 import { GenderSelectionModal } from './GenderSelectionModal';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useMatching } from '../../hooks/useMatching';
 
 interface MainContentProps {
   onManageInterests: () => void;
@@ -31,6 +32,7 @@ const interestSets = [
 export default function MainContent({ onManageInterests, activeArea, setActiveArea, roomId, suppressEmbeddedChat = false }: MainContentProps) {
   const navigate = useNavigate();
   const { gender, genderFilter, setGender, setGenderFilter, interests, avatarSeed, genderModalDismissed, setGenderModalDismissed, adminAccessKey } = useSessionStore();
+  const { textActiveUsers, videoActiveUsers } = useMatching();
   const [currentInterestSet, setCurrentInterestSet] = useState(0);
 
   // Modal state
@@ -151,6 +153,16 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
               <a href="https://tiktok.com/@buzzu" aria-label="BuzzU on TikTok" target="_blank" rel="noopener noreferrer" className="w-9 h-9 flex items-center justify-center rounded-full text-white transition-all duration-300 bg-zinc-900/60 hover:bg-zinc-800/90 hover:scale-110">
                 <TikTokIcon className="text-lg" />
               </a>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/40 bg-background/50 backdrop-blur-sm px-3 py-1.5 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                {videoActiveUsers} video
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-0.5 text-indigo-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+                {textActiveUsers} text
+              </span>
             </div>
 
 
@@ -326,7 +338,7 @@ export default function MainContent({ onManageInterests, activeArea, setActiveAr
 
             <span className="text-xs md:text-xs text-foreground-muted w-full self-center text-center flex items-center justify-center pb-1.5 md:pb-2 gap-1 mt-3">
               <span>Be respectful and follow our</span>
-              <a href="https://www.chitchat.gg/guidelines" target="_blank" rel="noreferrer" className="underline text-[hsl(var(--link-color))]">chat rules</a>
+              <a href="/guidelines" className="underline text-[hsl(var(--link-color))]">chat rules</a>
             </span>
           </div>
         </div>

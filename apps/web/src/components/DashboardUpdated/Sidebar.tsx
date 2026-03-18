@@ -5,7 +5,6 @@ import {
   MicIcon, SoundIcon, SettingsIcon, MenuIcon
 } from './Icons';
 import SidebarList from './SidebarList';
-import SettingsPopover from './SettingsPopover';
 import ProfilePopover from './ProfilePopover';
 import PremiumCard from './PremiumCard';
 
@@ -23,29 +22,24 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
   const { displayName, avatarSeed, avatarUrl } = useSessionStore();
   const dicebearUrl = `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${avatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`;
   const avatarSrc = avatarUrl || dicebearUrl;
-  const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
-        setShowSettings(false);
-      }
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setShowProfile(false);
       }
     };
 
-    if (showSettings || showProfile) {
+    if (showProfile) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showSettings, showProfile]);
+  }, [showProfile]);
 
   return (
     <>
@@ -64,7 +58,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
         {/* Mobile Header in Sidebar */}
         <div className="flex h-12 w-full items-center justify-between px-4 lg:hidden border-b border-border/10 shrink-0">
           <span className="font-bold text-lg">Menu</span>
-          <button onClick={onClose} className="p-1">
+          <button onClick={onClose} className="p-1" aria-label="Close menu" title="Close menu">
             <MenuIcon />
           </button>
         </div>
@@ -107,21 +101,28 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
                   />
                 )}
               </div>
-              <button className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground w-8 h-8">
+              <button
+                className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground w-8 h-8"
+                title="Mic"
+                aria-label="Mic"
+              >
                 <MicIcon />
               </button>
-              <button className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground w-8 h-8">
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('open-settings-modal'))}
+                className="inline-flex disabled:select-none items-center justify-center rounded-lg text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 w-8 h-8 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100"
+                title="Settings"
+                aria-label="Settings"
+              >
+                <SettingsIcon />
+              </button>
+              <button
+                className="inline-flex disabled:select-none items-center justify-center rounded-lg text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 w-8 h-8 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100"
+                title="Sound"
+                aria-label="Sound"
+              >
                 <SoundIcon />
               </button>
-              <div className="relative w-10" ref={settingsRef}>
-                <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10"
-                >
-                  <SettingsIcon />
-                </button>
-                {showSettings && <SettingsPopover theme={theme} onToggleTheme={toggleTheme} />}
-              </div>
             </div>
           </div>
         </div>

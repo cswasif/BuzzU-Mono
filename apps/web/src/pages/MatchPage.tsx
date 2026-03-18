@@ -6,22 +6,29 @@ import { useMatching } from '../hooks/useMatching';
 import { BuzzULogoIcon } from '../../components/SocialLanding/Icons';
 import { GenderDialog } from '../components/GenderDialog';
 
-const MATCHMAKER_URL = process.env.MATCHMAKER_URL || 'wss://buzzu-matchmaker.buzzu.workers.dev';
+const MATCHMAKER_URL = process.env.MATCHMAKER_URL || 'wss://buzzu-matchmaker.cswasif.workers.dev';
 
 const SUGGESTED_INTERESTS = [
     'Gaming', 'Music', 'Movies', 'Anime', 'Coding', 'Sports',
     'Photography', 'Art', 'Travel', 'Food', 'Fashion', 'Books',
     'Tech', 'Science', 'Memes', 'K-Pop', 'Fitness', 'BracU',
 ];
+const MAX_UI_INTERESTS = 20;
+
+const normalizeInterestKey = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
 export const MatchPage: React.FC = () => {
     const navigate = useNavigate();
     const { peerId,
         interests,
+        matchWithInterests,
+        interestTimeoutSec,
         gender,
         genderFilter,
         chatMode,
         setInterests,
+        setMatchWithInterests,
+        setInterestTimeoutSec,
         setGender,
         setGenderFilter,
         setChatMode,
@@ -51,8 +58,11 @@ export const MatchPage: React.FC = () => {
     }, [matchData, navigate]);
 
     const addInterest = (tag: string) => {
-        if (tag && !interests.includes(tag) && interests.length < 10) {
-            setInterests([...interests, tag]);
+        const trimmed = tag.trim().replace(/\s+/g, ' ');
+        const normalized = normalizeInterestKey(trimmed);
+        const exists = interests.some((interest) => normalizeInterestKey(interest) === normalized);
+        if (trimmed && !exists && interests.length < MAX_UI_INTERESTS) {
+            setInterests([...interests, trimmed]);
         }
         setInterestInput('');
     };
@@ -140,6 +150,20 @@ export const MatchPage: React.FC = () => {
                         {/* Interests */}
                         <div className="setting-group">
                             <label>Interests</label>
+                            <div className="gender-buttons" style={{ marginBottom: '8px' }}>
+                                <button
+                                    className={`gender-btn ${matchWithInterests ? 'active' : ''}`}
+                                    onClick={() => setMatchWithInterests(true)}
+                                >
+                                    🎯 Match by interests
+                                </button>
+                                <button
+                                    className={`gender-btn ${!matchWithInterests ? 'active' : ''}`}
+                                    onClick={() => setMatchWithInterests(false)}
+                                >
+                                    🌐 Ignore interests
+                                </button>
+                            </div>
                             <div className="interest-input-row">
                                 <input
                                     type="text"
@@ -149,9 +173,20 @@ export const MatchPage: React.FC = () => {
                                     placeholder="Add an interest..."
                                     maxLength={30}
                                 />
-                                <button onClick={() => addInterest(interestInput.trim())} disabled={!interestInput.trim()}>
+                                <button onClick={() => addInterest(interestInput.trim())} disabled={!interestInput.trim() || interests.length >= MAX_UI_INTERESTS}>
                                     Add
                                 </button>
+                            </div>
+                            <div className="gender-buttons" style={{ marginTop: '8px' }}>
+                                {[5, 10, 30, 600].map((seconds) => (
+                                    <button
+                                        key={seconds}
+                                        className={`gender-btn ${interestTimeoutSec === seconds ? 'active' : ''}`}
+                                        onClick={() => setInterestTimeoutSec(seconds)}
+                                    >
+                                        {seconds === 600 ? '10m' : `${seconds}s`}
+                                    </button>
+                                ))}
                             </div>
 
                             {interests.length > 0 && (
@@ -166,7 +201,7 @@ export const MatchPage: React.FC = () => {
                             )}
 
                             <div className="suggested-interests">
-                                {SUGGESTED_INTERESTS.filter(s => !interests.includes(s)).slice(0, 8).map(tag => (
+                                {SUGGESTED_INTERESTS.filter(s => !interests.some((interest) => normalizeInterestKey(interest) === normalizeInterestKey(s))).slice(0, 8).map(tag => (
                                     <button key={tag} className="suggestion-btn" onClick={() => addInterest(tag)}>
                                         + {tag}
                                     </button>
@@ -196,7 +231,7 @@ export const MatchPage: React.FC = () => {
                         <h2>Finding your match...</h2>
                         {waitPosition && <p className="wait-position">Position in queue: {waitPosition}</p>}
                         <p className="searching-hint">
-                            Looking for someone with similar interests
+                            {matchWithInterests ? 'Looking for someone with similar interests' : 'Looking for the fastest available match'}
                         </p>
                         <button className="cancel-btn" onClick={() => stopMatching()}>
                             Cancel

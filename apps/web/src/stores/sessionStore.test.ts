@@ -245,4 +245,40 @@ describe('sessionStore', () => {
       expect(state.dmUnreadCounts).toEqual({});
     });
   });
+
+  describe('preferences', () => {
+    it('uses expected defaults', () => {
+      const state = useSessionStore.getState();
+      expect(state.convertEmoticons).toBe(true);
+      expect(state.blurImages).toBe(true);
+      expect(state.notificationSoundEnabled).toBe(true);
+      expect(state.pushNotificationsEnabled).toBe(false);
+      expect(state.linkPreviewsEnabled).toBe(false);
+      expect(state.friendRequestsEnabled).toBe(true);
+      expect(state.badgeVisibility).toBe('Everyone');
+      expect(state.interestsVisibility).toBe('Friends');
+    });
+
+    it('updates preferences through store setters', () => {
+      const state = useSessionStore.getState();
+      state.setConvertEmoticons(false);
+      state.setBlurImages(false);
+      state.setNotificationSoundEnabled(false);
+      state.setPushNotificationsEnabled(true);
+      state.setLinkPreviewsEnabled(false);
+      state.setFriendRequestsEnabled(false);
+      state.setBadgeVisibility('Nobody');
+      state.setInterestsVisibility('Everyone');
+
+      const next = useSessionStore.getState();
+      expect(next.convertEmoticons).toBe(false);
+      expect(next.blurImages).toBe(false);
+      expect(next.notificationSoundEnabled).toBe(false);
+      expect(next.pushNotificationsEnabled).toBe(true);
+      expect(next.linkPreviewsEnabled).toBe(false);
+      expect(next.friendRequestsEnabled).toBe(false);
+      expect(next.badgeVisibility).toBe('Nobody');
+      expect(next.interestsVisibility).toBe('Everyone');
+    });
+  });
 });

@@ -7,73 +7,15 @@ import React, {
   useEffect,
 } from "react";
 import { useSessionStore } from "../stores/sessionStore";
+import type { SignalingMessage as SharedSignalingMessage } from "@buzzu/shared-contracts";
+
+export type SignalingMessage = SharedSignalingMessage;
 
 const SIGNALING_URL =
   process.env.SIGNALING_URL ||
   import.meta.env.VITE_SIGNALING_URL ||
-  "wss://buzzu-signaling.buzzu.workers.dev";
+  "wss://buzzu-signaling.cswasif.workers.dev";
 
-export interface SignalingMessage {
-  type:
-  | "RoomStatus"
-  | "Join"
-  | "Offer"
-  | "Answer"
-  | "IceCandidate"
-  | "PeerList"
-  | "Leave"
-  | "Error"
-  | "Relay"
-  | "RelayRequest"
-  | "RelayResponse"
-  | "Reachability"
-  | "Chat"
-  | "Typing"
-  | "PublishKeys"
-  | "RequestKeys"
-  | "KeysResponse"
-  | "SignalHandshake"
-  | "FriendRequest"
-  | "ScreenShare"
-  | "VoiceChat"
-  | "Profile"
-  | "Encrypted"
-  | "KeyExchange"
-  | "EditMessage"
-  | "DeleteMessage"
-  | "Skip"
-  | "SkipAck";
-  from?: string;
-  to?: string;
-  room_id?: string;
-  peer_id?: string;
-  payload?: string;
-  bundle?: string;
-  initiation?: string;
-  peers?: string[];
-  message?: string;
-  typing?: boolean;
-  via?: string;
-  hop_count?: number;
-  timestamp?: number;
-  session_id?: string;
-  candidates?: Array<{ peer_id: string; rtt_ms: number; reliability: number }>;
-  action?: "send" | "accept" | "decline";
-  sharing?: boolean;
-  username?: string;
-  avatarSeed?: string;
-  avatarUrl?: string | null;
-  status?: string;
-  active_peers?: number;
-  max_peers?: number;
-  /** EditMessage: the ID of the message being edited */
-  editId?: string;
-  /** DeleteMessage: the ID of the message being deleted */
-  deleteId?: string;
-  reason?: string;
-  closeCode?: number;
-  skipId?: string;
-}
 
 export interface ChatMessage {
   id: string;
@@ -98,7 +40,7 @@ interface SignalingContextType {
     currentPeerId: string,
     options?: { roomType?: string; roomKey?: string; accessKey?: string },
   ) => void;
-  disconnect: (options?: { intent?: "skip" | "default" }) => void;
+  disconnect: (options?: { intent?: "skip" | "transient" | "default" }) => void;
   sendMessage: (message: SignalingMessage) => void;
   onMessage: (
     type: SignalingMessage["type"],
@@ -149,7 +91,7 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const connectedRoomIdRef = useRef<string | null>(null);
 
-  const disconnect = useCallback((options?: { intent?: "skip" | "default" }) => {
+  const disconnect = useCallback((options?: { intent?: "skip" | "transient" | "default" }) => {
     shouldReconnectRef.current = false;
     isConnectingRef.current = false;
     messageQueueRef.current = [];
@@ -163,8 +105,10 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
       wsRef.current.onerror = null;
       if (options?.intent === "skip") {
         wsRef.current.close(4001, "intentional_skip");
-      } else {
+      } else if (options?.intent === "default") {
         wsRef.current.close();
+      } else {
+        wsRef.current.close(4002, "transient_disconnect");
       }
       wsRef.current = null;
     }
@@ -402,6 +346,32 @@ export const SignalingProvider: React.FC<{ children: React.ReactNode }> = ({
       localStreamRef.current = null;
       setLocalStream(null);
     }
+  }, []);
+
+  useEffect(() => {
+    const handlePageUnload = () => {
+      shouldReconnectRef.current = false;
+      const ws = wsRef.current;
+      if (
+        ws &&
+        (ws.readyState === WebSocket.OPEN ||
+          ws.readyState === WebSocket.CONNECTING)
+      ) {
+        try {
+          ws.close(4002, "transient_disconnect");
+        } catch {
+          ws.close();
+        }
+      }
+    };
+
+    window.addEventListener("beforeunload", handlePageUnload);
+    window.addEventListener("pagehide", handlePageUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handlePageUnload);
+      window.removeEventListener("pagehide", handlePageUnload);
+    };
   }, []);
 
   const value = React.useMemo(

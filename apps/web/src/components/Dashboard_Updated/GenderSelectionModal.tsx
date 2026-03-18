@@ -96,7 +96,7 @@ export const GenderSelectionModal: React.FC<GenderSelectionModalProps> = ({ isOp
                                 </span>
                                 <div data-orientation="horizontal" role="none" className="shrink-0 bg-border h-[1px] w-full"></div>
                                 <span className="text-sm text-white">
-                                    I'm at least <b className="text-warning">18 years old</b> and have read and agree to the <a href="https://www.chitchat.gg/terms" target="_blank" rel="noreferrer" className="text-link hover:underline">Terms of Service</a> and <a href="https://www.chitchat.gg/privacy-policy" target="_blank" rel="noreferrer" className="text-link hover:underline">Privacy Policy</a>
+                                    I'm at least <b className="text-warning">18 years old</b> and have read and agree to the <a href="/terms" className="text-link hover:underline">Terms of Service</a> and <a href="/privacy" className="text-link hover:underline">Privacy Policy</a>
                                 </span>
                                 <div className="flex-col-reverse max-md:gap-3 sm:flex-row sm:justify-end sm:space-x-2 pt-1.5 grid grid-cols-1 gap-2">
                                     <button
@@ -107,7 +107,7 @@ export const GenderSelectionModal: React.FC<GenderSelectionModalProps> = ({ isOp
                                         I AGREE, LET'S GO!
                                     </button>
                                     <span className="text-xs">
-                                        Already have an account? <a href="/login" className="link text-link">Login</a>
+                                        Already have an G-suite? <a href="/verify" className="link text-link">Login</a>
                                     </span>
                                 </div>
                             </form>

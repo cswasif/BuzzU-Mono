@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flag, ChevronDown, Check, X, Sparkles, CircleHelp } from 'lucide-react';
 import { LightningIcon, MaleIcon, FemaleIcon, BothIcon } from '../Dashboard_Updated/Icons';
+import { useSessionStore } from '../../stores/sessionStore';
 
 interface PartnerSkippedViewProps {
     onReport?: () => void;
-    onGetPremium?: () => void; // Keeping prop for backwards compatibility with any parents rendering it until we can clean it up
     isSelfSkip?: boolean;
 }
 
@@ -15,9 +15,31 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
 }) => {
     const [isInterestsOpen, setIsInterestsOpen] = useState(false);
     const [isGenderFilterOpen, setIsGenderFilterOpen] = useState(false);
-    const [interestsEnabled, setInterestsEnabled] = useState(true);
-    const [maxWait, setMaxWait] = useState('5s');
-    const [genderFilter, setGenderFilter] = useState('both');
+    const [newInterest, setNewInterest] = useState('');
+    const interests = useSessionStore((state) => state.interests);
+    const matchWithInterests = useSessionStore((state) => state.matchWithInterests);
+    const interestTimeoutSec = useSessionStore((state) => state.interestTimeoutSec);
+    const genderFilter = useSessionStore((state) => state.genderFilter);
+    const setInterests = useSessionStore((state) => state.setInterests);
+    const setMatchWithInterests = useSessionStore((state) => state.setMatchWithInterests);
+    const setInterestTimeoutSec = useSessionStore((state) => state.setInterestTimeoutSec);
+    const setGenderFilter = useSessionStore((state) => state.setGenderFilter);
+    const maxWait = interestTimeoutSec <= 5 ? '5s' : interestTimeoutSec <= 10 ? '10s' : interestTimeoutSec <= 30 ? '30s' : '10m';
+
+    const addInterest = () => {
+        const trimmed = newInterest.trim();
+        if (!trimmed) return;
+        const normalized = trimmed.toLowerCase();
+        const exists = interests.some((interest) => interest.trim().toLowerCase() === normalized);
+        if (!exists && interests.length < 20) {
+            setInterests([...interests, trimmed]);
+        }
+        setNewInterest('');
+    };
+
+    const removeInterest = (value: string) => {
+        setInterests(interests.filter((interest) => interest !== value));
+    };
 
     return (
         <div className="w-full flex justify-center py-8" id="component">
@@ -57,8 +79,8 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
                                         </svg>
                                     </span>
                                     Interests
-                                    <span className={`text-sm font-bold uppercase transition-colors ${interestsEnabled ? 'text-success' : 'text-muted-foreground'}`}>
-                                        ({interestsEnabled ? 'ON' : 'OFF'})
+                                    <span className={`text-sm font-bold uppercase transition-colors ${matchWithInterests ? 'text-success' : 'text-muted-foreground'}`}>
+                                        ({matchWithInterests ? 'ON' : 'OFF'})
                                     </span>
                                 </div>
                                 <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isInterestsOpen ? 'rotate-180' : ''}`} />
@@ -68,13 +90,13 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
                             <button
                                 type="button"
                                 role="switch"
-                                onClick={() => setInterestsEnabled(!interestsEnabled)}
-                                className={`peer inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 absolute right-6 inset-y-0 my-auto ${interestsEnabled ? 'bg-primary' : 'bg-muted'}`}
+                                onClick={() => setMatchWithInterests(!matchWithInterests)}
+                                className={`peer inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 absolute right-6 inset-y-0 my-auto ${matchWithInterests ? 'bg-primary' : 'bg-muted'}`}
                             >
                                 <span
-                                    className={`pointer-events-none relative block h-5 w-5 rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center ${interestsEnabled ? 'translate-x-5' : 'translate-x-0'}`}
+                                    className={`pointer-events-none relative block h-5 w-5 rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center ${matchWithInterests ? 'translate-x-5' : 'translate-x-0'}`}
                                 >
-                                    {interestsEnabled ? (
+                                    {matchWithInterests ? (
                                         <Check className="h-3 w-3 text-primary" strokeWidth={3} />
                                     ) : (
                                         <X className="h-3 w-3 text-muted-foreground" strokeWidth={3} />
@@ -93,11 +115,30 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
                                 >
                                     <div className="pb-4 pt-0 select-none">
                                         <div className="flex flex-wrap gap-2 bg-muted rounded-md p-2 py-4 mb-4">
+                                            {interests.map((interest) => (
+                                                <button
+                                                    key={interest}
+                                                    type="button"
+                                                    onClick={() => removeInterest(interest)}
+                                                    className="group inline-flex items-center justify-center gap-1.5 rounded-full bg-popover px-2.5 py-1 text-xs font-medium text-foreground hover:bg-popover/80"
+                                                >
+                                                    <span>{interest}</span>
+                                                    <span className="text-muted-foreground group-hover:text-foreground">×</span>
+                                                </button>
+                                            ))}
                                             <input
                                                 className="w-32 select-auto text-sm rounded-md bg-popover p-1 focus-visible:outline-none inline-flex"
                                                 maxLength={32}
                                                 placeholder="Add an interest..."
                                                 type="text"
+                                                value={newInterest}
+                                                onChange={(e) => setNewInterest(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        addInterest();
+                                                    }
+                                                }}
                                             />
                                         </div>
 
@@ -111,7 +152,7 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
                                                 {['5s', '10s', '30s', '10m'].map((val) => (
                                                     <div key={val} className="flex-shrink-0">
                                                         <button
-                                                            onClick={() => setMaxWait(val)}
+                                                            onClick={() => setInterestTimeoutSec(val === '5s' ? 5 : val === '10s' ? 10 : val === '30s' ? 30 : 600)}
                                                             className={`inline-flex items-center justify-center text-sm font-medium h-9 rounded-md px-3 cursor-pointer transition-all ${maxWait === val ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent border border-input'}`}
                                                         >
                                                             {val === '10m' ? 'Forever' : val === '5s' ? '5 sec' : val === '10s' ? '10 sec' : '30 sec'}
@@ -159,16 +200,16 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
 
                                                 {/* Male Option */}
                                                 <div className="max-sm:w-full relative group">
-                                                    <button type="button" role="radio" aria-checked={genderFilter === 'M'} onClick={() => setGenderFilter('M')} className="sr-only" />
+                                                    <button type="button" role="radio" aria-checked={genderFilter === 'male'} onClick={() => setGenderFilter('male')} className="sr-only" />
                                                     <div className="p-0.5">
                                                         <label
                                                             className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
-                                        ${genderFilter === 'M'
+                                        ${genderFilter === 'male'
                                                                     ? 'bg-blue-500/15 border-blue-500 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.25)] scale-[1.05]'
                                                                     : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
-                                                            onClick={() => setGenderFilter('M')}
+                                                            onClick={() => setGenderFilter('male')}
                                                         >
-                                                            {genderFilter === 'M' && (
+                                                            {genderFilter === 'male' && (
                                                                 <div className="absolute -top-2 -right-2 items-center justify-center flex bg-blue-500 text-white w-5 h-5 rounded-full shadow-lg shadow-blue-500/50 animate-in zoom-in duration-200">
                                                                     <LightningIcon className="w-3 h-3" />
                                                                 </div>
@@ -203,16 +244,16 @@ export const PartnerSkippedView: React.FC<PartnerSkippedViewProps> = ({
 
                                                 {/* Female Option */}
                                                 <div className="max-sm:w-full relative group">
-                                                    <button type="button" role="radio" aria-checked={genderFilter === 'F'} onClick={() => setGenderFilter('F')} className="sr-only" />
+                                                    <button type="button" role="radio" aria-checked={genderFilter === 'female'} onClick={() => setGenderFilter('female')} className="sr-only" />
                                                     <div className="p-0.5">
                                                         <label
                                                             className={`font-bold w-full min-w-[76px] sm:w-24 relative flex select-none flex-col items-center justify-between rounded-xl p-3 cursor-pointer text-sm border-2 transition-all duration-300 ease-out
-                                        ${genderFilter === 'F'
+                                        ${genderFilter === 'female'
                                                                     ? 'bg-pink-500/15 border-pink-500 text-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.25)] scale-[1.05]'
                                                                     : 'bg-background/50 border-transparent text-muted-foreground hover:bg-muted opacity-50 hover:opacity-100 hover:scale-100'}`}
-                                                            onClick={() => setGenderFilter('F')}
+                                                            onClick={() => setGenderFilter('female')}
                                                         >
-                                                            {genderFilter === 'F' && (
+                                                            {genderFilter === 'female' && (
                                                                 <div className="absolute -top-2 -right-2 items-center justify-center flex bg-pink-500 text-white w-5 h-5 rounded-full shadow-lg shadow-pink-500/50 animate-in zoom-in duration-200">
                                                                     <LightningIcon className="w-3 h-3" />
                                                                 </div>

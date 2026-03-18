@@ -364,83 +364,6 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
       adaptiveBitrateStats.lossRate !== null ||
       adaptiveBitrateStats.rttMs !== null);
 
-  // ── LOCAL PREVIEW — small floating card in bottom-right ──
-  if (isLocal) {
-    return (
-      <div className="absolute bottom-4 right-4 z-30 w-80 rounded-lg overflow-hidden shadow-2xl border border-white/10 bg-black">
-        <div className="relative">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            disablePictureInPicture
-            className="w-full aspect-video object-contain bg-black"
-          />
-          <div className="absolute top-0 inset-x-0 flex items-center justify-between px-2.5 py-1.5 bg-gradient-to-b from-black/80 to-transparent">
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-white text-[11px] font-medium">Your screen</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {onToggleAdaptiveBitrate && (
-                <div className="flex items-center gap-1.5 text-white/80">
-                  <span className="text-[10px] font-medium">Adaptive</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={!!adaptiveBitrateEnabled}
-                    aria-label="Toggle adaptive bitrate"
-                    data-state={adaptiveBitrateEnabled ? "checked" : "unchecked"}
-                    className="ss-control-btn inline-flex h-[18px] w-[34px] shrink-0 cursor-pointer items-center rounded-full border border-white/10 transition-colors"
-                    style={{
-                      backgroundColor: adaptiveBitrateEnabled
-                        ? "hsl(var(--primary))"
-                        : "rgba(255,255,255,0.2)",
-                    }}
-                    onClick={onToggleAdaptiveBitrate}
-                  >
-                    <span
-                      data-state={adaptiveBitrateEnabled ? "checked" : "unchecked"}
-                      className="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform"
-                      style={{
-                        transform: adaptiveBitrateEnabled
-                          ? "translateX(16px)"
-                          : "translateX(0px)",
-                      }}
-                    />
-                  </button>
-                </div>
-              )}
-              {onClose && (
-                <button
-                  onClick={onClose}
-                  className="ss-control-btn p-1 rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
-                  title="Stop sharing"
-                  aria-label="Stop local screen sharing"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-          {showAdaptiveStats && (
-            <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md bg-black/70 text-white text-[10px] font-medium flex items-center gap-2">
-              <span>Target {formatBitrate(adaptiveBitrateStats?.targetBitrate ?? null)}</span>
-              <span>Loss {formatLoss(adaptiveBitrateStats?.lossRate ?? null)}</span>
-              <span>RTT {formatRtt(adaptiveBitrateStats?.rttMs ?? null)}</span>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── REMOTE VIEWER ──
-
   if (isMinimized) {
     return (
       <div className="absolute bottom-4 right-4 z-30">
@@ -448,7 +371,7 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
           onClick={() => setIsMinimized(false)}
           className="ss-control-btn flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-white text-xs font-medium shadow-lg hover:bg-emerald-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
           title="Expand screen share"
-          aria-label={`Expand ${label}'s screen share`}
+          aria-label={`Expand ${isLocal ? "your" : `${label}'s`} screen share`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M13 3H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3" />
@@ -456,7 +379,7 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
             <line x1="18" y1="3" x2="18" y2="11" />
             <line x1="14" y1="7" x2="22" y2="7" />
           </svg>
-          <span>{label}'s screen</span>
+          <span>{isLocal ? "Your screen" : `${label}'s screen`}</span>
         </button>
       </div>
     );
@@ -464,8 +387,9 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
 
   const isTheater = layout === 'theater';
   const useOverlayHeader = isMobile && !isFullscreen;
+  const viewerTitle = isLocal ? "Your screen" : `${label}'s screen`;
   const remoteVideoFitClass = isTheater
-    ? 'relative z-10 w-full h-full object-contain'
+    ? 'relative z-10 w-full h-full max-w-full max-h-full object-contain'
     : 'max-w-full max-h-full object-contain';
 
   return (
@@ -483,9 +407,38 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
       <div className={`ss-theater-header flex items-center justify-between px-3 sm:px-4 ${useOverlayHeader ? 'absolute inset-x-0 top-0 z-20 py-1.5 bg-gradient-to-b from-black/45 to-transparent' : isTheater ? 'py-1.5 sm:py-2.5 bg-black/70 backdrop-blur border-b border-transparent' : 'py-2.5 bg-gradient-to-b from-black/90 to-black/60 border-b border-border/40'} ${useOverlayHeader ? '' : 'flex-shrink-0'}`}>
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className={`ss-theater-label text-white font-medium truncate ${useOverlayHeader ? 'text-[11px] max-w-[52vw]' : 'text-xs'}`}>{label}'s screen</span>
+          <span className={`ss-theater-label text-white font-medium truncate ${useOverlayHeader ? 'text-[11px] max-w-[52vw]' : 'text-xs'}`}>{viewerTitle}</span>
         </div>
         <div className={`flex items-center ${useOverlayHeader ? 'gap-0.5' : 'gap-1'}`}>
+          {isLocal && onToggleAdaptiveBitrate && !useOverlayHeader && (
+            <div className="flex items-center gap-1.5 text-white/80 mr-1">
+              <span className="text-[10px] font-medium">Adaptive</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!adaptiveBitrateEnabled}
+                aria-label="Toggle adaptive bitrate"
+                data-state={adaptiveBitrateEnabled ? "checked" : "unchecked"}
+                className="ss-control-btn inline-flex h-[18px] w-[34px] shrink-0 cursor-pointer items-center rounded-full border border-white/10 transition-colors"
+                style={{
+                  backgroundColor: adaptiveBitrateEnabled
+                    ? "hsl(var(--primary))"
+                    : "rgba(255,255,255,0.2)",
+                }}
+                onClick={onToggleAdaptiveBitrate}
+              >
+                <span
+                  data-state={adaptiveBitrateEnabled ? "checked" : "unchecked"}
+                  className="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform"
+                  style={{
+                    transform: adaptiveBitrateEnabled
+                      ? "translateX(16px)"
+                      : "translateX(0px)",
+                  }}
+                />
+              </button>
+            </div>
+          )}
           {/* PiP button */}
           {!useOverlayHeader && document.pictureInPictureEnabled && (
             <button
@@ -547,8 +500,8 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
             <button
               onClick={onClose}
               className={`ss-control-btn ${useOverlayHeader ? 'p-1' : 'p-1.5'} rounded hover:bg-red-500/80 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80`}
-              title="Stop viewing"
-              aria-label="Stop viewing screen share"
+              title={isLocal ? "Stop sharing" : "Stop viewing"}
+              aria-label={isLocal ? "Stop local screen sharing" : "Stop viewing screen share"}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -562,7 +515,6 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
       {/* Video element */}
       <div
         className={`ss-theater-viewport relative flex items-center justify-center min-h-0 overflow-hidden ${isTheater ? 'w-full p-0 sm:p-2 lg:p-3' : 'flex-grow p-1'}`}
-        style={isTheater ? { aspectRatio: `${videoAspectRatio}` } : {}}
       >
         {isTheater && (
           <video
@@ -571,13 +523,14 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
             playsInline
             muted
             disablePictureInPicture
-            className={`absolute inset-0 w-full h-full object-cover ${isMobile ? 'scale-125 blur-3xl opacity-65' : 'scale-110 blur-2xl opacity-40'}`}
+            className="absolute inset-0 w-full h-full object-cover scale-100 blur-2xl opacity-30"
           />
         )}
         <video
           ref={videoRef}
           autoPlay
           playsInline
+          muted={isLocal}
           className={`${remoteVideoFitClass} ${isTheater ? 'rounded-none sm:rounded-2xl bg-transparent' : 'rounded-2xl bg-black'}`}
         />
         {isStreamUnavailable && (
@@ -619,6 +572,13 @@ export const ScreenShareViewer: React.FC<ScreenShareViewerProps> = ({
             </svg>
             <span className="text-sm font-medium">Click to enable audio</span>
           </div>
+        </div>
+      )}
+      {isLocal && showAdaptiveStats && (
+        <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md bg-black/70 text-white text-[10px] font-medium flex items-center gap-2">
+          <span>Target {formatBitrate(adaptiveBitrateStats?.targetBitrate ?? null)}</span>
+          <span>Loss {formatLoss(adaptiveBitrateStats?.lossRate ?? null)}</span>
+          <span>RTT {formatRtt(adaptiveBitrateStats?.rttMs ?? null)}</span>
         </div>
       )}
     </div>

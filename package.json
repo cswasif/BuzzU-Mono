@@ -6,6 +6,10 @@
     "license": "AGPL-3.0",
     "scripts": {
         "dev": "pnpm --filter @buzzu/web run dev",
+        "dev:full": "pnpm --filter @buzzu/wasm run build:wasm && pnpm -r --parallel run dev",
+        "dev:workers": "pnpm --filter buzzu-signaling run dev",
+        "dev:matchmaker": "cd apps/matchmaker-worker && npx wrangler dev",
+        "dev:reputation": "cd apps/reputation-worker && npx wrangler dev",
         "build": "pnpm --filter @buzzu/web run build && pnpm --filter buzzu-signaling run build",
         "build:wasm": "pnpm --filter @buzzu/wasm run build:wasm",
         "test": "pnpm --filter @buzzu/web run test",

@@ -76,7 +76,7 @@
 }
 
 /* Map variables to logical colors */
-:root {
+.verify-page {
     --color-brightness: hsl(var(--brightness));
     --color-background: hsl(var(--background));
     --color-foreground: hsl(var(--foreground));
@@ -86,7 +86,7 @@
     --radius-radius: var(--radius);
 }
 
-:root {
+.verify-page {
     --brightness: 0 0% 0%;
     --background: 234 10% 95%;
     --foreground: 235 10% 20%;
@@ -96,7 +96,7 @@
     --radius: 0.5rem;
 }
 
-.dark {
+.verify-page.dark {
     --brightness: 255 100% 100%;
     --background: 234 10% 20%;
     --foreground: 235 10% 80%;

@@ -92,8 +92,11 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
 /* ─── Reusable row for link items ─── */
 function LinkRow({ icon, label, href, onClick }: { icon: React.ReactNode; label: string; href?: string; onClick?: () => void }) {
   const Tag = href ? "a" : "button";
+  const isExternalHref = !!href && /^(https?:)?\/\//.test(href);
   const extraProps = href
-    ? { href, target: "_blank" as const, rel: "noreferrer" }
+    ? isExternalHref
+      ? { href, target: "_blank" as const, rel: "noreferrer" }
+      : { href }
     : { onClick };
 
   return (
@@ -204,17 +207,17 @@ export function MoreModal({ open, onClose }: MoreModalProps) {
         <LinkRow
           icon={<LinkIcon />}
           label="Terms of Service"
-          href="https://chitchat.gg/terms"
+          href="/terms"
         />
         <LinkRow
           icon={<LinkIcon />}
           label="Privacy Policy"
-          href="https://chitchat.gg/privacy-policy"
+          href="/privacy"
         />
         <LinkRow
           icon={<LinkIcon />}
           label="Community Guidelines"
-          href="https://chitchat.gg/guidelines"
+          href="/guidelines"
         />
         <LinkRow
           icon={<TrashIcon />}

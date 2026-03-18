@@ -5,8 +5,12 @@ import {
   ChatMessage,
 } from "../context/SignalingContext";
 import { useSessionStore } from "../stores/sessionStore";
+import { fingerprintValue, parseJsonSafe, traceE2E } from "../utils/e2eTrace";
 
 const SKIP_DEDUP_TTL_MS = 30_000;
+const SIGNAL_EVENT_DEDUP_TTL_MS = 8_000;
+const MAX_RECENT_SIGNAL_EVENTS = 2048;
+const MAX_SKIP_EVENTS = 512;
 
 const randomHex = (bytes: number) => {
   if (
@@ -31,6 +35,7 @@ export function useSignaling() {
   const voiceChatStateRef = useRef<Record<string, { value: boolean; ts: number } | undefined>>({});
   const pendingSkipAckRef = useRef<Map<string, { targetPeerId: string; sentAt: number }>>(new Map());
   const receivedSkipRef = useRef<Map<string, number>>(new Map());
+  const recentSignalEventsRef = useRef<Map<string, number>>(new Map());
 
   const offerListenersRef = useRef<
     Set<(offer: RTCSessionDescriptionInit, from: string) => void>
@@ -80,6 +85,12 @@ export function useSignaling() {
       username?: string,
       avatarSeed?: string,
       avatarUrl?: string | null,
+      metadata?: {
+        interests?: string[];
+        interestsVisibility?: "Everyone" | "Friends" | "Nobody";
+        badgeVisibility?: "Everyone" | "Friends" | "Nobody";
+        joinedAt?: string | null;
+      },
     ) => void>
   >(new Set());
   const roomStatusListenersRef = useRef<
@@ -111,6 +122,17 @@ export function useSignaling() {
     [],
   );
 
+  const trimMapToSize = useCallback(
+    <K, V>(map: Map<K, V>, maxSize: number) => {
+      while (map.size > maxSize) {
+        const oldestKey = map.keys().next().value as K | undefined;
+        if (typeof oldestKey === "undefined") break;
+        map.delete(oldestKey);
+      }
+    },
+    [],
+  );
+
   const pruneSkipMaps = useCallback(() => {
     const cutoff = Date.now() - SKIP_DEDUP_TTL_MS;
     for (const [skipId, ts] of receivedSkipRef.current) {
@@ -123,16 +145,65 @@ export function useSignaling() {
         pendingSkipAckRef.current.delete(skipId);
       }
     }
-  }, []);
+    trimMapToSize(receivedSkipRef.current, MAX_SKIP_EVENTS);
+    trimMapToSize(pendingSkipAckRef.current, MAX_SKIP_EVENTS);
+  }, [trimMapToSize]);
+
+  const shouldDropSignalDuplicate = useCallback(
+    (eventKey: string, ttlMs: number = SIGNAL_EVENT_DEDUP_TTL_MS) => {
+      const nowTs = Date.now();
+      const cutoff = nowTs - ttlMs;
+      for (const [key, ts] of recentSignalEventsRef.current) {
+        if (ts < cutoff) {
+          recentSignalEventsRef.current.delete(key);
+        }
+      }
+      trimMapToSize(recentSignalEventsRef.current, MAX_RECENT_SIGNAL_EVENTS);
+      const seenAt = recentSignalEventsRef.current.get(eventKey) ?? 0;
+      if (nowTs - seenAt < ttlMs) {
+        return true;
+      }
+      recentSignalEventsRef.current.set(eventKey, nowTs);
+      trimMapToSize(recentSignalEventsRef.current, MAX_RECENT_SIGNAL_EVENTS);
+      return false;
+    },
+    [trimMapToSize],
+  );
 
   const activeSessionId =
     currentRoomId && partnerId && peerId
       ? `${currentRoomId}:${partnerId}:${peerId}`
       : undefined;
 
+  useEffect(() => {
+    typingStateRef.current = {};
+    screenShareStateRef.current = {};
+    voiceChatStateRef.current = {};
+    pendingSkipAckRef.current.clear();
+    receivedSkipRef.current.clear();
+    recentSignalEventsRef.current.clear();
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      pruneSkipMaps();
+      const cutoff = Date.now() - SIGNAL_EVENT_DEDUP_TTL_MS;
+      for (const [key, ts] of recentSignalEventsRef.current) {
+        if (ts < cutoff) {
+          recentSignalEventsRef.current.delete(key);
+        }
+      }
+      trimMapToSize(recentSignalEventsRef.current, MAX_RECENT_SIGNAL_EVENTS);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [pruneSkipMaps, trimMapToSize]);
+
   const isStaleSignalSession = useCallback(
     (msg: SignalingMessage) => {
       const requiresSessionCheck =
+        msg.type === "Join" ||
+        msg.type === "Leave" ||
         msg.type === "Offer" ||
         msg.type === "Answer" ||
         msg.type === "IceCandidate" ||
@@ -160,32 +231,52 @@ export function useSignaling() {
 
   // Subscribe to context messages and trigger legacy callbacks
   useEffect(() => {
+    const isLoopbackFromSelf = (msg: SignalingMessage) =>
+      !!msg.from && msg.from === peerId;
     const unsubscribers = [
       context.onMessage("Offer", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (isStaleSignalSession(msg)) return;
-        if (msg.from && msg.payload)
-          notifyListeners(offerListenersRef.current, JSON.parse(msg.payload), msg.from);
+        if (msg.from && msg.payload) {
+          const parsed = parseJsonSafe<RTCSessionDescriptionInit>(msg.payload);
+          if (parsed) {
+            notifyListeners(offerListenersRef.current, parsed, msg.from);
+          }
+        }
       }),
       context.onMessage("Answer", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (isStaleSignalSession(msg)) return;
-        if (msg.from && msg.payload)
-          notifyListeners(answerListenersRef.current, JSON.parse(msg.payload), msg.from);
+        if (msg.from && msg.payload) {
+          const parsed = parseJsonSafe<RTCSessionDescriptionInit>(msg.payload);
+          if (parsed) {
+            notifyListeners(answerListenersRef.current, parsed, msg.from);
+          }
+        }
       }),
       context.onMessage("IceCandidate", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (isStaleSignalSession(msg)) return;
-        if (msg.from && msg.payload)
-          notifyListeners(iceCandidateListenersRef.current, JSON.parse(msg.payload), msg.from);
+        if (msg.from && msg.payload) {
+          const parsed = parseJsonSafe<RTCIceCandidateInit>(msg.payload);
+          if (parsed) {
+            notifyListeners(iceCandidateListenersRef.current, parsed, msg.from);
+          }
+        }
       }),
       context.onMessage("Join", (msg) => {
+        if (isStaleSignalSession(msg)) return;
         if (msg.peer_id && msg.peer_id !== peerId)
           notifyListeners(peerJoinListenersRef.current, msg.peer_id);
       }),
       context.onMessage("Leave", (msg) => {
+        if (isStaleSignalSession(msg)) return;
         if (msg.peer_id) {
           notifyListeners(peerLeaveListenersRef.current, msg.peer_id, msg.reason, msg.closeCode);
         }
       }),
       context.onMessage("Skip", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (isStaleSignalSession(msg)) return;
         pruneSkipMaps();
         if (msg.skipId) {
@@ -206,25 +297,112 @@ export function useSignaling() {
         }
       }),
       context.onMessage("Chat", (msg) => {
-        if (msg.from && msg.payload)
-          notifyListeners(chatMessageListenersRef.current, JSON.parse(msg.payload), msg.from);
+        if (isLoopbackFromSelf(msg)) return;
+        if (msg.from && msg.payload) {
+          const parsed =
+            parseJsonSafe<
+              ChatMessage & {
+                isEncrypted?: boolean;
+                encryptedContent?: string | null;
+              }
+            >(msg.payload);
+          traceE2E("signaling.chat.inbound", {
+            transport: "signaling",
+            fromPeerId: msg.from,
+            toPeerId: peerId,
+            messageId: parsed?.id ?? null,
+            isEncryptedFlag: !!parsed?.isEncrypted,
+            hasEncryptedContent: !!parsed?.encryptedContent,
+            encryptedContentFp: fingerprintValue(parsed?.encryptedContent ?? null),
+            payloadLength: msg.payload.length,
+            signalingType: msg.type,
+          }, "info");
+          if (parsed) {
+            notifyListeners(chatMessageListenersRef.current, parsed, msg.from);
+          }
+        }
       }),
       context.onMessage("Typing", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (msg.from && typeof msg.typing === "boolean")
           notifyListeners(typingListenersRef.current, msg.typing, msg.from);
       }),
       context.onMessage("RequestKeys", (msg) => {
-        if (msg.from) notifyListeners(keysRequestListenersRef.current, msg.from);
+        if (isLoopbackFromSelf(msg)) return;
+        if (msg.from) {
+          const eventKey = `RequestKeys:${msg.from}:${msg.to ?? ""}:${msg.room_id ?? ""}:${msg.session_id ?? ""}`;
+          if (shouldDropSignalDuplicate(eventKey)) {
+            traceE2E("signaling.keys_request.duplicate_dropped", {
+              fromPeerId: msg.from,
+              toPeerId: msg.to ?? null,
+            }, "debug");
+            return;
+          }
+          traceE2E("signaling.keys_request.inbound", {
+            transport: "signaling",
+            fromPeerId: msg.from,
+            toPeerId: peerId,
+            signalingType: msg.type,
+          }, "info");
+          notifyListeners(keysRequestListenersRef.current, msg.from);
+        }
       }),
       context.onMessage("KeysResponse", (msg) => {
-        if (msg.from && msg.bundle)
+        if (isLoopbackFromSelf(msg)) return;
+        if (msg.from && msg.bundle) {
+          const bundleFp = fingerprintValue(msg.bundle) ?? "none";
+          const eventKey = `KeysResponse:${msg.from}:${msg.to ?? ""}:${bundleFp}`;
+          if (shouldDropSignalDuplicate(eventKey)) {
+            traceE2E("signaling.keys_response.duplicate_dropped", {
+              fromPeerId: msg.from,
+              toPeerId: msg.to ?? null,
+              bundleFp,
+            }, "debug");
+            return;
+          }
+          const parsedBundle = parseJsonSafe<Record<string, string | null>>(msg.bundle);
+          traceE2E("signaling.keys_response.inbound", {
+            transport: "signaling",
+            fromPeerId: msg.from,
+            toPeerId: peerId,
+            signalingType: msg.type,
+            bundleLength: msg.bundle.length,
+            identityKeyFp: fingerprintValue(parsedBundle?.identity_key ?? null),
+            signedPreKeyFp: fingerprintValue(parsedBundle?.signed_prekey ?? null),
+            signatureFp: fingerprintValue(parsedBundle?.signed_prekey_signature ?? null),
+          }, "info");
           notifyListeners(keysResponseListenersRef.current, msg.bundle, msg.from);
+        }
       }),
       context.onMessage("SignalHandshake", (msg) => {
-        if (msg.from && msg.initiation)
+        if (isLoopbackFromSelf(msg)) return;
+        if (msg.from && msg.initiation) {
+          const initiationFp = fingerprintValue(msg.initiation) ?? "none";
+          const eventKey = `SignalHandshake:${msg.from}:${msg.to ?? ""}:${initiationFp}`;
+          if (shouldDropSignalDuplicate(eventKey)) {
+            traceE2E("signaling.handshake.duplicate_dropped", {
+              fromPeerId: msg.from,
+              toPeerId: msg.to ?? null,
+              initiationFp,
+            }, "debug");
+            return;
+          }
+          const parsedInit = parseJsonSafe<Record<string, string | null>>(msg.initiation);
+          traceE2E("signaling.handshake.inbound", {
+            transport: "signaling",
+            fromPeerId: msg.from,
+            toPeerId: peerId,
+            signalingType: msg.type,
+            initiationLength: msg.initiation.length,
+            identityKeyFp: fingerprintValue(parsedInit?.identity_key ?? null),
+            ephemeralKeyFp: fingerprintValue(parsedInit?.ephemeral_key ?? null),
+            ratchetKeyFp: fingerprintValue(parsedInit?.ratchet_key ?? null),
+          }, "info");
           notifyListeners(handshakeListenersRef.current, msg.initiation, msg.from);
+        }
       }),
       context.onMessage("FriendRequest", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (msg.from && msg.action) {
           notifyListeners(
             friendRequestListenersRef.current,
@@ -237,11 +415,13 @@ export function useSignaling() {
         }
       }),
       context.onMessage("ScreenShare", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (msg.from && typeof msg.sharing === "boolean") {
           notifyListeners(screenShareListenersRef.current, msg.sharing, msg.from);
         }
       }),
       context.onMessage("VoiceChat", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (isDev) {
           console.log("[useSignaling] Received VoiceChat message:", msg);
         }
@@ -250,13 +430,49 @@ export function useSignaling() {
         }
       }),
       context.onMessage("Profile", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (msg.from) {
+          let metadata:
+            | {
+                interests?: string[];
+                interestsVisibility?: "Everyone" | "Friends" | "Nobody";
+                badgeVisibility?: "Everyone" | "Friends" | "Nobody";
+                joinedAt?: string | null;
+              }
+            | undefined;
+          if (typeof msg.payload === "string") {
+            const parsed = parseJsonSafe<{
+              interests?: string[];
+              interestsVisibility?: "Everyone" | "Friends" | "Nobody";
+              badgeVisibility?: "Everyone" | "Friends" | "Nobody";
+              joinedAt?: string | null;
+            }>(msg.payload);
+            if (parsed) {
+              metadata = {
+                interests: Array.isArray(parsed.interests) ? parsed.interests.filter((interest) => typeof interest === "string") : undefined,
+                interestsVisibility:
+                  parsed.interestsVisibility === "Everyone" ||
+                  parsed.interestsVisibility === "Friends" ||
+                  parsed.interestsVisibility === "Nobody"
+                    ? parsed.interestsVisibility
+                    : undefined,
+                badgeVisibility:
+                  parsed.badgeVisibility === "Everyone" ||
+                  parsed.badgeVisibility === "Friends" ||
+                  parsed.badgeVisibility === "Nobody"
+                    ? parsed.badgeVisibility
+                    : undefined,
+                joinedAt: typeof parsed.joinedAt === "string" ? parsed.joinedAt : null,
+              };
+            }
+          }
           notifyListeners(
             profileListenersRef.current,
             msg.from,
             msg.username,
             msg.avatarSeed,
             msg.avatarUrl ?? null,
+            metadata,
           );
         }
       }),
@@ -271,11 +487,13 @@ export function useSignaling() {
         }
       }),
       context.onMessage("EditMessage", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (msg.from && msg.editId && msg.payload) {
           notifyListeners(editMessageListenersRef.current, msg.editId, msg.payload, msg.from);
         }
       }),
       context.onMessage("DeleteMessage", (msg) => {
+        if (isLoopbackFromSelf(msg)) return;
         if (msg.from && msg.deleteId) {
           notifyListeners(deleteMessageListenersRef.current, msg.deleteId, msg.from);
         }
@@ -283,7 +501,15 @@ export function useSignaling() {
     ];
 
     return () => unsubscribers.forEach((unsub) => unsub());
-  }, [context, isStaleSignalSession, notifyListeners, peerId, pruneSkipMaps, isDev]);
+  }, [
+    context,
+    isDev,
+    isStaleSignalSession,
+    notifyListeners,
+    peerId,
+    pruneSkipMaps,
+    shouldDropSignalDuplicate,
+  ]);
 
   // Wrapper methods
   const sendOffer = useCallback(
@@ -334,11 +560,27 @@ export function useSignaling() {
 
   const sendChatMessage = useCallback(
     (targetPeerId: string, message: ChatMessage) => {
+      const messageMeta = message as ChatMessage & {
+        isEncrypted?: boolean;
+        encryptedContent?: string | null;
+      };
+      const payload = JSON.stringify(message);
+      traceE2E("signaling.chat.outbound", {
+        transport: "signaling",
+        fromPeerId: peerId,
+        toPeerId: targetPeerId,
+        messageId: message.id ?? null,
+        isEncryptedFlag: !!messageMeta.isEncrypted,
+        hasEncryptedContent: !!messageMeta.encryptedContent,
+        encryptedContentFp: fingerprintValue(messageMeta.encryptedContent ?? null),
+        payloadLength: payload.length,
+        signalingType: "Chat",
+      }, "info");
       context.sendMessage({
         type: "Chat",
         from: peerId,
         to: targetPeerId,
-        payload: JSON.stringify(message),
+        payload,
       });
     },
     [context, peerId],
@@ -428,6 +670,17 @@ export function useSignaling() {
       }
       const bundleStr =
         typeof bundle === "string" ? bundle : JSON.stringify(bundle);
+      const parsedBundle = parseJsonSafe<Record<string, string | null>>(bundleStr);
+      traceE2E("signaling.keys_publish.outbound", {
+        transport: "signaling",
+        fromPeerId: peerId,
+        toPeerId: null,
+        signalingType: "PublishKeys",
+        bundleLength: bundleStr.length,
+        identityKeyFp: fingerprintValue(parsedBundle?.identity_key ?? null),
+        signedPreKeyFp: fingerprintValue(parsedBundle?.signed_prekey ?? null),
+        signatureFp: fingerprintValue(parsedBundle?.signed_prekey_signature ?? null),
+      }, "info");
       context.sendMessage({
         type: "PublishKeys",
         from: peerId,
@@ -451,6 +704,12 @@ export function useSignaling() {
           peerId,
         );
       }
+      traceE2E("signaling.keys_request.outbound", {
+        transport: "signaling",
+        fromPeerId: peerId,
+        toPeerId: targetPeerId,
+        signalingType: "RequestKeys",
+      }, "info");
       context.sendMessage({
         type: "RequestKeys",
         from: peerId,
@@ -475,6 +734,17 @@ export function useSignaling() {
       }
       const bundleStr =
         typeof bundle === "string" ? bundle : JSON.stringify(bundle);
+      const parsedBundle = parseJsonSafe<Record<string, string | null>>(bundleStr);
+      traceE2E("signaling.keys_response.outbound", {
+        transport: "signaling",
+        fromPeerId: peerId,
+        toPeerId: targetPeerId,
+        signalingType: "KeysResponse",
+        bundleLength: bundleStr.length,
+        identityKeyFp: fingerprintValue(parsedBundle?.identity_key ?? null),
+        signedPreKeyFp: fingerprintValue(parsedBundle?.signed_prekey ?? null),
+        signatureFp: fingerprintValue(parsedBundle?.signed_prekey_signature ?? null),
+      }, "info");
       context.sendMessage({
         type: "KeysResponse",
         from: peerId,
@@ -502,6 +772,17 @@ export function useSignaling() {
         typeof initiation === "string"
           ? initiation
           : JSON.stringify(initiation);
+      const parsedInit = parseJsonSafe<Record<string, string | null>>(initiationStr);
+      traceE2E("signaling.handshake.outbound", {
+        transport: "signaling",
+        fromPeerId: peerId,
+        toPeerId: targetPeerId,
+        signalingType: "SignalHandshake",
+        initiationLength: initiationStr.length,
+        identityKeyFp: fingerprintValue(parsedInit?.identity_key ?? null),
+        ephemeralKeyFp: fingerprintValue(parsedInit?.ephemeral_key ?? null),
+        ratchetKeyFp: fingerprintValue(parsedInit?.ratchet_key ?? null),
+      }, "info");
       context.sendMessage({
         type: "SignalHandshake",
         from: peerId,
@@ -639,6 +920,10 @@ export function useSignaling() {
         username?: string;
         avatarSeed?: string;
         avatarUrl?: string | null;
+        interests?: string[];
+        interestsVisibility?: "Everyone" | "Friends" | "Nobody";
+        badgeVisibility?: "Everyone" | "Friends" | "Nobody";
+        joinedAt?: string | null;
       },
     ) => {
       context.sendMessage({
@@ -648,6 +933,12 @@ export function useSignaling() {
         username: profile.username,
         avatarSeed: profile.avatarSeed,
         avatarUrl: profile.avatarUrl ?? null,
+        payload: JSON.stringify({
+          interests: profile.interests ?? [],
+          interestsVisibility: profile.interestsVisibility ?? "Friends",
+          badgeVisibility: profile.badgeVisibility ?? "Everyone",
+          joinedAt: profile.joinedAt ?? null,
+        }),
       });
     },
     [context, peerId],
@@ -720,6 +1011,12 @@ export function useSignaling() {
         username?: string,
         avatarSeed?: string,
         avatarUrl?: string | null,
+        metadata?: {
+          interests?: string[];
+          interestsVisibility?: "Everyone" | "Friends" | "Nobody";
+          badgeVisibility?: "Everyone" | "Friends" | "Nobody";
+          joinedAt?: string | null;
+        },
       ) => void,
     ) => {
       return subscribeListener(profileListenersRef.current, cb);

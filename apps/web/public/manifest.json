@@ -1,7 +1,7 @@
 {
   "name": "BuzzU",
   "short_name": "BuzzU",
-  "description": "Connecting you to the world via anonymous chatting.",
+  "description": "BuzzU is an Omegle-inspired, browser-based app built by BRAC University students and open to everyone. Connect anonymously with the world through video, voice, and text chat.",
   "start_url": "/",
   "display": "standalone",
   "display_override": [

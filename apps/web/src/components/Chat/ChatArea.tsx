@@ -35,6 +35,7 @@ import {
   toEncryptedBytes,
   type IncomingChatMessage,
 } from "./chatAreaRuntime";
+import { fingerprintValue, traceE2E } from "../../utils/e2eTrace";
 
 function now() {
   return new Date().toLocaleTimeString([], {
@@ -51,6 +52,13 @@ const SUPPRESS_AUTO_START_ONCE_KEY = "buzzu:suppress-chat-autostart-once";
 const SKIP_VIEW_STATE_KEY = "buzzu:skip-view-state";
 const MAX_CACHED_IMAGE_DATA_URLS = 160;
 const MESSAGE_CACHE_PERSIST_DEBOUNCE_MS = 450;
+const MESSAGE_SIGNAL_FALLBACK_DELAY_MS = 600;
+const MESSAGE_P2P_OPEN_WAIT_MS = 350;
+const MESSAGE_SIGNAL_FALLBACK_DELAY_WHEN_P2P_HEALTHY_MS = 2500;
+const P2P_PROBE_TIMEOUT_MS = 1500;
+const PARTNER_RECONNECT_GRACE_MS = 8000;
+const ENCRYPTED_MESSAGE_DEDUPE_TTL_MS = 180000;
+const KEY_EXCHANGE_RESPONDER_FALLBACK_GATE_MS = 2200;
 const safeSessionStorage = createSafeSessionStorage(
   typeof window !== "undefined" ? window.sessionStorage : undefined,
 );
@@ -197,7 +205,22 @@ export function ChatArea({
     avatarSeed: string;
     avatarUrl?: string | null;
     isVerified?: boolean;
+    interests?: string[];
+    interestsVisibility?: "Everyone" | "Friends" | "Nobody";
+    badgeVisibility?: "Everyone" | "Friends" | "Nobody";
+    joinedAt?: string | null;
   } | null>(null);
+  const [peerProfileMeta, setPeerProfileMeta] = useState<
+    Record<
+      string,
+      {
+        interests?: string[];
+        interestsVisibility?: "Everyone" | "Friends" | "Nobody";
+        badgeVisibility?: "Everyone" | "Friends" | "Nobody";
+        joinedAt?: string | null;
+      }
+    >
+  >({});
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -256,9 +279,30 @@ export function ChatArea({
   const lastKeysRequestResponseAtRef = useRef<Map<string, number>>(new Map());
   const lastKeysResponseHandledAtRef = useRef<Map<string, number>>(new Map());
   const lastHandshakeHandledAtRef = useRef<Map<string, number>>(new Map());
+  const decryptInFlightRef = useRef<Set<string>>(new Set());
+  const recentlyHandledEncryptedRef = useRef<Map<string, number>>(new Map());
+  const ackedOutgoingMessagesRef = useRef<Set<string>>(new Set());
+  const pendingSignalFallbackTimersRef = useRef<
+    Map<string, ReturnType<typeof setTimeout>>
+  >(new Map());
+  const p2pHealthyPeersRef = useRef<Map<string, { lastAckAt: number; rttMs: number }>>(
+    new Map(),
+  );
+  const pendingP2PProbeRef = useRef<Map<string, { peerId: string; sentAt: number }>>(
+    new Map(),
+  );
+  const p2pProbeTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
   const pendingKeysRequestRef = useRef<Set<string>>(new Set());
   const pendingKeysResponseRef = useRef<Map<string, string>>(new Map());
   const pendingHandshakeRef = useRef<Map<string, string>>(new Map());
+  const keyExchangeEpochRef = useRef<Map<string, number>>(new Map());
+  const keyExchangeModeRef = useRef<Map<string, "normal" | "reconnect">>(
+    new Map(),
+  );
+  const responderFallbackEligibleAtRef = useRef<Map<string, number>>(new Map());
+  const processedKeyPayloadFpRef = useRef<Map<string, string>>(new Map());
   const lastTypingSignalRef = useRef<Map<string, { value: boolean; ts: number }>>(
     new Map(),
   );
@@ -279,6 +323,7 @@ export function ChatArea({
     connect: connectSignaling,
     disconnect: disconnectSignaling,
     sendOffer,
+    sendChatMessage: sendChatMessageSignaling,
     sendTypingState,
     publishKeys,
     requestKeys,
@@ -330,6 +375,7 @@ export function ChatArea({
     closeAllPeerConnections,
     getPeerConnection,
     getPeerConnections,
+    getOpenDataChannels,
     applyTurnFallback,
     isFallbackActive,
     getConnectionState,
@@ -364,11 +410,33 @@ export function ChatArea({
   const hasRemoteTheaterShare = isRemoteSharing && !!remoteScreenStream;
   const hasLocalTheaterShare = isLocalScreenSharing && !!localScreenStream;
   const isTheaterMode = hasRemoteTheaterShare || hasLocalTheaterShare;
-  const theaterPrimaryStream = remoteScreenStream ?? localScreenStream ?? null;
-  const theaterPrimaryIsLocal = !remoteScreenStream && !!localScreenStream;
-  const showTheaterLocalPreview =
-    !!remoteScreenStream && isLocalScreenSharing && !!localScreenStream;
+  const theaterStreams = [
+    ...(hasRemoteTheaterShare && remoteScreenStream
+      ? [
+          {
+            id: "remote",
+            stream: remoteScreenStream,
+            label: partner?.name || "Partner",
+            isLocal: false,
+            key: `remote-${remoteStreamVersion}`,
+          },
+        ]
+      : []),
+    ...(hasLocalTheaterShare && localScreenStream
+      ? [
+          {
+            id: "local",
+            stream: localScreenStream,
+            label: "You",
+            isLocal: true,
+            key: `local-${localScreenStream.id}`,
+          },
+        ]
+      : []),
+  ];
+  const hasDualTheaterStreams = theaterStreams.length > 1;
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // ── Voice Chat ──────────────────────────────────────────────────
   const {
@@ -815,6 +883,11 @@ export function ChatArea({
     friendRequestsSent,
     friendRequestsReceived,
     friendList,
+    friendRequestsEnabled,
+    badgeVisibility,
+    interests,
+    interestsVisibility,
+    joinedAt,
     sendFriendRequest: sendFriendRequestAction,
     acceptFriendRequest,
     declineFriendRequest,
@@ -843,6 +916,8 @@ export function ChatArea({
         "--viewport-height",
         `${height}px`,
       );
+      const fullHeight = window.innerHeight || height;
+      setIsKeyboardVisible(isMobile && fullHeight - height > 120);
     };
     updateViewportHeight();
     window.visualViewport?.addEventListener("resize", updateViewportHeight);
@@ -853,7 +928,7 @@ export function ChatArea({
       window.visualViewport?.removeEventListener("scroll", updateViewportHeight);
       window.removeEventListener("resize", updateViewportHeight);
     };
-  }, []);
+  }, [isMobile]);
 
 
   useEffect(() => {
@@ -899,6 +974,59 @@ export function ChatArea({
     [devLog],
   );
 
+  const clearKeyExchangeGate = useCallback((peer: string | null | undefined) => {
+    if (!peer) return;
+    keyExchangeModeRef.current.delete(peer);
+    responderFallbackEligibleAtRef.current.delete(peer);
+    const keysToDelete: string[] = [];
+    processedKeyPayloadFpRef.current.forEach((_, key) => {
+      if (key.startsWith(`${peer}:`)) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach((key) => processedKeyPayloadFpRef.current.delete(key));
+  }, []);
+
+  const beginKeyExchangeCycle = useCallback(
+    (peer: string, mode: "normal" | "reconnect") => {
+      const nextEpoch = (keyExchangeEpochRef.current.get(peer) ?? 0) + 1;
+      keyExchangeEpochRef.current.set(peer, nextEpoch);
+      keyExchangeModeRef.current.set(peer, mode);
+      if (mode === "reconnect") {
+        responderFallbackEligibleAtRef.current.set(
+          peer,
+          Date.now() + KEY_EXCHANGE_RESPONDER_FALLBACK_GATE_MS,
+        );
+      } else {
+        responderFallbackEligibleAtRef.current.delete(peer);
+      }
+      const keysToDelete: string[] = [];
+      processedKeyPayloadFpRef.current.forEach((_, key) => {
+        if (key.startsWith(`${peer}:`)) {
+          keysToDelete.push(key);
+        }
+      });
+      keysToDelete.forEach((key) => processedKeyPayloadFpRef.current.delete(key));
+    },
+    [],
+  );
+
+  const isDuplicateKeyPayload = useCallback(
+    (peer: string, kind: "keys_response" | "handshake", payload: string) => {
+      const fp = fingerprintValue(payload);
+      if (!fp) return false;
+      const epoch = keyExchangeEpochRef.current.get(peer) ?? 0;
+      const key = `${peer}:${epoch}:${kind}`;
+      const previousFp = processedKeyPayloadFpRef.current.get(key);
+      if (previousFp === fp) {
+        return true;
+      }
+      processedKeyPayloadFpRef.current.set(key, fp);
+      return false;
+    },
+    [],
+  );
+
   useEffect(() => {
     if (
       shouldMarkSignalReady({
@@ -915,8 +1043,10 @@ export function ChatArea({
         });
       }
       isReconnectingRef.current = false;
+      clearKeyExchangeGate(partnerId);
     }
   }, [
+    clearKeyExchangeGate,
     emitEncryptionMetric,
     partnerId,
     isCryptoReady,
@@ -952,9 +1082,13 @@ export function ChatArea({
     if (pendingKeysResponse && myPeerId < partnerId) {
       pendingKeysResponseRef.current.delete(partnerId);
       try {
-        const initiation = initiateSignalSession(partnerId, pendingKeysResponse);
-        sendHandshake(partnerId, initiation as any);
-        setIsSignalReady(true);
+        if (!isDuplicateKeyPayload(partnerId, "keys_response", pendingKeysResponse)) {
+          const initiation = initiateSignalSession(partnerId, pendingKeysResponse);
+          sendHandshake(partnerId, initiation as any);
+          isReconnectingRef.current = false;
+          setIsSignalReady(true);
+          clearKeyExchangeGate(partnerId);
+        }
       } catch (err) {
         console.error(
           "[ChatArea] [Signal Debug] Failed to process pending KeysResponse:",
@@ -967,8 +1101,12 @@ export function ChatArea({
     if (pendingHandshake && myPeerId > partnerId) {
       pendingHandshakeRef.current.delete(partnerId);
       try {
-        respondToSignalSession(partnerId, pendingHandshake);
-        setIsSignalReady(true);
+        if (!isDuplicateKeyPayload(partnerId, "handshake", pendingHandshake)) {
+          respondToSignalSession(partnerId, pendingHandshake);
+          isReconnectingRef.current = false;
+          setIsSignalReady(true);
+          clearKeyExchangeGate(partnerId);
+        }
       } catch (err) {
         console.error(
           "[ChatArea] [Signal Debug] Failed to process pending SignalHandshake:",
@@ -984,6 +1122,8 @@ export function ChatArea({
     initiateSignalSession,
     sendHandshake,
     respondToSignalSession,
+    isDuplicateKeyPayload,
+    clearKeyExchangeGate,
   ]);
 
   const addIncomingChatMessage = useCallback(
@@ -1026,6 +1166,15 @@ export function ChatArea({
           })()
           : null,
       });
+      recentlyHandledEncryptedRef.current.set(`${from}:${message.id}`, Date.now());
+      if (recentlyHandledEncryptedRef.current.size > 500) {
+        const cutoff = Date.now() - ENCRYPTED_MESSAGE_DEDUPE_TTL_MS;
+        recentlyHandledEncryptedRef.current.forEach((handledAt, key) => {
+          if (handledAt < cutoff) {
+            recentlyHandledEncryptedRef.current.delete(key);
+          }
+        });
+      }
       if (from === partnerId && message.avatarUrl) {
         setPartnerAvatarUrl(message.avatarUrl);
       }
@@ -1058,6 +1207,19 @@ export function ChatArea({
     [decryptMessage],
   );
 
+  const enqueuePendingEncryptedMessage = useCallback(
+    (message: IncomingChatMessage, from: string) => {
+      const key = `${from}:${message.id}`;
+      const existing = pendingEncryptedMessagesRef.current.get(key);
+      pendingEncryptedMessagesRef.current.set(key, {
+        message,
+        from,
+        receivedAt: existing?.receivedAt ?? Date.now(),
+      });
+    },
+    [],
+  );
+
   const recoverEncryptionSession = useCallback(
     (from: string) => {
       if (!from || !isCryptoReady || !signalingConnected) return;
@@ -1072,6 +1234,7 @@ export function ChatArea({
         });
         setIsSignalReady(false);
         keyExchangeInitiatedRef.current = null;
+        beginKeyExchangeCycle(from, "reconnect");
         clearSignalSession(from);
         const bundle = generatePreKeyBundle();
         publishKeys(bundle as any);
@@ -1085,6 +1248,7 @@ export function ChatArea({
       isCryptoReady,
       signalingConnected,
       clearSignalSession,
+      beginKeyExchangeCycle,
       emitEncryptionMetric,
       generatePreKeyBundle,
       publishKeys,
@@ -1115,6 +1279,11 @@ export function ChatArea({
         return;
       }
       try {
+        if (decryptInFlightRef.current.has(key)) {
+          remaining += 1;
+          return;
+        }
+        decryptInFlightRef.current.add(key);
         const decrypted = decryptIncomingContent(entry.message, entry.from);
         encryptionCountersRef.current.flushed += 1;
         emitEncryptionMetric("encryption_queue_flushed", entry.from, {
@@ -1139,13 +1308,15 @@ export function ChatArea({
           recoverEncryptionSession(entry.from);
           remaining += 1;
         }
+      } finally {
+        decryptInFlightRef.current.delete(key);
       }
     });
     if (remaining > 0 && !pendingDecryptFlushTimerRef.current) {
       pendingDecryptFlushTimerRef.current = setTimeout(() => {
         pendingDecryptFlushTimerRef.current = null;
         flushPendingEncryptedMessages();
-      }, 800);
+      }, 250);
     }
   }, [
     addIncomingChatMessage,
@@ -1157,7 +1328,7 @@ export function ChatArea({
   ]);
 
   const schedulePendingEncryptedFlush = useCallback(
-    (delayMs = 600) => {
+    (delayMs = 120) => {
       if (pendingDecryptFlushTimerRef.current) return;
       pendingDecryptFlushTimerRef.current = setTimeout(() => {
         pendingDecryptFlushTimerRef.current = null;
@@ -1173,6 +1344,10 @@ export function ChatArea({
       username: displayName || "Anonymous",
       avatarSeed,
       avatarUrl: avatarUrl || null,
+      interests,
+      interestsVisibility,
+      badgeVisibility,
+      joinedAt,
     };
     const directTargets = isDirectConnectMode
       ? Array.from(new Set(peersInRoom))
@@ -1193,9 +1368,13 @@ export function ChatArea({
     displayName,
     avatarSeed,
     avatarUrl,
+    interests,
+    interestsVisibility,
     isDirectConnectMode,
     peersInRoom,
     partnerId,
+    badgeVisibility,
+    joinedAt,
   ]);
 
   const CHAT_CACHE_PREFIX = "buzzu_chat_cache_";
@@ -1661,12 +1840,18 @@ export function ChatArea({
   ) => {
     const currentAvatarUrl =
       username === partnerName ? partnerAvatarUrl : avatarUrl || null;
+    const resolvedPeerId = clickedPeerId || partnerId || "";
+    const meta = resolvedPeerId ? peerProfileMeta[resolvedPeerId] : undefined;
     setSelectedProfile({
-      peerId: clickedPeerId || "",
+      peerId: resolvedPeerId,
       username,
       avatarSeed,
       avatarUrl: currentAvatarUrl,
       isVerified,
+      interests: meta?.interests,
+      interestsVisibility: meta?.interestsVisibility,
+      badgeVisibility: meta?.badgeVisibility,
+      joinedAt: meta?.joinedAt,
     });
     setIsProfileModalOpen(true);
   };
@@ -1749,6 +1934,9 @@ export function ChatArea({
         });
       } else {
         if (targetPeerId) {
+          getOpenDataChannels(targetPeerId).forEach((channel) => {
+            addChannel(channel);
+          });
           const partnerPc = getPeerConnection(targetPeerId);
           const channelMap = (partnerPc as any)?.dataChannels as
             | Map<string, RTCDataChannel>
@@ -1763,24 +1951,180 @@ export function ChatArea({
 
       return Array.from(openChannels);
     },
-    [isDirectConnectMode, getPeerConnections, getPeerConnection],
+    [isDirectConnectMode, getPeerConnections, getPeerConnection, getOpenDataChannels],
+  );
+
+  const markP2PHealthy = useCallback(
+    (targetPeerId: string, rttMs: number) => {
+      p2pHealthyPeersRef.current.set(targetPeerId, { lastAckAt: Date.now(), rttMs });
+      traceE2E("chat.p2p.health.confirmed", {
+        fromPeerId: peerId,
+        toPeerId: targetPeerId,
+        rttMs: Number(rttMs.toFixed(1)),
+        status: "healthy",
+      }, "info");
+    },
+    [peerId],
+  );
+
+  const sendP2PProbe = useCallback(
+    (channel: RTCDataChannel, targetPeerId: string) => {
+      if (channel.readyState !== "open") return;
+      const probeId = `${targetPeerId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      const sentAt = Date.now();
+      const payload = JSON.stringify({
+        type: "p2p_probe",
+        probeId,
+        sentAt,
+      });
+      try {
+        channel.send(payload);
+      } catch (err) {
+        traceE2E("chat.p2p.probe.send_failed", {
+          probeId,
+          fromPeerId: peerId,
+          toPeerId: targetPeerId,
+          error: err instanceof Error ? err.message : String(err),
+        }, "warn");
+        return;
+      }
+      pendingP2PProbeRef.current.set(probeId, { peerId: targetPeerId, sentAt });
+      const existingTimeout = p2pProbeTimeoutsRef.current.get(probeId);
+      if (existingTimeout) clearTimeout(existingTimeout);
+      const timeout = setTimeout(() => {
+        p2pProbeTimeoutsRef.current.delete(probeId);
+        pendingP2PProbeRef.current.delete(probeId);
+        traceE2E("chat.p2p.probe.timeout", {
+          probeId,
+          fromPeerId: peerId,
+          toPeerId: targetPeerId,
+          timeoutMs: P2P_PROBE_TIMEOUT_MS,
+        }, "warn");
+      }, P2P_PROBE_TIMEOUT_MS);
+      p2pProbeTimeoutsRef.current.set(probeId, timeout);
+      traceE2E("chat.p2p.probe.sent", {
+        probeId,
+        fromPeerId: peerId,
+        toPeerId: targetPeerId,
+        channelLabel: channel.label,
+      }, "debug");
+    },
+    [peerId],
+  );
+
+  const clearPendingSignalFallback = useCallback((messageId: string) => {
+    const timer = pendingSignalFallbackTimersRef.current.get(messageId);
+    if (timer) {
+      clearTimeout(timer);
+      pendingSignalFallbackTimersRef.current.delete(messageId);
+    }
+  }, []);
+
+  const sendChatDeliveryAck = useCallback(
+    (targetPeerId: string, messageId: string) => {
+      if (!targetPeerId || !messageId) return;
+      const ackPayload = JSON.stringify({
+        type: "chat_ack",
+        messageId,
+      });
+      const channels = resolveOpenChatChannels(targetPeerId);
+      traceE2E("chat.ack.outbound", {
+        transport: "p2p_data_channel",
+        messageId,
+        fromPeerId: peerId,
+        toPeerId: targetPeerId,
+        openChannelCount: channels.length,
+      }, "debug");
+      channels.forEach((channel) => {
+        try {
+          channel.send(ackPayload);
+        } catch (_) { }
+      });
+    },
+    [peerId, resolveOpenChatChannels],
   );
 
   const handleSendMessage = useCallback(
     async (content: string, replyToMessage?: Message | null) => {
+      const messageId = makeId();
       let encryptedContent: string | undefined;
       let isEncrypted = false;
+      const partnerHasSignalSession = !!(partnerId && hasSignalSession(partnerId));
+      traceE2E("chat.message.create", {
+        messageId,
+        fromPeerId: peerId,
+        toPeerId: partnerId ?? null,
+        roomId: activeRoomId ?? null,
+        plaintextLength: content.length,
+        hasReply: !!replyToMessage,
+        isSignalReady,
+        isCryptoReady,
+        hasSignalSession: partnerHasSignalSession,
+      }, "info");
 
-      if (partnerId && isCryptoReady && isSignalReady) {
+      if (partnerId && isCryptoReady && isSignalReady && partnerHasSignalSession) {
         try {
+          traceE2E("chat.message.encrypt.start", {
+            messageId,
+            fromPeerId: peerId,
+            toPeerId: partnerId,
+            plaintextLength: content.length,
+          }, "debug");
           const encrypted = await encryptMessage(partnerId, content);
           encryptedContent = JSON.stringify(Array.from(encrypted));
           isEncrypted = true;
+          traceE2E("chat.message.encrypt.success", {
+            messageId,
+            fromPeerId: peerId,
+            toPeerId: partnerId,
+            plaintextLength: content.length,
+            encryptedPayloadLength: encryptedContent.length,
+            encryptedPayloadFp: fingerprintValue(encryptedContent),
+            encryptionStatus: "signal_e2e",
+          }, "info");
         } catch (e) {
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          const isMissingSessionError =
+            errorMessage.includes("No Signal session");
+          if (isMissingSessionError && partnerId) {
+            traceE2E("chat.message.blocked_no_secure_session", {
+              messageId,
+              fromPeerId: peerId,
+              toPeerId: partnerId,
+              isSignalReady,
+              isCryptoReady,
+              hasSignalSession: hasSignalSession(partnerId),
+              encryptionStatus: "not_ready",
+              recoveredFromEncryptError: true,
+            }, "warn");
+            recoverEncryptionSession(partnerId);
+            const rid = activeRoomId;
+            if (rid)
+              useMessageStore.getState().addMessage(rid, {
+                id: makeId(),
+                username: "System",
+                avatarSeed: "",
+                avatarUrl: null,
+                timestamp: now(),
+                content:
+                  "⚠ Message not sent — secure session is not ready yet. Retrying key exchange.",
+                isVerified: false,
+                replyToMessage: null,
+              });
+            return;
+          }
           console.error(
             "[ChatArea] Encryption failed — refusing to send plaintext:",
             e,
           );
+          traceE2E("chat.message.encrypt.failed", {
+            messageId,
+            fromPeerId: peerId,
+            toPeerId: partnerId,
+            plaintextLength: content.length,
+            encryptionStatus: "failed",
+            error: errorMessage,
+          }, "error");
           // SECURITY: Never silently downgrade to plaintext. Notify the user.
           const rid = activeRoomId;
           if (rid)
@@ -1798,6 +2142,32 @@ export function ChatArea({
           return; // Abort — do NOT send plaintext
         }
       }
+      if (partnerId && !isEncrypted) {
+        traceE2E("chat.message.blocked_no_secure_session", {
+          messageId,
+          fromPeerId: peerId,
+          toPeerId: partnerId,
+          isSignalReady,
+          isCryptoReady,
+          hasSignalSession: hasSignalSession(partnerId),
+          encryptionStatus: "not_ready",
+        }, "warn");
+        recoverEncryptionSession(partnerId);
+        const rid = activeRoomId;
+        if (rid)
+          useMessageStore.getState().addMessage(rid, {
+            id: makeId(),
+            username: "System",
+            avatarSeed: "",
+            avatarUrl: null,
+            timestamp: now(),
+            content:
+              "⚠ Message not sent — secure session is not ready yet. Retrying key exchange.",
+            isVerified: false,
+            replyToMessage: null,
+          });
+        return;
+      }
 
       // Async closure validation check to prevent broadcasting after skip
       if (activeRoomIdRef.current !== activeRoomId) {
@@ -1808,7 +2178,10 @@ export function ChatArea({
       let openChannels = resolveOpenChatChannels(partnerId);
       if (openChannels.length === 0 && partnerId && !isDirectConnectMode) {
         try {
-          const becameReady = await waitForDataChannelOpen(partnerId, 1200);
+          const becameReady = await waitForDataChannelOpen(
+            partnerId,
+            MESSAGE_P2P_OPEN_WAIT_MS,
+          );
           if (becameReady) {
             openChannels = resolveOpenChatChannels(partnerId);
           }
@@ -1818,7 +2191,8 @@ export function ChatArea({
       }
 
       const rid = activeRoomId;
-      if (openChannels.length === 0) {
+      const canUseSignalingFallback = !!(partnerId && signalingConnected);
+      if (openChannels.length === 0 && !canUseSignalingFallback) {
         if (rid)
           useMessageStore.getState().addMessage(rid, {
             id: makeId(),
@@ -1834,48 +2208,118 @@ export function ChatArea({
       }
 
       const message = {
-        id: makeId(),
+        id: messageId,
         username: "Me",
         avatarSeed: avatarSeed,
         avatarUrl: avatarUrl || null,
         timestamp: now(),
         content, // Local message stays plaintext
-        isVerified: isVerified,
+        isVerified:
+          isVerified &&
+          (badgeVisibility === "Everyone" ||
+            (badgeVisibility === "Friends" &&
+              !!partnerId &&
+              friendList.some((friend) => friend.id === partnerId))),
         senderId: peerId,
         replyToMessage: replyToMessage || null,
       };
 
       if (rid) useMessageStore.getState().addMessage(rid, message);
+      const outgoingMessage = {
+        id: message.id,
+        username: displayName || "Anonymous",
+        avatarSeed: avatarSeed,
+        avatarUrl: avatarUrl || null,
+        timestamp: message.timestamp,
+        content: isEncrypted ? "[encrypted]" : content,
+        encryptedContent,
+        isVerified:
+          isVerified &&
+          (badgeVisibility === "Everyone" ||
+            (badgeVisibility === "Friends" &&
+              !!partnerId &&
+              friendList.some((friend) => friend.id === partnerId))),
+        isEncrypted,
+        replyToMessage: replyToMessage
+          ? {
+            id: replyToMessage.id,
+            content: isEncrypted ? "[encrypted]" : replyToMessage.content,
+          }
+          : null,
+      };
       const outgoingPayload = JSON.stringify({
         type: "chat_message",
-        message: {
-          id: message.id,
-          username: displayName || "Anonymous",
-          avatarSeed: avatarSeed,
-          avatarUrl: avatarUrl || null,
-          timestamp: message.timestamp,
-          content: isEncrypted ? "[encrypted]" : content,
-          encryptedContent,
-          isVerified: isVerified,
-          isEncrypted,
-          replyToMessage: replyToMessage
-            ? {
-              id: replyToMessage.id,
-              content: isEncrypted ? "[encrypted]" : replyToMessage.content,
-            }
-            : null,
-        },
+        message: outgoingMessage,
       });
       let sentCount = 0;
       openChannels.forEach((channel) => {
         try {
           channel.send(outgoingPayload);
           sentCount += 1;
+          traceE2E("chat.message.outbound", {
+            messageId: outgoingMessage.id,
+            fromPeerId: peerId,
+            toPeerId: partnerId ?? null,
+            roomId: activeRoomId ?? null,
+            transport: "p2p_data_channel",
+            channelLabel: channel.label,
+            isEncryptedFlag: outgoingMessage.isEncrypted,
+            hasEncryptedContent: !!outgoingMessage.encryptedContent,
+            encryptionStatus: outgoingMessage.isEncrypted ? "signal_e2e" : "not_encrypted",
+          }, "info");
         } catch (err) {
           console.warn("[ChatArea] Failed to send chat message over data channel:", err);
+          traceE2E("chat.message.outbound_failed", {
+            messageId: outgoingMessage.id,
+            fromPeerId: peerId,
+            toPeerId: partnerId ?? null,
+            transport: "p2p_data_channel",
+            error: err instanceof Error ? err.message : String(err),
+          }, "warn");
         }
       });
       if (sentCount === 0) {
+        if (canUseSignalingFallback && partnerId) {
+          try {
+            sendChatMessageSignaling(partnerId, outgoingMessage as any);
+            traceE2E("chat.message.outbound", {
+              messageId: outgoingMessage.id,
+              fromPeerId: peerId,
+              toPeerId: partnerId,
+              roomId: activeRoomId ?? null,
+              transport: "signaling_fallback",
+              isEncryptedFlag: outgoingMessage.isEncrypted,
+              hasEncryptedContent: !!outgoingMessage.encryptedContent,
+              encryptionStatus: outgoingMessage.isEncrypted ? "signal_e2e" : "not_encrypted",
+            }, "warn");
+          } catch (err) {
+            traceE2E("chat.message.outbound_failed", {
+              messageId: outgoingMessage.id,
+              fromPeerId: peerId,
+              toPeerId: partnerId,
+              transport: "signaling_fallback",
+              error: err instanceof Error ? err.message : String(err),
+            }, "error");
+            if (rid) {
+              useMessageStore.getState().removeMessage(rid, message.id);
+              useMessageStore.getState().addMessage(rid, {
+                id: makeId(),
+                username: "System",
+                avatarSeed: "",
+                avatarUrl: null,
+                timestamp: now(),
+                content: "⚠ Message could not be sent — fallback signaling failed.",
+                isVerified: false,
+                replyToMessage: null,
+              });
+            }
+            return;
+          }
+          setReplyingTo(null);
+          setEditingMessage(null);
+          updatePeerActivity();
+          return;
+        }
         if (rid) {
           useMessageStore.getState().removeMessage(rid, message.id);
           useMessageStore.getState().addMessage(rid, {
@@ -1892,6 +2336,82 @@ export function ChatArea({
         return;
       }
 
+      if (partnerId && signalingConnected) {
+        ackedOutgoingMessagesRef.current.delete(message.id);
+        clearPendingSignalFallback(message.id);
+        const p2pHealth = partnerId
+          ? p2pHealthyPeersRef.current.get(partnerId) ?? null
+          : null;
+        const hasFreshP2PHealth =
+          !!p2pHealth && Date.now() - p2pHealth.lastAckAt < 8_000;
+        const partnerPc = partnerId ? getPeerConnection(partnerId) : null;
+        const hasConnectedP2P =
+          partnerPc?.connectionState === "connected" &&
+          partnerPc?.iceConnectionState === "connected";
+        const hasRecentP2PHealth =
+          !!p2pHealth && Date.now() - p2pHealth.lastAckAt < 30_000;
+        const shouldTreatP2PAsHealthy = hasFreshP2PHealth || (hasConnectedP2P && hasRecentP2PHealth);
+        if (sentCount > 0 && shouldTreatP2PAsHealthy) {
+          traceE2E("chat.message.fallback.skipped_healthy_p2p", {
+            messageId: message.id,
+            fromPeerId: peerId,
+            toPeerId: partnerId,
+            sentCount,
+            p2pLastRttMs: p2pHealth?.rttMs ?? null,
+          }, "info");
+          setReplyingTo(null);
+          setEditingMessage(null);
+          updatePeerActivity();
+          return;
+        }
+        const fallbackDelayMs = shouldTreatP2PAsHealthy
+          ? MESSAGE_SIGNAL_FALLBACK_DELAY_WHEN_P2P_HEALTHY_MS
+          : MESSAGE_SIGNAL_FALLBACK_DELAY_MS;
+        traceE2E("chat.message.fallback.scheduled", {
+          messageId: message.id,
+          fromPeerId: peerId,
+          toPeerId: partnerId,
+          fallbackDelayMs,
+          p2pHealthy: shouldTreatP2PAsHealthy,
+          p2pLastRttMs: p2pHealth?.rttMs ?? null,
+        }, shouldTreatP2PAsHealthy ? "debug" : "warn");
+        const timer = setTimeout(() => {
+          pendingSignalFallbackTimersRef.current.delete(message.id);
+          if (ackedOutgoingMessagesRef.current.has(message.id)) {
+            traceE2E("chat.message.fallback.cancelled_ack", {
+              messageId: message.id,
+              fromPeerId: peerId,
+              toPeerId: partnerId,
+              transport: "signaling_fallback",
+            }, "debug");
+            return;
+          }
+          try {
+            sendChatMessageSignaling(partnerId, outgoingMessage as any);
+            traceE2E("chat.message.outbound", {
+              messageId: message.id,
+              fromPeerId: peerId,
+              toPeerId: partnerId,
+              roomId: activeRoomId ?? null,
+              transport: "signaling_fallback_retry",
+              isEncryptedFlag: outgoingMessage.isEncrypted,
+              hasEncryptedContent: !!outgoingMessage.encryptedContent,
+              encryptionStatus: outgoingMessage.isEncrypted ? "signal_e2e" : "not_encrypted",
+            }, "warn");
+          } catch (err) {
+            console.warn("[ChatArea] Failed to send chat message over signaling fallback:", err);
+            traceE2E("chat.message.outbound_failed", {
+              messageId: message.id,
+              fromPeerId: peerId,
+              toPeerId: partnerId,
+              transport: "signaling_fallback_retry",
+              error: err instanceof Error ? err.message : String(err),
+            }, "error");
+          }
+        }, fallbackDelayMs);
+        pendingSignalFallbackTimersRef.current.set(message.id, timer);
+      }
+
       // Clear reply/edit state after sending
       setReplyingTo(null);
       setEditingMessage(null);
@@ -1901,23 +2421,36 @@ export function ChatArea({
       displayName,
       isCryptoReady,
       encryptMessage,
+      hasSignalSession,
       isVerified,
       isSignalReady,
       avatarSeed,
       avatarUrl,
+      badgeVisibility,
       activeRoomId,
+      peerId,
       isDirectConnectMode,
       partnerId,
+      friendList,
+      signalingConnected,
       waitForDataChannelOpen,
       resolveOpenChatChannels,
+      clearPendingSignalFallback,
+      markP2PHealthy,
+      sendChatMessageSignaling,
+      recoverEncryptionSession,
       updatePeerActivity,
     ],
   );
 
   const handleIncomingChatMessage = useCallback(
-    (message: IncomingChatMessage, from: string) => {
+    (
+      message: IncomingChatMessage,
+      from: string,
+      transport: "signaling" | "p2p_data_channel" = "signaling",
+    ) => {
       const incomingAudio = incomingMessageAudioRef.current;
-      if (incomingAudio) {
+      if (incomingAudio && useSessionStore.getState().notificationSoundEnabled) {
         try {
           incomingAudio.currentTime = 0;
           incomingAudio.play().catch(() => { });
@@ -1931,58 +2464,148 @@ export function ChatArea({
           "from:",
           from,
         );
+      sendChatDeliveryAck(from, message.id);
+      const rid = activeRoomIdRef.current;
+      if (rid) {
+        const exists = useMessageStore
+          .getState()
+          .getMessages(rid)
+          .some((m) => m.id === message.id);
+        if (exists) {
+          return;
+        }
+      }
 
       const hasEncryptedContent = !!message.encryptedContent;
       const isEncryptedFlag = !!message.isEncrypted;
       const isEncryptedMessage =
         hasEncryptedContent || isEncryptedFlag || message.content === "[encrypted]";
       const canDecrypt = isCryptoReady && hasSignalSession(from);
+      if (transport === "p2p_data_channel") {
+        markP2PHealthy(from, 1);
+      }
+      traceE2E("chat.message.inbound", {
+        messageId: message.id,
+        fromPeerId: from,
+        toPeerId: peerId,
+        roomId: activeRoomIdRef.current ?? null,
+        transport,
+        isEncryptedFlag,
+        hasEncryptedContent,
+        encryptionStatus: isEncryptedMessage ? "claimed_encrypted" : "plaintext",
+        canDecrypt,
+        hasSignalSession: hasSignalSession(from),
+        isSignalReady,
+      }, "info");
 
       if (isEncryptedMessage && !canDecrypt) {
         encryptionCountersRef.current.queued += 1;
         emitEncryptionMetric("encryption_message_queued", from, {
           total: encryptionCountersRef.current.queued,
         });
-        pendingEncryptedMessagesRef.current.set(`${from}:${message.id}`, {
-          message,
-          from,
-          receivedAt: Date.now(),
-        });
+        enqueuePendingEncryptedMessage(message, from);
+        traceE2E("chat.message.inbound_queued", {
+          messageId: message.id,
+          fromPeerId: from,
+          toPeerId: peerId,
+          transport,
+          queueSize: pendingEncryptedMessagesRef.current.size,
+          reason: "session_not_ready",
+        }, "warn");
         recoverEncryptionSession(from);
         schedulePendingEncryptedFlush();
         return;
       }
 
       if (isEncryptedMessage) {
+        const encryptedKey = `${from}:${message.id}`;
+        const lastHandledAt =
+          recentlyHandledEncryptedRef.current.get(encryptedKey) ?? 0;
+        if (Date.now() - lastHandledAt < ENCRYPTED_MESSAGE_DEDUPE_TTL_MS) {
+          traceE2E("chat.message.inbound_deduped", {
+            messageId: message.id,
+            fromPeerId: from,
+            toPeerId: peerId,
+            transport,
+            reason: "recently_handled",
+          }, "debug");
+          return;
+        }
+        if (decryptInFlightRef.current.has(encryptedKey)) {
+          traceE2E("chat.message.inbound_deduped", {
+            messageId: message.id,
+            fromPeerId: from,
+            toPeerId: peerId,
+            transport,
+            reason: "decrypt_in_flight",
+          }, "debug");
+          return;
+        }
+        decryptInFlightRef.current.add(encryptedKey);
         try {
+          traceE2E("chat.message.decrypt.start", {
+            messageId: message.id,
+            fromPeerId: from,
+            toPeerId: peerId,
+            transport,
+            encryptedPayloadFp:
+              typeof message.encryptedContent === "string"
+                ? fingerprintValue(message.encryptedContent)
+                : null,
+          }, "debug");
           const decrypted = decryptIncomingContent(message, from);
           addIncomingChatMessage(message, from, decrypted);
+          traceE2E("chat.message.decrypt.success", {
+            messageId: message.id,
+            fromPeerId: from,
+            toPeerId: peerId,
+            transport,
+            plaintextLength: decrypted.length,
+            encryptionStatus: "signal_e2e",
+          }, "info");
         } catch (err) {
           console.error("[ChatArea] Decryption failed, scheduling retry:", err);
           encryptionCountersRef.current.decryptFail += 1;
           emitEncryptionMetric("encryption_decrypt_failed", from, {
             total: encryptionCountersRef.current.decryptFail,
           });
-          pendingEncryptedMessagesRef.current.set(`${from}:${message.id}`, {
-            message,
-            from,
-            receivedAt: Date.now(),
-          });
+          traceE2E("chat.message.decrypt.failed", {
+            messageId: message.id,
+            fromPeerId: from,
+            toPeerId: peerId,
+            transport,
+            error: err instanceof Error ? err.message : String(err),
+          }, "error");
+          enqueuePendingEncryptedMessage(message, from);
           recoverEncryptionSession(from);
           schedulePendingEncryptedFlush();
+        } finally {
+          decryptInFlightRef.current.delete(encryptedKey);
         }
         return;
       }
       addIncomingChatMessage(message, from, message.content);
+      traceE2E("chat.message.accepted_plaintext", {
+        messageId: message.id,
+        fromPeerId: from,
+        toPeerId: peerId,
+        transport,
+        plaintextLength: typeof message.content === "string" ? message.content.length : 0,
+      }, "warn");
     },
     [
       addIncomingChatMessage,
       decryptIncomingContent,
+      enqueuePendingEncryptedMessage,
       emitEncryptionMetric,
       hasSignalSession,
       isCryptoReady,
+      isSignalReady,
+      peerId,
       recoverEncryptionSession,
       schedulePendingEncryptedFlush,
+      sendChatDeliveryAck,
+      markP2PHealthy,
     ],
   );
 
@@ -1995,7 +2618,7 @@ export function ChatArea({
     };
 
     register(onChatMessage((message, from) => {
-      handleIncomingChatMessage(message, from);
+      handleIncomingChatMessage(message, from, "signaling");
     }));
 
     register(onTyping((isTyping, from) => {
@@ -2020,9 +2643,33 @@ export function ChatArea({
           closeCode === 4001 ||
           normalizedReason === "skip" ||
           normalizedReason === "intentional_skip";
+        const isTransientLeave =
+          normalizedReason === "" ||
+          normalizedReason === "disconnect" ||
+          normalizedReason === "transient_disconnect";
         if (isSkipLeave) {
           partnerSkipIntentRef.current.add(leftPeerId);
           finalizePartnerSkip();
+          return;
+        }
+        if (isTransientLeave) {
+          console.log(
+            "[ChatArea] Partner transient signaling disconnect — waiting for reconnect",
+            { reason, closeCode },
+          );
+          pendingLeavePeerRef.current = leftPeerId;
+          if (partnerLeaveTimerRef.current) {
+            clearTimeout(partnerLeaveTimerRef.current);
+            partnerLeaveTimerRef.current = null;
+          }
+          partnerLeaveTimerRef.current = setTimeout(() => {
+            if (!isMountedRef.current) return;
+            if (pendingLeavePeerRef.current !== leftPeerId) return;
+            finalizePartnerSkip();
+          }, PARTNER_RECONNECT_GRACE_MS);
+          setIsSignalReady(false);
+          keyExchangeInitiatedRef.current = null;
+          isReconnectingRef.current = true;
           return;
         }
         if (partnerSkipIntentRef.current.has(leftPeerId)) {
@@ -2041,7 +2688,7 @@ export function ChatArea({
           if (!isMountedRef.current) return;
           if (pendingLeavePeerRef.current !== leftPeerId) return;
           finalizePartnerSkip();
-        }, 1400);
+        }, PARTNER_RECONNECT_GRACE_MS);
         setIsSignalReady(false);
         keyExchangeInitiatedRef.current = null;
         isReconnectingRef.current = true;
@@ -2140,6 +2787,14 @@ export function ChatArea({
         "isCryptoReady:",
         isCryptoReady,
       );
+      traceE2E("chat.key_exchange.request.received", {
+        fromPeerId: from,
+        toPeerId: peerId,
+        partnerId: partnerId ?? null,
+        isCryptoReady,
+        isSignalReady,
+        hasSession: hasSignalSession(from),
+      }, "info");
       if (from === partnerId && isCryptoReady) {
         try {
           const nowTs = Date.now();
@@ -2169,6 +2824,11 @@ export function ChatArea({
           // sendKeysResponse expects an object (or string), let it handle stringification
           sendKeysResponse(from, bundle as any);
           console.log("[ChatArea] [Signal Debug] Keys response sent to:", from);
+          traceE2E("chat.key_exchange.response.sent", {
+            fromPeerId: peerId,
+            toPeerId: from,
+            isReconnecting: isReconnectingRef.current,
+          }, "info");
         } catch (err) {
           console.error(
             "[ChatArea] [Signal Debug] Error in onKeysRequest:",
@@ -2206,6 +2866,16 @@ export function ChatArea({
       //
       const myPeerId = useSessionStore.getState().peerId;
       const isInitiator = myPeerId < from;
+      traceE2E("chat.key_exchange.response.received", {
+        fromPeerId: from,
+        toPeerId: peerId,
+        isInitiator,
+        isCryptoReady,
+        isSignalReady,
+        hasSession: hasSignalSession(from),
+        bundleLength: typeof bundleStr === "string" ? bundleStr.length : null,
+        bundleFp: typeof bundleStr === "string" ? fingerprintValue(bundleStr) : null,
+      }, "info");
       if (
         from === partnerId &&
         isCryptoReady &&
@@ -2213,6 +2883,17 @@ export function ChatArea({
         isInitiator
       ) {
         try {
+          if (
+            typeof bundleStr === "string" &&
+            isDuplicateKeyPayload(from, "keys_response", bundleStr)
+          ) {
+            traceE2E("chat.key_exchange.response.duplicate_dropped", {
+              fromPeerId: from,
+              toPeerId: peerId,
+              role: "initiator",
+            }, "info");
+            return;
+          }
           const nowTs = Date.now();
           const lastHandledAt =
             lastKeysResponseHandledAtRef.current.get(from) ?? 0;
@@ -2249,6 +2930,14 @@ export function ChatArea({
           );
           isReconnectingRef.current = false;
           setIsSignalReady(true);
+          clearKeyExchangeGate(from);
+          schedulePendingEncryptedFlush(0);
+          traceE2E("chat.key_exchange.handshake.sent", {
+            fromPeerId: peerId,
+            toPeerId: from,
+            role: "initiator",
+            handshakeLength: typeof initiation === "string" ? initiation.length : null,
+          }, "info");
         } catch (err) {
           console.error(
             "[ChatArea] [Signal Debug] Failed to initiate Signal session:",
@@ -2265,6 +2954,36 @@ export function ChatArea({
           isReconnectingRef.current
         ) {
           try {
+            if (
+              typeof bundleStr === "string" &&
+              isDuplicateKeyPayload(from, "keys_response", bundleStr)
+            ) {
+              traceE2E("chat.key_exchange.response.duplicate_dropped", {
+                fromPeerId: from,
+                toPeerId: peerId,
+                role: "responder",
+              }, "info");
+              return;
+            }
+            const fallbackEligibleAt =
+              responderFallbackEligibleAtRef.current.get(from) ?? 0;
+            if (!fallbackEligibleAt || Date.now() < fallbackEligibleAt) {
+              traceE2E("chat.key_exchange.fallback.gated", {
+                fromPeerId: from,
+                toPeerId: peerId,
+                role: "responder",
+                fallbackEligibleAt,
+                nowTs: Date.now(),
+                hasSession: hasSignalSession(from),
+              }, "info");
+              return;
+            }
+            if (hasSignalSession(from)) {
+              isReconnectingRef.current = false;
+              setIsSignalReady(true);
+              clearKeyExchangeGate(from);
+              return;
+            }
             const nowTs = Date.now();
             const lastHandledAt =
               lastKeysResponseHandledAtRef.current.get(from) ?? 0;
@@ -2279,6 +2998,14 @@ export function ChatArea({
             sendHandshake(from, initiation as any);
             setIsSignalReady(true);
             isReconnectingRef.current = false;
+            clearKeyExchangeGate(from);
+            schedulePendingEncryptedFlush(0);
+            traceE2E("chat.key_exchange.handshake.sent", {
+              fromPeerId: peerId,
+              toPeerId: from,
+              role: "responder_recovery_fallback",
+              handshakeLength: typeof initiation === "string" ? initiation.length : null,
+            }, "warn");
             return;
           } catch (err) {
             console.error(
@@ -2320,6 +3047,17 @@ export function ChatArea({
       // The initiator ignores this — they already have their session from initiateSignalSession.
       const myPeerId = useSessionStore.getState().peerId;
       const isResponder = myPeerId > from;
+      traceE2E("chat.key_exchange.handshake.received", {
+        fromPeerId: from,
+        toPeerId: peerId,
+        isResponder,
+        isCryptoReady,
+        isSignalReady,
+        hasSession: hasSignalSession(from),
+        initiationLength: typeof initiationStr === "string" ? initiationStr.length : null,
+        initiationFp:
+          typeof initiationStr === "string" ? fingerprintValue(initiationStr) : null,
+      }, "info");
       if (
         from === partnerId &&
         isCryptoReady &&
@@ -2327,6 +3065,17 @@ export function ChatArea({
         isResponder
       ) {
         try {
+          if (
+            typeof initiationStr === "string" &&
+            isDuplicateKeyPayload(from, "handshake", initiationStr)
+          ) {
+            traceE2E("chat.key_exchange.handshake.duplicate_dropped", {
+              fromPeerId: from,
+              toPeerId: peerId,
+              role: "responder",
+            }, "info");
+            return;
+          }
           const nowTs = Date.now();
           const lastHandledAt =
             lastHandshakeHandledAtRef.current.get(from) ?? 0;
@@ -2355,7 +3104,16 @@ export function ChatArea({
           console.log(
             "[ChatArea] [Signal Debug] [Responder] Signal session responded successfully",
           );
+          isReconnectingRef.current = false;
           setIsSignalReady(true);
+          clearKeyExchangeGate(from);
+          schedulePendingEncryptedFlush(0);
+          traceE2E("chat.key_exchange.handshake.accepted", {
+            fromPeerId: from,
+            toPeerId: peerId,
+            role: "responder",
+            hasSession: hasSignalSession(from),
+          }, "info");
         } catch (err) {
           console.error(
             "[ChatArea] [Signal Debug] Failed to respond to Signal handshake:",
@@ -2391,6 +3149,10 @@ export function ChatArea({
         from,
       );
       if (action === "send") {
+        if (!friendRequestsEnabled) {
+          sendFriendRequestSignaling(from, "decline");
+          return;
+        }
         handleReceivedFriendRequest({
           id: from,
           username: username || "Partner",
@@ -2404,7 +3166,18 @@ export function ChatArea({
       }
     }));
 
-    register(onProfile((from, username, avatarSeed, incomingAvatarUrl) => {
+    register(onProfile((from, username, avatarSeed, incomingAvatarUrl, metadata) => {
+      if (metadata) {
+        setPeerProfileMeta((prev) => ({
+          ...prev,
+          [from]: {
+            interests: metadata.interests,
+            interestsVisibility: metadata.interestsVisibility,
+            badgeVisibility: metadata.badgeVisibility,
+            joinedAt: metadata.joinedAt ?? null,
+          },
+        }));
+      }
       updatePeerProfile(from, {
         username: username || undefined,
         avatarSeed: avatarSeed || undefined,
@@ -2499,6 +3272,7 @@ export function ChatArea({
     onPeerLeave,
     onPeerSkip,
     finalizePartnerSkip,
+    peerId,
     partnerId,
     disconnectSignaling,
     isCryptoReady,
@@ -2525,10 +3299,13 @@ export function ChatArea({
     getPeerConnection,
     onPeerJoin,
     activeRoomId,
+    friendRequestsEnabled,
     isSignalReady,
     recoverEncryptionSession,
     schedulePendingEncryptedFlush,
     connectionState,
+    isDuplicateKeyPayload,
+    clearKeyExchangeGate,
   ]);
 
   useEffect(() => {
@@ -2538,6 +3315,16 @@ export function ChatArea({
 
   useEffect(() => {
     return () => {
+      pendingSignalFallbackTimersRef.current.forEach((timer) => clearTimeout(timer));
+      pendingSignalFallbackTimersRef.current.clear();
+      p2pProbeTimeoutsRef.current.forEach((timer) => clearTimeout(timer));
+      p2pProbeTimeoutsRef.current.clear();
+      pendingP2PProbeRef.current.clear();
+      p2pHealthyPeersRef.current.clear();
+      keyExchangeEpochRef.current.clear();
+      keyExchangeModeRef.current.clear();
+      responderFallbackEligibleAtRef.current.clear();
+      processedKeyPayloadFpRef.current.clear();
       if (pendingDecryptFlushTimerRef.current) {
         clearTimeout(pendingDecryptFlushTimerRef.current);
         pendingDecryptFlushTimerRef.current = null;
@@ -2688,10 +3475,10 @@ export function ChatArea({
         const arrayBuffer = await file.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
 
-        // Shrink to fit under 500KB or 1280px max dimension
-        const compressed = compressor.compress_to_webp(uint8Array, 1280, 1280);
+        // Shrink to fit under 500KB using JPEG (iteratively reduces dimensions)
+        const compressed = compressor.shrink_to_fit(uint8Array, 500);
 
-        const blob = new Blob([compressed], { type: "image/webp" });
+        const blob = new Blob([compressed], { type: "image/jpeg" });
         console.log(
           "[ChatArea] Compression complete:",
           (blob.size / 1024).toFixed(1),
@@ -2771,7 +3558,12 @@ export function ChatArea({
             avatarSeed: avatarSeed,
             timestamp: now(),
             content: `![image](${url})`,
-            isVerified: isVerified,
+            isVerified:
+              isVerified &&
+              (badgeVisibility === "Everyone" ||
+                (badgeVisibility === "Friends" &&
+                  !!partnerId &&
+                  friendList.some((friend) => friend.id === partnerId))),
             senderId: peerId,
             status: "sending",
             progress: 0,
@@ -2821,32 +3613,64 @@ export function ChatArea({
           continue;
         }
 
-        try {
-          console.log("[ChatArea] Starting file send for:", file.name);
-          await sendFile(channel, transferFile, isVanishMode, (p) => {
-            // Update progress for this specific message
-            if (rid)
-              useMessageStore
-                .getState()
-                .updateMessage(rid, messageId, (m) => ({ ...m, progress: p }));
-          });
+        let sendError: unknown = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const activeChannel =
+            attempt === 0 ? channel : fileTransferChannelRef.current;
+          if (!activeChannel || activeChannel.readyState !== "open") {
+            sendError = new Error("P2P Connection not ready");
+            if (!partnerId) break;
+            const channelOpened = await waitForDataChannelOpen(partnerId, 10000);
+            if (!channelOpened) break;
+            continue;
+          }
+          try {
+            console.log("[ChatArea] Starting file send for:", file.name, "attempt", attempt + 1);
+            await sendFile(activeChannel, transferFile, isVanishMode, (p) => {
+              if (rid)
+                useMessageStore
+                  .getState()
+                  .updateMessage(rid, messageId, (m) => ({ ...m, progress: p }));
+            });
+            sendError = null;
+            break;
+          } catch (err) {
+            sendError = err;
+            const errorMessage =
+              err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+            const retryable =
+              attempt === 0 &&
+              (errorMessage.includes("network") ||
+                errorMessage.includes("datachannel") ||
+                errorMessage.includes("readystate") ||
+                errorMessage.includes("not open"));
+            if (!retryable || !partnerId) {
+              break;
+            }
+            const channelOpened = await waitForDataChannelOpen(partnerId, 10000);
+            if (!channelOpened || !isDataChannelOpen(partnerId)) {
+              break;
+            }
+          }
+        }
 
-          // Mark as fully sent
+        if (!sendError) {
           if (rid)
             msgStore.updateMessage(rid, messageId, (m) => ({
               ...m,
               status: "sent",
               progress: 100,
             }));
-        } catch (err) {
-          console.error("[ChatArea] File send failed:", err);
-          if (rid)
-            msgStore.updateMessage(rid, messageId, (m) => ({
-              ...m,
-              status: "error",
-              content: `Failed to send: ${err instanceof Error ? err.message : "Unknown error"}`,
-            }));
+          continue;
         }
+
+        console.error("[ChatArea] File send failed:", sendError);
+        if (rid)
+          msgStore.updateMessage(rid, messageId, (m) => ({
+            ...m,
+            status: "error",
+            content: `Failed to send: ${sendError instanceof Error ? sendError.message : "Network error. Please retry."}`,
+          }));
       }
     },
     [
@@ -2858,6 +3682,8 @@ export function ChatArea({
       isVanishMode,
       avatarSeed,
       activeRoomId,
+      waitForDataChannelOpen,
+      isDataChannelOpen,
     ],
   );
 
@@ -3009,9 +3835,16 @@ export function ChatArea({
 
     // We need partner info from the store (persisted via localStorage)
     const state = useSessionStore.getState();
-    if (state.currentRoomId !== urlRoomId || !state.partnerId) {
+    if (state.currentRoomId !== urlRoomId || !state.partnerId || !state.peerId) {
       console.log(
         "[ChatArea] Reconnect: Room ID mismatch or no partner info, falling back to dashboard",
+      );
+      navigate("/chat/new", { replace: true });
+      return;
+    }
+    if (state.peerId === state.partnerId) {
+      console.warn(
+        "[ChatArea] Reconnect: peerId equals partnerId, resetting chat state",
       );
       navigate("/chat/new", { replace: true });
       return;
@@ -3041,7 +3874,7 @@ export function ChatArea({
     if (state.peerId < state.partnerId) {
       p2pInitRoomRef.current = urlRoomId;
     }
-  }, [urlRoomId, connectionState]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [urlRoomId, connectionState, connectSignaling, navigate]);
 
   // ── Reconnect P2P offer — fires when partner joins room ──────────
   // Split from the main reconnect effect so the offer is only sent
@@ -3062,12 +3895,12 @@ export function ChatArea({
     if (p2pInitRoomRef.current === `done:${urlRoomId}`) return;
     if (p2pInFlightRef.current.has(state.partnerId)) return;
 
-    p2pInitRoomRef.current = `done:${urlRoomId}`;
-
     const initReconnect = async () => {
-      p2pInFlightRef.current.add(state.partnerId!);
+      const partnerId = state.partnerId;
+      if (!partnerId) return;
+      p2pInFlightRef.current.add(partnerId);
       try {
-        const existingPc = getPeerConnection(state.partnerId!);
+        const existingPc = getPeerConnection(partnerId);
         if (
           existingPc &&
           existingPc.signalingState !== "closed" &&
@@ -3077,36 +3910,39 @@ export function ChatArea({
             "[ChatArea] Reconnect: skipping offer — signalingState is",
             existingPc.signalingState,
             "for:",
-            state.partnerId,
+            partnerId,
           );
+          p2pInitRoomRef.current = urlRoomId;
           return;
         }
 
         const pc =
           existingPc && existingPc.signalingState !== "closed"
             ? existingPc
-            : await createPeerConnection(state.partnerId!, undefined, true);
+            : await createPeerConnection(partnerId, undefined, true);
         if (pc.signalingState !== "stable") {
           console.log(
             "[ChatArea] Reconnect: skipping offer after PC init — signalingState is",
             pc.signalingState,
             "for:",
-            state.partnerId,
+            partnerId,
           );
+          p2pInitRoomRef.current = urlRoomId;
           return;
         }
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        sendOffer(state.partnerId!, offer);
+        sendOffer(partnerId, offer);
+        p2pInitRoomRef.current = `done:${urlRoomId}`;
         console.log(
           "[ChatArea] Reconnect: WebRTC Offer sent to:",
-          state.partnerId,
+          partnerId,
         );
       } catch (err) {
         console.error("[ChatArea] Reconnect: P2P re-initiation failed:", err);
         p2pInitRoomRef.current = urlRoomId; // allow retry
       } finally {
-        p2pInFlightRef.current.delete(state.partnerId!);
+        p2pInFlightRef.current.delete(partnerId);
       }
     };
     initReconnect();
@@ -3139,6 +3975,9 @@ export function ChatArea({
     // Wait for partner to be in the room before requesting keys
     if (!peersInRoom.includes(state.partnerId)) return;
 
+    const partnerId = state.partnerId;
+    if (!partnerId) return;
+
     if (keyExchangeInitiatedRef.current === urlRoomId) {
       // Already initiated — set up a retry in case the messages were lost.
       const retryTimer = setTimeout(() => {
@@ -3149,7 +3988,8 @@ export function ChatArea({
         keyExchangeInitiatedRef.current = null; // allow next effect run to re-initiate
         isReconnectingRef.current = false; // reset so it re-sets cleanly
         try {
-          requestKeys(state.partnerId!);
+          beginKeyExchangeCycle(partnerId, "reconnect");
+          requestKeys(partnerId);
         } catch (_) {
           /* ignore */
         }
@@ -3161,11 +4001,12 @@ export function ChatArea({
       // Signal the onKeysResponse callback to bypass role enforcement.
       // See comment on isReconnectingRef declaration for full rationale.
       isReconnectingRef.current = true;
-      clearSignalSession(state.partnerId);
+      beginKeyExchangeCycle(partnerId, "reconnect");
+      clearSignalSession(partnerId);
       const bundle = generatePreKeyBundle();
       publishKeys(bundle as any);
       // Both peers request keys for redundancy (role enforcement in callbacks)
-      requestKeys(state.partnerId);
+      requestKeys(partnerId);
       keyExchangeInitiatedRef.current = urlRoomId;
       console.log(
         "[ChatArea] Reconnect: Published keys & requested partner keys (isReconnecting=true)",
@@ -3184,6 +4025,33 @@ export function ChatArea({
     publishKeys,
     requestKeys,
     clearSignalSession,
+    beginKeyExchangeCycle,
+  ]);
+
+  const receiveChunkRef = useRef(receiveChunk);
+  const handleIncomingChatMessageRef = useRef(handleIncomingChatMessage);
+  const clearPendingSignalFallbackRef = useRef(clearPendingSignalFallback);
+  const markP2PHealthyRef = useRef(markP2PHealthy);
+  const sendP2PProbeRef = useRef(sendP2PProbe);
+  const finalizePartnerSkipRef = useRef(finalizePartnerSkip);
+  const peerIdRef = useRef(peerId);
+
+  useEffect(() => {
+    receiveChunkRef.current = receiveChunk;
+    handleIncomingChatMessageRef.current = handleIncomingChatMessage;
+    clearPendingSignalFallbackRef.current = clearPendingSignalFallback;
+    markP2PHealthyRef.current = markP2PHealthy;
+    sendP2PProbeRef.current = sendP2PProbe;
+    finalizePartnerSkipRef.current = finalizePartnerSkip;
+    peerIdRef.current = peerId;
+  }, [
+    receiveChunk,
+    handleIncomingChatMessage,
+    clearPendingSignalFallback,
+    markP2PHealthy,
+    sendP2PProbe,
+    finalizePartnerSkip,
+    peerId,
   ]);
 
   // ── Data Channel Registration ──────────────────────────────────────
@@ -3199,7 +4067,8 @@ export function ChatArea({
       );
       if (channel.label === "file-transfer") {
         fileTransferChannelRef.current = channel;
-        if (wiredFileTransferChannelsRef.current.has(channel)) {
+        const existingTeardown = dataChannelTeardownRef.current.get(channel);
+        if (existingTeardown && wiredFileTransferChannelsRef.current.has(channel)) {
           return;
         }
         wiredFileTransferChannelsRef.current.add(channel);
@@ -3209,6 +4078,7 @@ export function ChatArea({
         const handleOpen = () => {
           devLog("[ChatArea] File transfer channel OPEN");
           fileTransferChannelRef.current = channel;
+          sendP2PProbeRef.current(channel, from);
         };
 
         const handleMessage = (event: MessageEvent<string | Blob | ArrayBuffer>) => {
@@ -3218,7 +4088,7 @@ export function ChatArea({
           if (typeof event.data === "string") {
             const msg = parseDataChannelControlMessage(event.data);
             if (!msg) {
-              receiveChunk(event.data);
+              receiveChunkRef.current(event.data);
               return;
             }
             if (msg.type === "delete_message") {
@@ -3252,21 +4122,79 @@ export function ChatArea({
                 }
               }
             } else if (msg.type === "chat_message") {
-              handleIncomingChatMessage(msg.message, from);
+              markP2PHealthyRef.current(from, 1);
+              handleIncomingChatMessageRef.current(
+                msg.message,
+                from,
+                "p2p_data_channel",
+              );
+            } else if (msg.type === "chat_ack") {
+              ackedOutgoingMessagesRef.current.add(msg.messageId);
+              clearPendingSignalFallbackRef.current(msg.messageId);
+              markP2PHealthyRef.current(from, 1);
+              traceE2E("chat.ack.inbound", {
+                messageId: msg.messageId,
+                fromPeerId: from,
+                toPeerId: peerIdRef.current,
+                transport: "p2p_data_channel",
+              }, "debug");
+            } else if (msg.type === "p2p_probe") {
+              markP2PHealthyRef.current(from, 1);
+              const ackPayload = JSON.stringify({
+                type: "p2p_probe_ack",
+                probeId: msg.probeId,
+                sentAt: msg.sentAt,
+                ackAt: Date.now(),
+              });
+              traceE2E("chat.p2p.probe.received", {
+                probeId: msg.probeId,
+                fromPeerId: from,
+                toPeerId: peerIdRef.current,
+                channelLabel: channel.label,
+              }, "debug");
+              try {
+                channel.send(ackPayload);
+              } catch (err) {
+                traceE2E("chat.p2p.probe.ack_send_failed", {
+                  probeId: msg.probeId,
+                  fromPeerId: peerIdRef.current,
+                  toPeerId: from,
+                  error: err instanceof Error ? err.message : String(err),
+                }, "warn");
+              }
+            } else if (msg.type === "p2p_probe_ack") {
+              const pending = pendingP2PProbeRef.current.get(msg.probeId);
+              if (pending) {
+                pendingP2PProbeRef.current.delete(msg.probeId);
+              }
+              const timeout = p2pProbeTimeoutsRef.current.get(msg.probeId);
+              if (timeout) {
+                clearTimeout(timeout);
+                p2pProbeTimeoutsRef.current.delete(msg.probeId);
+              }
+              const rttMs = Math.max(0, Date.now() - msg.sentAt);
+              markP2PHealthyRef.current(from, rttMs);
+              traceE2E("chat.p2p.probe.ack_received", {
+                probeId: msg.probeId,
+                fromPeerId: from,
+                toPeerId: peerIdRef.current,
+                rttMs,
+                hadPendingProbe: !!pending,
+              }, "info");
             } else if (msg.type === "skip_signal") {
               const currentPartnerId = useSessionStore.getState().partnerId;
               if (from === currentPartnerId && isMountedRef.current) {
                 partnerSkipIntentRef.current.add(from);
-                finalizePartnerSkip();
+                finalizePartnerSkipRef.current();
               }
             }
           } else if (event.data instanceof ArrayBuffer) {
-            receiveChunk(event.data);
+            receiveChunkRef.current(event.data);
           } else if (event.data instanceof Blob) {
             void event.data
               .arrayBuffer()
               .then((buffer) => {
-                receiveChunk(buffer);
+                receiveChunkRef.current(buffer);
               })
               .catch((err) => {
                 devWarn("[ChatArea] Failed to read blob data-channel chunk", err);
@@ -3314,10 +4242,8 @@ export function ChatArea({
     };
   }, [
     devLog,
+    devWarn,
     onDataChannel,
-    receiveChunk,
-    handleIncomingChatMessage,
-    finalizePartnerSkip,
   ]);
 
   useEffect(() => {
@@ -3335,8 +4261,9 @@ export function ChatArea({
       handledMatchId.current = matchData.room_id;
       keyExchangeInitiatedRef.current = null;
 
-      const resolvedName = partnerName || funAnimalName(matchData.partner_id);
-      const resolvedAvatarSeed = partnerAvatarSeed || matchData.partner_id;
+      const resolvedName = partnerName || "Partner";
+      const resolvedAvatarSeed =
+        partnerAvatarSeed || matchData.partner_avatar_seed || matchData.partner_id;
 
       setConnectionState("connected");
       setPartner({ name: resolvedName, avatarSeed: resolvedAvatarSeed });
@@ -3349,6 +4276,7 @@ export function ChatArea({
         matchData.partner_is_verified ?? false,
         resolvedName,
         resolvedAvatarSeed,
+        matchData.partner_avatar_url || null,
       );
 
       // Update the URL to include the roomId — gives the chat its own URL
@@ -3400,6 +4328,40 @@ export function ChatArea({
     requestKeys,
     isMatching,
   ]);
+
+  useEffect(() => {
+    if (!partnerId) return;
+    const incomingName = partnerName?.trim();
+    const incomingAvatarSeed = partnerAvatarSeed || partnerId;
+    const fallbackName = funAnimalName(partnerId);
+    setPartner((current) => {
+      const currentName = current?.name?.trim() || "";
+      const currentIsFallback =
+        !currentName ||
+        currentName === "Partner" ||
+        currentName === "Stranger" ||
+        currentName === "Anonymous" ||
+        currentName === fallbackName;
+      const nextName =
+        incomingName && incomingName.length > 0
+          ? incomingName
+          : currentIsFallback
+            ? "Partner"
+            : currentName;
+      const nextAvatarSeed = incomingAvatarSeed || current?.avatarSeed || partnerId;
+      if (
+        current &&
+        current.name === nextName &&
+        current.avatarSeed === nextAvatarSeed
+      ) {
+        return current;
+      }
+      return {
+        name: nextName,
+        avatarSeed: nextAvatarSeed,
+      };
+    });
+  }, [partnerId, partnerName, partnerAvatarSeed]);
 
   useEffect(() => {
     if (urlRoomId) return;
@@ -3585,6 +4547,7 @@ export function ChatArea({
         // Force a re-run by requesting keys again (the effect won't re-fire on ref
         // change alone, but the requestKeys send itself will succeed or fail fast).
         try {
+          beginKeyExchangeCycle(matchData.partner_id, "normal");
           requestKeys(matchData.partner_id);
         } catch (_) {
           /* ignore */
@@ -3600,6 +4563,7 @@ export function ChatArea({
     );
 
     try {
+      beginKeyExchangeCycle(matchData.partner_id, "normal");
       const bundle = generatePreKeyBundle();
       publishKeys(bundle as any);
       // BOTH peers request keys — redundancy in case one direction's message is lost.
@@ -3627,6 +4591,7 @@ export function ChatArea({
     publishKeys,
     requestKeys,
     peerId,
+    beginKeyExchangeCycle,
   ]);
 
   return (
@@ -3752,7 +4717,6 @@ export function ChatArea({
                   onReport={() => {
                     setIsReportModalOpen(true);
                   }}
-                  onGetPremium={() => console.log("Premium clicked")}
                   isSelfSkip={connectionState === "self_skipped"}
                 />
               </div>
@@ -3769,46 +4733,69 @@ export function ChatArea({
                   <div className="flex flex-1 min-h-0 flex-col lg:flex-row gap-2 lg:gap-4 px-0 pb-0 sm:px-2 sm:pb-2 lg:px-4 lg:pb-4">
                     <div
                       className="relative w-full flex-none transition-all duration-300 lg:flex-1 lg:min-h-0"
+                      style={
+                        isMobile
+                          ? {
+                              maxHeight: isKeyboardVisible
+                                ? "24dvh"
+                                : hasDualTheaterStreams
+                                  ? "40dvh"
+                                  : "48dvh",
+                            }
+                          : undefined
+                      }
                     >
-                      {theaterPrimaryStream && (
-                        <ScreenShareViewer
-                          key={`theater-primary-${remoteStreamVersion}-${theaterPrimaryIsLocal ? "local" : "remote"}`}
-                          stream={theaterPrimaryStream}
-                          label={theaterPrimaryIsLocal ? "Your screen" : (partner?.name || "Partner")}
-                          isLocal={theaterPrimaryIsLocal}
-                          onClose={() =>
-                            theaterPrimaryIsLocal
-                              ? useScreenShareStore.getState().requestStop()
-                              : useScreenShareStore.getState().clearRemoteSharing()
-                          }
-                          isMobile={isMobile}
-                          pc={
-                            getPeerConnection(
-                              useSessionStore.getState().partnerId ?? "",
-                            ) ?? null
-                          }
-                          layout="theater"
-                        />
-                      )}
-                      {showTheaterLocalPreview && localScreenStream && (
-                        <ScreenShareViewer
-                          stream={localScreenStream}
-                          label="You"
-                          isLocal
-                          isMobile={isMobile}
-                          adaptiveBitrateEnabled={adaptiveBitrateEnabled}
-                          onToggleAdaptiveBitrate={() =>
-                            setAdaptiveBitrateEnabled(!adaptiveBitrateEnabled)
-                          }
-                          adaptiveBitrateStats={adaptiveBitrateStats}
-                          onClose={() =>
-                            useScreenShareStore.getState().requestStop()
-                          }
-                        />
-                      )}
+                      <div
+                        className={`flex h-full min-h-0 ${hasDualTheaterStreams ? "flex-col gap-2 lg:gap-4" : ""}`}
+                      >
+                        {theaterStreams.map((theaterStream) => (
+                          <div
+                            key={theaterStream.key}
+                            className="flex-1 min-h-0 overflow-hidden"
+                          >
+                            <ScreenShareViewer
+                              stream={theaterStream.stream}
+                              label={theaterStream.label}
+                              isLocal={theaterStream.isLocal}
+                              onClose={() =>
+                                theaterStream.isLocal
+                                  ? useScreenShareStore.getState().requestStop()
+                                  : useScreenShareStore.getState().clearRemoteSharing()
+                              }
+                              isMobile={isMobile}
+                              pc={
+                                theaterStream.isLocal
+                                  ? null
+                                  : getPeerConnection(
+                                      useSessionStore.getState().partnerId ?? "",
+                                    ) ?? null
+                              }
+                              layout="theater"
+                              adaptiveBitrateEnabled={
+                                theaterStream.isLocal
+                                  ? adaptiveBitrateEnabled
+                                  : undefined
+                              }
+                              onToggleAdaptiveBitrate={
+                                theaterStream.isLocal
+                                  ? () =>
+                                      setAdaptiveBitrateEnabled(
+                                        !adaptiveBitrateEnabled,
+                                      )
+                                  : undefined
+                              }
+                              adaptiveBitrateStats={
+                                theaterStream.isLocal
+                                  ? adaptiveBitrateStats
+                                  : undefined
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                     <div className="flex flex-col flex-1 min-h-0 lg:flex-none lg:w-[360px] xl:w-[420px] bg-panel/70 rounded-2xl overflow-hidden shadow-[0_30px_120px_rgba(0,0,0,0.6)] backdrop-blur-xl">
-                      <div className="flex items-center justify-between px-4 py-3 bg-panel/80">
+                      <div className={`flex items-center justify-between px-4 ${isMobile && isKeyboardVisible ? "py-2" : "py-3"} bg-panel/80`}>
                         <div className="flex flex-col">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-foreground">
@@ -4036,6 +5023,10 @@ export function ChatArea({
         avatarSeed={selectedProfile?.avatarSeed || ""}
         avatarUrl={selectedProfile?.avatarUrl || null}
         isVerified={selectedProfile?.isVerified}
+        interests={selectedProfile?.interests}
+        interestsVisibility={selectedProfile?.interestsVisibility}
+        badgeVisibility={selectedProfile?.badgeVisibility}
+        joinedAt={selectedProfile?.joinedAt}
         onAddFriend={() =>
           handleAddFriend(selectedProfile?.peerId || partnerId || "")
         }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { VenetianMask, Loader2, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { BuzzULogoIcon } from '../../components/SocialLanding/Icons';
 import { useSessionStore } from '../stores/sessionStore';
 import { verifyGoogleIdToken } from '../lib/verifyGoogleToken';
@@ -14,7 +14,8 @@ declare global {
     }
 }
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+let gsiInitializedClientId: string | null = null;
 
 const GoogleIcon = () => (
     <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="block" aria-hidden="true">
@@ -28,13 +29,16 @@ const GoogleIcon = () => (
 
 export const VerificationPage: React.FC = () => {
     const navigate = useNavigate();
-    const location = useLocation();
-    const { setVerified, initSession, avatarSeed } = useSessionStore();
+    const { setVerified, initSession } = useSessionStore();
     const googleBtnRef = useRef<HTMLDivElement>(null);
+    const initialDarkClassRef = useRef<boolean | null>(null);
     const [gsiReady, setGsiReady] = useState(false);
     const [verifyError, setVerifyError] = useState<string | null>(null);
     const [verifying, setVerifying] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [googleRenderTick, setGoogleRenderTick] = useState(0);
+    const hasGoogleClientId = GOOGLE_CLIENT_ID.length > 0;
+    const renderedGoogleButtonThemeRef = useRef<string | null>(null);
 
     const [isDarkMode, setIsDarkMode] = useState(() => {
         if (typeof window !== 'undefined') {
@@ -50,6 +54,10 @@ export const VerificationPage: React.FC = () => {
 
     /** Cryptographically verify the token using Google's public keys */
     const handleCredential = useCallback(async (token: string) => {
+        if (!hasGoogleClientId) {
+            setVerifyError('Google sign-in is not configured. Set VITE_GOOGLE_CLIENT_ID and reload.');
+            return;
+        }
         setVerifying(true);
         setVerifyError(null);
         try {
@@ -65,13 +73,15 @@ export const VerificationPage: React.FC = () => {
                 setVerifyError('Your session has expired. Please try again.');
             } else if (err.message.includes('SIGNATURE')) {
                 setVerifyError('Security verification failed. Token signature is invalid.');
+            } else if (err.message.includes('audience')) {
+                setVerifyError('Google client configuration mismatch. Check VITE_GOOGLE_CLIENT_ID.');
             } else {
                 setVerifyError('Verification failed. Please try again.');
             }
         } finally {
             setVerifying(false);
         }
-    }, [setVerified, navigate]);
+    }, [hasGoogleClientId, setVerified, navigate]);
 
     /** Standard callback handler (for One Tap success) */
     const handleCallbackResponse = useCallback((response: any) => {
@@ -84,14 +94,29 @@ export const VerificationPage: React.FC = () => {
     useEffect(() => {
         const hash = window.location.hash;
         if (hash.startsWith('#token=')) {
-            const token = hash.substring(7);
+            const token = decodeURIComponent(hash.substring(7));
             window.history.replaceState(null, '', window.location.pathname);
             handleCredential(token);
         }
     }, [handleCredential]);
 
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const credential = params.get('credential');
+        if (!credential) return;
+        window.history.replaceState(null, '', window.location.pathname);
+        handleCredential(credential);
+    }, [handleCredential]);
+
+    useEffect(() => {
+        if (!hasGoogleClientId) {
+            setVerifyError('Google sign-in is not configured. Set VITE_GOOGLE_CLIENT_ID and reload.');
+        }
+    }, [hasGoogleClientId]);
+
     /** Wait for GSI library */
     useEffect(() => {
+        if (!hasGoogleClientId) return;
         const checkGsi = setInterval(() => {
             if (window.google?.accounts?.id) {
                 clearInterval(checkGsi);
@@ -99,11 +124,11 @@ export const VerificationPage: React.FC = () => {
             }
         }, 100);
         return () => clearInterval(checkGsi);
-    }, []);
+    }, [hasGoogleClientId]);
 
-    /** Initialize Google Identity Services */
     useEffect(() => {
-        if (!gsiReady || !window.google) return;
+        if (!gsiReady || !window.google || !hasGoogleClientId) return;
+        if (gsiInitializedClientId === GOOGLE_CLIENT_ID) return;
 
         window.google.accounts.id.initialize({
             client_id: GOOGLE_CLIENT_ID,
@@ -112,20 +137,44 @@ export const VerificationPage: React.FC = () => {
             ux_mode: 'redirect',
             login_uri: window.location.origin + '/verify',
         });
+        gsiInitializedClientId = GOOGLE_CLIENT_ID;
+    }, [gsiReady, hasGoogleClientId, handleCallbackResponse]);
 
-        if (googleBtnRef.current) {
-            const parentWidth = googleBtnRef.current.clientWidth || 320;
-            const btnWidth = Math.min(parentWidth, 400);
-
-            window.google.accounts.id.renderButton(googleBtnRef.current, {
-                theme: isDarkMode ? 'filled_black' : 'outline',
-                size: 'large',
-                width: btnWidth,
-                text: 'continue_with',
-                shape: 'rectangular',
-            });
+    useEffect(() => {
+        if (isLoading || !gsiReady || !window.google || !hasGoogleClientId || !googleBtnRef.current) return;
+        const host = googleBtnRef.current;
+        const parentWidth = host.clientWidth || 0;
+        if (parentWidth < 200) {
+            if (googleRenderTick < 10) {
+                const retryTimer = window.setTimeout(() => {
+                    setGoogleRenderTick((value) => value + 1);
+                }, 120);
+                return () => window.clearTimeout(retryTimer);
+            }
+            return;
         }
-    }, [gsiReady, isDarkMode, handleCallbackResponse]);
+        const nextTheme = isDarkMode ? 'filled_black' : 'outline';
+        if (renderedGoogleButtonThemeRef.current === nextTheme && host.childElementCount > 0) {
+            return;
+        }
+        const btnWidth = Math.min(parentWidth, 400);
+        host.innerHTML = '';
+        window.google.accounts.id.renderButton(host, {
+            theme: nextTheme,
+            size: 'large',
+            width: btnWidth,
+            text: 'continue_with',
+            shape: 'rectangular',
+        });
+        renderedGoogleButtonThemeRef.current = nextTheme;
+        const hasRenderedControl = host.querySelector('iframe, div[role="button"], span[role="button"]');
+        if (!hasRenderedControl && googleRenderTick < 10) {
+            const retryTimer = window.setTimeout(() => {
+                setGoogleRenderTick((value) => value + 1);
+            }, 120);
+            return () => window.clearTimeout(retryTimer);
+        }
+    }, [gsiReady, hasGoogleClientId, isDarkMode, isLoading, googleRenderTick]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -143,6 +192,22 @@ export const VerificationPage: React.FC = () => {
             localStorage.setItem('theme', 'light');
         }
     }, [isDarkMode]);
+
+    useEffect(() => {
+        if (initialDarkClassRef.current === null) {
+            initialDarkClassRef.current = document.documentElement.classList.contains('dark');
+        }
+        document.documentElement.classList.add('verify-page');
+        return () => {
+            document.documentElement.classList.remove('verify-page');
+            const shouldRestoreDark = initialDarkClassRef.current;
+            if (shouldRestoreDark === true) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        };
+    }, []);
 
     const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
@@ -182,7 +247,6 @@ export const VerificationPage: React.FC = () => {
 
                 <main className="flex items-center !justify-center p-8 min-h-dvh relative z-10 w-full">
                     <motion.div
-                        layout
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.3, ease: 'easeOut' }}
@@ -194,7 +258,7 @@ export const VerificationPage: React.FC = () => {
                         }}
                     >
                         <div className="flex flex-col justify-start gap-4 self-center p-4 text-start">
-                            <motion.div layout="position" className="flex flex-row items-center justify-center self-center sm:self-start mb-2">
+                            <motion.div className="flex flex-row items-center justify-center self-center sm:self-start mb-2">
                                 <BuzzULogoIcon className="w-8 h-8 sm:w-10 sm:h-10 mr-2 text-primary drop-shadow-sm" />
                                 <span className="font-bold text-foreground text-xl tracking-tight">BuzzU</span>
                             </motion.div>

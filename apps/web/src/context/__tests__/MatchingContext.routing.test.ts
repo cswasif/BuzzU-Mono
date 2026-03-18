@@ -32,6 +32,8 @@ describe("MatchingContext routing URL", () => {
   it("builds Search payload with blocked peer ids", () => {
     const payload = buildMatchmakerSearchMessage({
       interests: ["music", "coding"],
+      matchWithInterests: true,
+      interestTimeoutSec: 30,
       gender: "M",
       genderFilter: "both",
       isVerified: true,
@@ -44,11 +46,15 @@ describe("MatchingContext routing URL", () => {
     expect(payload.type).toBe("Search");
     expect(payload.blocked_peer_ids).toEqual(["peer_a", "peer_b"]);
     expect(payload.chat_mode).toBe("video");
+    expect(payload.with_interests).toBe(true);
+    expect(payload.interest_timeout).toBe(30);
   });
 
   it("builds Search payload with empty block list", () => {
     const payload = buildMatchmakerSearchMessage({
       interests: [],
+      matchWithInterests: true,
+      interestTimeoutSec: 10,
       gender: "",
       genderFilter: "both",
       isVerified: false,
@@ -60,6 +66,25 @@ describe("MatchingContext routing URL", () => {
     });
     expect(payload.blocked_peer_ids).toEqual([]);
     expect(payload.type).toBe("Search");
+  });
+
+  it("disables interest matching and clamps timeout bounds", () => {
+    const payload = buildMatchmakerSearchMessage({
+      interests: ["music"],
+      matchWithInterests: false,
+      interestTimeoutSec: 9999,
+      gender: "M",
+      genderFilter: "both",
+      isVerified: false,
+      verifiedOnly: false,
+      chatMode: "text",
+      deviceId: "d",
+      tabId: "t",
+      blockedPeerIds: [],
+    });
+    expect(payload.interests).toEqual([]);
+    expect(payload.with_interests).toBe(false);
+    expect(payload.interest_timeout).toBe(600);
   });
 
   it("suppresses expected autoplay audio errors", () => {

@@ -35,6 +35,7 @@ export interface UseWebRTCResult {
   applyTurnFallback: (targetPeerId: string) => void;
   isFallbackActive: (targetPeerId: string) => boolean;
   getConnectionState: (targetPeerId: string) => PeerConnectionState;
+  getOpenDataChannels: (targetPeerId: string) => RTCDataChannel[];
 }
 
 export const shouldRecoverFromAnswerError = (err: unknown): boolean => {
@@ -56,6 +57,31 @@ export const shouldIgnoreDuplicateOfferSdp = (
 
 export const shouldReplayDataChannelState = (readyState: RTCDataChannelState): boolean => {
   return readyState === 'connecting' || readyState === 'open';
+};
+
+const parseIceCandidateLine = (candidateLine?: string | null) => {
+  if (!candidateLine || !candidateLine.startsWith('candidate:')) {
+    return null;
+  }
+  const parts = candidateLine.trim().split(/\s+/);
+  if (parts.length < 8) return null;
+  const protocol = (parts[2] || '').toLowerCase();
+  const address = parts[4] || null;
+  const port = Number(parts[5] || 0) || null;
+  const typeIndex = parts.findIndex((part) => part === 'typ');
+  const candidateType = typeIndex >= 0 ? (parts[typeIndex + 1] || null) : null;
+  const relatedAddressIndex = parts.findIndex((part) => part === 'raddr');
+  const relatedPortIndex = parts.findIndex((part) => part === 'rport');
+  const relatedAddress = relatedAddressIndex >= 0 ? (parts[relatedAddressIndex + 1] || null) : null;
+  const relatedPort = relatedPortIndex >= 0 ? Number(parts[relatedPortIndex + 1] || 0) || null : null;
+  return {
+    protocol,
+    address,
+    port,
+    candidateType,
+    relatedAddress,
+    relatedPort,
+  };
 };
 
 // Whether the current browser is Firefox (setCodecPreferences is broken on FF answerer).
@@ -579,6 +605,18 @@ export function useWebRTC(): UseWebRTCResult {
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        const parsedCandidate = parseIceCandidateLine(event.candidate.candidate);
+        logEvent('info', 'webrtc_local_ice_candidate', {
+          targetPeerId,
+          sdpMid: event.candidate.sdpMid ?? null,
+          sdpMLineIndex: event.candidate.sdpMLineIndex ?? null,
+          candidateType: parsedCandidate?.candidateType ?? null,
+          protocol: parsedCandidate?.protocol ?? null,
+          address: parsedCandidate?.address ?? null,
+          port: parsedCandidate?.port ?? null,
+          relatedAddress: parsedCandidate?.relatedAddress ?? null,
+          relatedPort: parsedCandidate?.relatedPort ?? null,
+        });
         if (isDev) {
           console.log('[useWebRTC] Local ICE candidate generated for:', targetPeerId);
         }
@@ -661,10 +699,49 @@ export function useWebRTC(): UseWebRTCResult {
             const stats = await pc.getStats();
             stats.forEach((report) => {
               if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-                const rtt = report.currentRoundTripTime;
+                const candidatePair = report as RTCStats & {
+                  localCandidateId?: string;
+                  remoteCandidateId?: string;
+                  currentRoundTripTime?: number;
+                  availableOutgoingBitrate?: number;
+                  bytesSent?: number;
+                  bytesReceived?: number;
+                  nominated?: boolean;
+                };
+                const localCand = candidatePair.localCandidateId
+                  ? (stats.get(candidatePair.localCandidateId) as (RTCStats & Record<string, unknown>) | undefined)
+                  : undefined;
+                const remoteCand = candidatePair.remoteCandidateId
+                  ? (stats.get(candidatePair.remoteCandidateId) as (RTCStats & Record<string, unknown>) | undefined)
+                  : undefined;
+                logEvent('info', 'webrtc_candidate_pair_selected', {
+                  targetPeerId,
+                  localCandidateType: (localCand as any)?.candidateType ?? null,
+                  localProtocol: (localCand as any)?.protocol ?? null,
+                  localAddress: (localCand as any)?.address ?? null,
+                  localPort: (localCand as any)?.port ?? null,
+                  localNetworkType: (localCand as any)?.networkType ?? null,
+                  remoteCandidateType: (remoteCand as any)?.candidateType ?? null,
+                  remoteProtocol: (remoteCand as any)?.protocol ?? null,
+                  remoteAddress: (remoteCand as any)?.address ?? null,
+                  remotePort: (remoteCand as any)?.port ?? null,
+                  relayProtocol: (localCand as any)?.relayProtocol ?? null,
+                  nominated: candidatePair.nominated ?? null,
+                  currentRoundTripTimeMs:
+                    typeof candidatePair.currentRoundTripTime === 'number'
+                      ? Number((candidatePair.currentRoundTripTime * 1000).toFixed(1))
+                      : null,
+                  availableOutgoingKbps:
+                    typeof candidatePair.availableOutgoingBitrate === 'number'
+                      ? Number((candidatePair.availableOutgoingBitrate / 1000).toFixed(1))
+                      : null,
+                  bytesSent: candidatePair.bytesSent ?? null,
+                  bytesReceived: candidatePair.bytesReceived ?? null,
+                });
+                const rtt = candidatePair.currentRoundTripTime;
                 if (typeof rtt === 'number' && rtt > 0) {
                   // Find which STUN server produced the local candidate
-                  const localCandReport = stats.get(report.localCandidateId);
+                  const localCandReport = stats.get((report as any).localCandidateId);
                   const stunUrl = localCandReport?.url;
                   if (stunUrl) {
                     recordLiveRtt(stunUrl, rtt * 1000); // s → ms
@@ -1265,7 +1342,7 @@ export function useWebRTC(): UseWebRTCResult {
     connectionTimeoutRef.current.set(targetPeerId, connectionTimer);
 
     return pc;
-  }, [stunServers, turnServers, sendMessage, peerId, browser, pruneDataChannelsForPeer, registerDataChannel]);
+  }, [stunServers, turnServers, sendMessage, peerId, browser, pruneDataChannelsForPeer, registerDataChannel, logEvent]);
 
   // Wire up the ref so applyTurnFallback can call createPeerConnectionWrapper
   // without a circular useCallback dependency.
@@ -1582,6 +1659,12 @@ export function useWebRTC(): UseWebRTCResult {
     return dataChannelOpenStatesRef.current.get(targetPeerId) || false;
   }, []);
 
+  const getOpenDataChannels = useCallback((targetPeerId: string): RTCDataChannel[] => {
+    pruneDataChannelsForPeer(targetPeerId);
+    const channels = activeDataChannelsRef.current.get(targetPeerId) || [];
+    return channels.filter((channel) => channel.readyState === 'open');
+  }, [pruneDataChannelsForPeer]);
+
   // Wait for data channel to open with timeout
   const waitForDataChannelOpen = useCallback(async (targetPeerId: string, timeoutMs: number = 20000): Promise<boolean> => {
     const startTime = Date.now();
@@ -1784,6 +1867,18 @@ export function useWebRTC(): UseWebRTCResult {
         const pc = peerConnectionsRef.current.get(from);
         if (pc && pc.remoteDescription) {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          const parsedCandidate = parseIceCandidateLine(candidate.candidate);
+          logEvent('info', 'webrtc_remote_ice_candidate_applied', {
+            peerId: from,
+            sdpMid: candidate.sdpMid ?? null,
+            sdpMLineIndex: candidate.sdpMLineIndex ?? null,
+            candidateType: parsedCandidate?.candidateType ?? null,
+            protocol: parsedCandidate?.protocol ?? null,
+            address: parsedCandidate?.address ?? null,
+            port: parsedCandidate?.port ?? null,
+            relatedAddress: parsedCandidate?.relatedAddress ?? null,
+            relatedPort: parsedCandidate?.relatedPort ?? null,
+          });
           console.log('[useWebRTC] Added ICE candidate from', from);
         } else {
           console.log('[useWebRTC] Buffering ICE candidate from', from, '(no remote description yet)');
@@ -2052,5 +2147,6 @@ export function useWebRTC(): UseWebRTCResult {
     applyTurnFallback,
     isFallbackActive: (targetPeerId: string) => fallbackActiveRef.current.has(targetPeerId),
     getConnectionState: (targetPeerId: string) => peerStateRef.current.get(targetPeerId) ?? { type: 'new' },
+    getOpenDataChannels,
   };
 }

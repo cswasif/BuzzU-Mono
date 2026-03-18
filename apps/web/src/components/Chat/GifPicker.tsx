@@ -28,6 +28,12 @@ export const GifPicker: React.FC<GifPickerProps> = ({
     const isMobile = useMediaQuery('(max-width: 1024px)');
     const { resolvedTheme } = useTheme();
     const [isDarkMode, setIsDarkMode] = React.useState(false);
+    const klipyApiKey =
+        process.env.KLIPY_API_KEY ||
+        process.env.KIPPY_API_KEY ||
+        (import.meta as any).env?.VITE_KLIPY_API_KEY ||
+        (import.meta as any).env?.VITE_KIPPY_API_KEY ||
+        '';
 
     useEffect(() => {
         const updateTheme = () => {
@@ -87,7 +93,7 @@ export const GifPicker: React.FC<GifPickerProps> = ({
         return (
             <div ref={pickerRef} className="h-full w-full flex flex-col bg-popover">
                 <KlipyPicker
-                    klipyApiKey={process.env.KLIPY_API_KEY!}
+                    klipyApiKey={klipyApiKey}
                     theme={isDarkMode ? 'dark' : 'light'}
                     onGifClick={onGifSelect}
                     width="100%"
@@ -102,6 +108,18 @@ export const GifPicker: React.FC<GifPickerProps> = ({
     const desktopHeight = compact ? 320 : 450;
     const mobileWidth = compact ? 280 : 320;
     const mobileHeight = compact ? 220 : 350;
+    const anchorRect = anchorRef?.current?.getBoundingClientRect();
+    const viewportHeight = typeof window !== 'undefined'
+        ? (window.visualViewport?.height ?? window.innerHeight)
+        : 0;
+    const availableHeightAboveAnchor = anchorRect
+        ? Math.max(160, Math.floor(anchorRect.top - 12))
+        : mobileHeight;
+    const mobileResolvedHeight = Math.min(
+        mobileHeight,
+        Math.max(160, Math.floor(viewportHeight * 0.45)),
+        availableHeightAboveAnchor,
+    );
 
     return (
         <AnimatePresence>
@@ -117,8 +135,8 @@ export const GifPicker: React.FC<GifPickerProps> = ({
                         left: 'auto',
                         right: isMobile ? '8px' : '12px',
                         width: isMobile ? `${mobileWidth}px` : `${desktopWidth}px`,
-                        height: isMobile ? `${mobileHeight}px` : `${desktopHeight}px`,
-                        maxHeight: isMobile ? `${mobileHeight}px` : `${desktopHeight}px`,
+                        height: isMobile ? `${mobileResolvedHeight}px` : `${desktopHeight}px`,
+                        maxHeight: isMobile ? `${mobileResolvedHeight}px` : `${desktopHeight}px`,
                         maxWidth: isMobile ? 'calc(100vw - 16px)' : `${desktopWidth}px`,
                         borderRadius: '12px',
                         overflow: 'hidden',
@@ -141,7 +159,7 @@ export const GifPicker: React.FC<GifPickerProps> = ({
                         )}
                         <div className="flex-1 min-h-0 flex flex-col relative w-full h-full klipy-container-override">
                             <KlipyPicker
-                                klipyApiKey={process.env.KLIPY_API_KEY!}
+                                klipyApiKey={klipyApiKey}
                                 theme={isDarkMode ? 'dark' : 'light'}
                                 onGifClick={onGifSelect}
                                 width="100%"

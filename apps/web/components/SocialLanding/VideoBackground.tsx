@@ -76,6 +76,7 @@ export const VideoBackground = memo(({
   }, [onReady]);
 
   const currentVideo = videos[currentIndex];
+  const shouldUsePlayerApi = true;
 
   useEffect(() => {
     // Reset our tracker when the video switches so we re-apply the correct mute setting
@@ -86,6 +87,7 @@ export const VideoBackground = memo(({
 
   // Handle real-time mute/unmute toggle from props
   useEffect(() => {
+    if (!shouldUsePlayerApi) return;
     if (iframeRef.current?.contentWindow) {
       const command = isMuted ? 'mute' : 'unMute';
       iframeRef.current.contentWindow.postMessage(
@@ -101,15 +103,19 @@ export const VideoBackground = memo(({
         );
       }
     }
-  }, [isMuted, mirrored]);
+  }, [isMuted, mirrored, shouldUsePlayerApi]);
 
   // Poll for time and enforce loop bounds manually because YouTube loop=1 resets to 0
   useEffect(() => {
+    if (!shouldUsePlayerApi) return;
     if (!currentVideo) return;
     const { start, end } = currentVideo;
     if (!end || end <= start) return;
 
     const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.youtube.com' && event.origin !== 'https://www.youtube-nocookie.com') {
+        return;
+      }
       if (event.source === iframeRef.current?.contentWindow) {
         try {
           const data = JSON.parse(event.data);
@@ -170,11 +176,11 @@ export const VideoBackground = memo(({
       window.removeEventListener('message', handleMessage);
       clearInterval(setupInterval);
     };
-  }, [currentVideo, isMuted, mirrored, onVideoEnd, onReady]);
+  }, [currentVideo, isMuted, onVideoEnd, onReady, shouldUsePlayerApi]);
 
   // Watchdog timer to detect if YouTube is blocked (e.g. "not a bot" prompt)
   useEffect(() => {
-    if (playbackFailed || !currentVideo) return;
+    if (playbackFailed || !currentVideo || forceFallback) return;
 
     const timer = setTimeout(() => {
       // If after 8 seconds we still haven't seen the video move to a "Playing" state,
@@ -190,6 +196,26 @@ export const VideoBackground = memo(({
   }, [currentVideo, playbackFailed]); // Removed onReady from dependencies
 
   if (!currentVideo) return null;
+
+  const query = new URLSearchParams({
+    autoplay: '1',
+    mute: '1',
+    controls: '0',
+    showinfo: '0',
+    rel: '0',
+    disablekb: '1',
+    modestbranding: '1',
+    playsinline: '1',
+    start: String(currentVideo.start),
+    end: String(currentVideo.end),
+  });
+
+  if (shouldUsePlayerApi) {
+    query.set('enablejsapi', '1');
+    if (typeof window !== 'undefined') {
+      query.set('origin', window.location.origin);
+    }
+  }
 
   const aspectRatioClass = cropBlackBars && currentVideo.aspectRatio
     ? ` aspect-${currentVideo.aspectRatio.replace(':', '-')}`
@@ -218,9 +244,11 @@ export const VideoBackground = memo(({
           key={currentVideo.videoId + currentIndex + (mirrored ? '-mirror' : '')}
           ref={iframeRef}
           className={`video-background-iframe${cropBlackBars ? ' crop-black-bars' : ''}${aspectRatioClass}`}
-          src={`https://www.youtube.com/embed/${currentVideo.videoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&enablejsapi=1&disablekb=1&modestbranding=1&start=${currentVideo.start}&end=${currentVideo.end}`}
+          src={`https://www.youtube-nocookie.com/embed/${currentVideo.videoId}?${query.toString()}`}
           title="YouTube video player"
           frameBorder="0"
+          loading={mirrored ? 'lazy' : 'eager'}
+          referrerPolicy="strict-origin-when-cross-origin"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
         ></iframe>

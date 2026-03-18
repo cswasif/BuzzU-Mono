@@ -141,9 +141,9 @@ export default function DashboardLayout() {
 
     return (
         <DmSignalingProvider>
-            <div className={`chitchat-dashboard-theme ${theme === 'dark' ? 'theme-dark' : ''} min-h-[100dvh] bg-background text-foreground`}>
+            <div className={`chitchat-dashboard-theme ${theme === 'dark' ? 'theme-dark' : ''} min-h-full h-full w-full overflow-hidden bg-background text-foreground`}>
                 <NotificationListener />
-                <div className="text-foreground bg-background h-[100dvh] flex flex-col overflow-hidden text-sm md:text-base">
+                <div className="text-foreground bg-background h-full min-h-0 flex flex-col overflow-hidden text-sm md:text-base">
                     {/* Header — hidden when video mode etc. */}
                     {!hideChrome && (
                         <Header
@@ -157,7 +157,7 @@ export default function DashboardLayout() {
                         />
                     )}
 
-                    <div className="flex h-full overflow-hidden relative">
+                    <div className="flex h-full min-h-0 overflow-hidden relative">
                         {/* Sidebar — shared across all dashboard routes */}
                         {!hideChrome && (
                             <Sidebar

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useCallback, useEffect, useRef } from
 import { useSessionStore } from '../stores/sessionStore';
 import { DmYjsManager, type YjsMessageData } from '../yjs/DmYjsManager';
 
-const SIGNALING_URL = process.env.SIGNALING_URL || import.meta.env.VITE_SIGNALING_URL || 'wss://buzzu-signaling.buzzu.workers.dev';
+const SIGNALING_URL = process.env.SIGNALING_URL || import.meta.env.VITE_SIGNALING_URL || 'wss://buzzu-signaling.cswasif.workers.dev';
 const DM_WS_HEARTBEAT_INTERVAL = 20000;
 const DM_WS_HEARTBEAT_TIMEOUT = 45000;
 const DM_WS_RECONNECT_BASE_DELAY = 1500;
@@ -94,6 +94,7 @@ function extractProfileFields(msg: any) {
 
 function playDmMessageSound() {
     if (typeof window === 'undefined') return;
+    if (!useSessionStore.getState().notificationSoundEnabled) return;
     const now = Date.now();
     const globalState = window as unknown as { __dmLastSoundAt?: number };
     if (globalState.__dmLastSoundAt && now - globalState.__dmLastSoundAt < 700) {

@@ -75,6 +75,18 @@
   --glass-brightness: 1.15;
   --glass-saturate: 180%;
   --glass-border: rgba(255, 255, 255, 0.1);
+  --footer-height: 44px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --app-height: 100svh;
+}
+
+@supports not (height: 100svh) {
+  :root {
+    --app-height: 100vh;
+  }
 }
 
 /* Theme-specific Glass Overrides */
@@ -312,12 +324,31 @@
   html,
   body {
     height: 100%;
+    min-height: var(--app-height);
     overflow-x: hidden;
-    /* Prevent horizontal scrollbars from layout shifting */
+    width: 100%;
+  }
+
+  html:not(.verify-page),
+  html:not(.verify-page) body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  html:not(.verify-page) #root {
+    height: auto;
+    min-height: var(--app-height);
+    padding: 0;
+    overflow: visible;
   }
 
   body {
     margin: 0;
+  }
+
+  #root,
+  #react-root {
+    min-height: var(--app-height);
   }
 
   html {
@@ -715,6 +746,10 @@
     transform: scale(0.98) !important;
   }
 
+  [data-testid="signupButton"].btn-hover-accent:active {
+    transform: none !important;
+  }
+
   /* Fallback for specific buttons if needed, but variables are preferred */
   .btn-hover-translucent-black {
     transition-property: background-color;
@@ -851,10 +886,20 @@
     justify-content: center;
     gap: 0;
     row-gap: 4px;
-    padding: 12px 16px;
+    padding: 12px 16px calc(12px + var(--safe-area-bottom));
     text-align: center;
     font-size: 13px;
     margin-top: auto;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    min-height: calc(var(--footer-height) + var(--safe-area-bottom));
+    background: var(--glass-bg);
+    border-top: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur, 20px));
+    -webkit-backdrop-filter: blur(var(--glass-blur, 20px));
   }
 
   nav[aria-label="Footer"] .css-1jxf684 {
@@ -884,10 +929,14 @@
     position: relative;
     transition: background-image 0.8s ease-in-out;
     filter: none !important;
-    min-height: 100vh !important;
+    min-height: var(--app-height) !important;
+    height: var(--app-height);
     display: flex !important;
     flex-direction: column !important;
     width: 100% !important;
+    padding-bottom: calc(var(--footer-height) + var(--safe-area-bottom));
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   /* === ROBUST MODAL FIXES FOR /chat/new DIRECT ACCESS === */
@@ -1069,7 +1118,7 @@
         color-mix(in srgb, var(--theme-bg), transparent 90%) !important;
       backdrop-filter: blur(12px) saturate(180%) !important;
       -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
-      padding: 24px 16px 64px !important;
+      padding: 24px 16px calc(24px + var(--safe-area-bottom)) !important;
       margin-top: 20px !important;
       width: 100% !important;
       border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
@@ -1276,7 +1325,7 @@
     top: 0;
     left: 0;
     width: 100vw;
-    height: 100vh;
+    height: var(--app-height);
     overflow: hidden;
     z-index: 0;
     /* Base layer */
@@ -1392,8 +1441,8 @@
     left: 50%;
     width: 100vw;
     height: 56.25vw;
-    min-height: 100vh;
-    min-width: 177.77vh;
+    min-height: var(--app-height);
+    min-width: calc(var(--app-height) * 1.7777);
     transform: translate(-50%, -50%);
     pointer-events: none;
     z-index: 0;
@@ -1457,7 +1506,7 @@
   /* Mute Button styling */
   .mute-btn {
     position: fixed !important;
-    bottom: 24px !important;
+    bottom: calc(24px + var(--safe-area-bottom)) !important;
     z-index: 9999 !important;
     /* Above all overlays globally */
     background: rgba(0, 0, 0, 0.5);

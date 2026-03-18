@@ -5,10 +5,9 @@ import { toast } from 'sonner';
 
 const NotificationListener: React.FC = () => {
     const { onFriendRequest } = useSignaling();
-    const { addNotification, peerId } = useSessionStore();
+    const { addNotification, pushNotificationsEnabled } = useSessionStore();
 
     useEffect(() => {
-        // Listen for friend request acceptance
         onFriendRequest((action, from, username, avatarSeed, avatarUrl) => {
             if (action === 'accept') {
                 const newNotif = {
@@ -23,14 +22,38 @@ const NotificationListener: React.FC = () => {
                 };
 
                 addNotification(newNotif);
-
-                // Show a small toast as well
                 toast.success(`${newNotif.fromUsername} accepted your friend request!`);
+
+                if (
+                    pushNotificationsEnabled &&
+                    typeof window !== 'undefined' &&
+                    'Notification' in window &&
+                    Notification.permission === 'granted'
+                ) {
+                    try {
+                        new Notification('BuzzU', {
+                            body: `${newNotif.fromUsername} accepted your friend request!`,
+                            icon: newNotif.fromAvatarUrl || '/apple-touch-icon.png',
+                        });
+                    } catch (_) {
+                    }
+                }
             }
         });
-    }, [onFriendRequest, addNotification]);
+    }, [onFriendRequest, addNotification, pushNotificationsEnabled]);
 
-    return null; // This component doesn't render anything
+    useEffect(() => {
+        if (
+            pushNotificationsEnabled &&
+            typeof window !== 'undefined' &&
+            'Notification' in window &&
+            Notification.permission === 'default'
+        ) {
+            Notification.requestPermission().catch(() => { });
+        }
+    }, [pushNotificationsEnabled]);
+
+    return null;
 };
 
 export default NotificationListener;

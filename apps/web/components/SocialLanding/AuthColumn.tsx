@@ -4,6 +4,7 @@ import { useTheme } from '../ThemeContext';
 import { VideoBackground, VideoSegment } from './VideoBackground';
 import { createPortal } from 'react-dom';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 const VIDEOS: VideoSegment[] = [
   { videoId: "IpFX2vq8HKw", start: 30, end: 110 }, // yung kai - blue
@@ -17,18 +18,25 @@ const VIDEOS: VideoSegment[] = [
 ];
 
 // Create a version for the mirrored background that plays from the beginning (0s)
-const MIRRORED_VIDEOS: VideoSegment[] = VIDEOS.map(v => ({
-  ...v,
-  start: 0, // Play from beginning as requested
-  end: v.end - v.start + 0 // Maintain duration relative to 0
-}));
+const MIRRORED_VIDEOS: VideoSegment[] = VIDEOS.map((v, index) => {
+  if (index === 0) {
+    return { ...v, start: 54, end: 134 };
+  }
+  return {
+    ...v,
+    start: 0,
+    end: v.end - v.start + 0
+  };
+});
 
 export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
   const { colors, theme } = useTheme();
+  const useStaticFallbackOnly = true;
   const [currentIndex, setCurrentIndex] = useState(() => 0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [videoLayerReady, setVideoLayerReady] = useState(false);
 
   // Hardware-accelerated Motion Values for tilt
   const mouseX = useMotionValue(0.5);
@@ -60,6 +68,25 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  React.useEffect(() => {
+    setVideoLayerReady(false);
+    let rafA = 0;
+    let rafB = 0;
+    const timer = window.setTimeout(() => {
+      rafA = window.requestAnimationFrame(() => {
+        rafB = window.requestAnimationFrame(() => {
+          setVideoLayerReady(true);
+        });
+      });
+    }, 120);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.cancelAnimationFrame(rafA);
+      window.cancelAnimationFrame(rafB);
+    };
+  }, [isMobile]);
 
   const handleVideoEnd = useCallback(() => {
     // Show the photo transition for 2 seconds
@@ -100,6 +127,8 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
     </button>
   );
 
+  const shouldRenderVideos = isMobile || videoLayerReady;
+
   return (
     <div
       className="css-175oi2r r-tv6buo r-791edh r-1euycsn"
@@ -117,7 +146,7 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
         }}
       >
         {/* Mirrored Background Video specifically for the right side - Desktop Only */}
-        {!isMobile && (
+        {!isMobile && shouldRenderVideos && (
           <div className="mirrored-video-container">
             <VideoBackground
               videos={MIRRORED_VIDEOS}
@@ -125,8 +154,8 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
               isMuted={true}
               onVideoEnd={handleVideoEnd}
               mirrored={true}
-              fallbackImage="/assets/landing_right.jpg"
-              forceFallback={isTransitioning}
+              fallbackImage="/assets/buzzu_fallback_right.jpg"
+              forceFallback={useStaticFallbackOnly || isTransitioning}
               cropBlackBars={true}
               filterSide="none"
             />
@@ -148,18 +177,18 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
 
           <div className="css-175oi2r">
             {/* Create Account Button (Renamed to Start Buzzing) */}
-            <a href="/verify" role="link" className={`css-175oi2r r-sdzlij r-1phboty r-rs99b7 r-lrvibr r-17w48nw r-a9p05 r-eu3ka r-1ifxtd0 r-1ipicw7 r-2yi16 r-1qi8awa r-3pj75a r-o7ynqc r-6416eg r-1ny4l3l r-1loqt21 btn-hover-accent`} data-testid="signupButton" style={{ backgroundColor: colors.accent, borderColor: 'rgba(0, 0, 0, 0)', marginBottom: '8px' }}>
+            <Link to="/verify" role="link" className={`css-175oi2r r-sdzlij r-1phboty r-rs99b7 r-lrvibr r-17w48nw r-a9p05 r-eu3ka r-1ifxtd0 r-1ipicw7 r-2yi16 r-1qi8awa r-3pj75a r-o7ynqc r-6416eg r-1ny4l3l r-1loqt21 btn-hover-accent`} data-testid="signupButton" style={{ backgroundColor: colors.accent, borderColor: 'rgba(0, 0, 0, 0)', marginBottom: '8px' }}>
               <div dir="ltr" className="css-146c3p1 r-qvutc0 r-1qd0xha r-q4m81j r-a023e6 r-rjixqe r-b88u0q r-1awozwy r-6koalj r-18u37iz r-16y2uox r-bcqeeo r-1777fci" style={{ color: (theme === 'light' || theme === 'lavender') ? '#fff' : '#000', backgroundColor: 'transparent' }}>
                 <div className="css-175oi2r r-xoduu5">
                   <span className="css-1jxf684 r-dnmrzs r-1udh08x r-1udbk01 r-3s2u2q r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-a023e6 r-rjixqe" style={{ fontWeight: 700 }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Start Buzzing</span></span>
                 </div>
               </div>
-            </a>
+            </Link>
 
             <div dir="ltr" className="css-146c3p1 r-bcqeeo r-1ttztb7 r-qvutc0 r-1qd0xha r-1gkfh8e r-56xrmm r-16dba41 r-13awgt0 r-117bsoe r-17w48nw" style={{ color: colors.textSecondary, fontSize: '11px', lineHeight: '12px', marginBottom: '20px' }}>
-              By signing up, you agree to the <a href="https://x.com/tos" rel="noopener noreferrer nofollow" target="_blank" role="link" className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-1loqt21" style={{ color: colors.accent }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Terms of Service</span></a>
-              and <a href="https://x.com/privacy" rel="noopener noreferrer nofollow" target="_blank" role="link" className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-1loqt21" style={{ color: colors.accent }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Privacy Policy</span></a>,
-              including <a href="https://help.x.com/rules-and-policies/twitter-cookies" rel="noopener noreferrer nofollow" target="_blank" role="link" className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-1loqt21" style={{ color: colors.accent }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Cookie Use.</span></a>
+              By signing up, you agree to the <a href="/terms" role="link" className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-1loqt21" style={{ color: colors.accent }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Terms of Service</span></a>
+              and <a href="/privacy" role="link" className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-1loqt21" style={{ color: colors.accent }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Privacy Policy</span></a>,
+              including <a href="/cookies" role="link" className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3 r-1loqt21" style={{ color: colors.accent }}><span className="css-1jxf684 r-bcqeeo r-1ttztb7 r-qvutc0 r-poiln3">Cookie Use.</span></a>
             </div>
 
             <div className="css-175oi2r r-2o02ov" style={{ marginTop: '32px', gap: '12px', display: 'flex', flexDirection: 'column' }}>
@@ -186,24 +215,26 @@ export const AuthColumn = ({ onVideoReady }: { onVideoReady?: () => void }) => {
 
       {/* Left Column: Logo & Primary Video */}
       <div className="css-175oi2r r-1777fci r-1udh08x r-13awgt0 r-12zvaga r-t60dpp">
-        <VideoBackground
-          videos={VIDEOS}
-          currentIndex={currentIndex}
-          isMuted={isMuted}
-          onVideoEnd={handleVideoEnd}
-          onReady={onVideoReady}
-          fallbackImage="/assets/landing_left.jfif"
-          forceFallback={isTransitioning}
-          cropBlackBars={true}
-          filterSide="none"
-        />
+        {shouldRenderVideos && (
+          <VideoBackground
+            videos={VIDEOS}
+            currentIndex={currentIndex}
+            isMuted={isMuted}
+            onVideoEnd={handleVideoEnd}
+            onReady={onVideoReady}
+            fallbackImage={isMobile ? "/assets/buzzu_fallback_right.jpg" : "/assets/buzzu_fallback_left.png"}
+            forceFallback={useStaticFallbackOnly || isTransitioning}
+            cropBlackBars={true}
+            filterSide="none"
+          />
+        )}
         <div className="hero-background-image" />
         <div className="css-175oi2r r-1p0dtai r-13awgt0 r-1777fci r-1d2f490 r-u8s1d r-zchlnj r-ipm5af mobile-hero-logo">
           <BuzzULogoIcon style={{ color: colors.accent, height: '100%', width: '100%' }} className="drop-shadow-md" />
         </div>
       </div>
 
-      {!isMobile && typeof document !== 'undefined' && createPortal(muteButton, document.body)}
+      {!useStaticFallbackOnly && !isMobile && typeof document !== 'undefined' && createPortal(muteButton, document.body)}
     </div>
   );
 };

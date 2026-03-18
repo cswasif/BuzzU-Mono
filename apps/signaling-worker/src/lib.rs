@@ -911,14 +911,13 @@ impl RoomDurableObject {
         }
 
         let normalized_reason = close_reason
-            .as_ref()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_ascii_lowercase);
+        let normalized_reason_ref = normalized_reason.as_deref();
         let is_skip_intent = close_code == Some(4001)
-            || normalized_reason
-                .as_deref()
-                .map(|reason| reason.eq_ignore_ascii_case("intentional_skip"))
-                .unwrap_or(false);
+            || matches!(normalized_reason_ref, Some("intentional_skip" | "skip"));
 
         if is_skip_intent {
             if let Ok(json_str) = serde_json::to_string(&SignalingMessage::Skip {
@@ -942,7 +941,7 @@ impl RoomDurableObject {
         } else {
             let leave_msg = SignalingMessage::Leave {
                 peer_id: peer_id.clone(),
-                reason: Some("disconnect".to_string()),
+                reason: Some("transient_disconnect".to_string()),
                 close_code,
             };
             if let Ok(json_str) = serde_json::to_string(&leave_msg) {
@@ -1429,7 +1428,15 @@ fn is_local_origin(origin: &str) -> bool {
 fn is_buzzu_origin(origin: &str) -> bool {
     if let Ok(parsed) = Url::parse(origin) {
         if let Some(host) = parsed.host_str() {
-            return host == "buzzu.xyz" || host == "www.buzzu.xyz" || host.ends_with(".buzzu.xyz");
+            return host == "buzzu.xyz"
+                || host == "www.buzzu.xyz"
+                || host.ends_with(".buzzu.xyz")
+                || host == "buzzu.pages.dev"
+                || host.ends_with(".buzzu.pages.dev")
+                || host == "buzzu3.pages.dev"
+                || host.ends_with(".buzzu3.pages.dev")
+                || host == "buzzu.wasif.app"
+                || host.ends_with(".buzzu.wasif.app");
         }
     }
     false

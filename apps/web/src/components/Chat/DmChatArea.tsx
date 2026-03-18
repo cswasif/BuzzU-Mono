@@ -59,6 +59,11 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
     });
     const fileTransferChannelRef = useRef<RTCDataChannel | null>(null);
     const blobUrlsRef = useRef<Set<string>>(new Set());
+    const initializedWebRtcFriendRef = useRef<string | null>(null);
+    const activeDmFriendIdRef = useRef<string | null>(null);
+    const dmWebRtcInitAttemptsRef = useRef<Map<string, number>>(new Map());
+    const dmWebRtcInitSuccessRef = useRef<Map<string, number>>(new Map());
+    const dmWebRtcInitSkipsRef = useRef<Map<string, number>>(new Map());
 
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -67,6 +72,7 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isPartnerTyping, setIsPartnerTyping] = useState(false);
     const { sendDmMessage, editDmMessage, deleteDmMessage, sendTyping, sendProfile, onTyping, onProfile, getDataChannel, onDataChannel, initWebRTC } = useDmSignaling();
+    const activeDmFriendId = activeDmFriend?.id ?? null;
 
     const currentMessages = activeDmFriend ? (dmMessages[activeDmFriend.id] || []) : [];
 
@@ -77,19 +83,27 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
         }
     }, [activeDmFriend, setHasNewDmMessage]);
 
+    useEffect(() => {
+        activeDmFriendIdRef.current = activeDmFriendId;
+        if (!activeDmFriendId) {
+            initializedWebRtcFriendRef.current = null;
+            fileTransferChannelRef.current = null;
+        }
+    }, [activeDmFriendId]);
+
     // Handle incoming typing events
     useEffect(() => {
-        if (!activeDmFriend) return;
+        if (!activeDmFriendId) return;
         return onTyping((friendId, isTyping) => {
-            if (friendId === activeDmFriend.id) {
+            if (friendId === activeDmFriendIdRef.current) {
                 setIsPartnerTyping(isTyping);
             }
         });
-    }, [activeDmFriend, onTyping]);
+    }, [activeDmFriendId, onTyping]);
 
     // Handle incoming profile updates
     useEffect(() => {
-        if (!activeDmFriend) return;
+        if (!activeDmFriendId) return;
         return onProfile((friendId, username, avatarSeed, incomingAvatarUrl) => {
             updatePeerProfile(friendId, {
                 username: username || undefined,
@@ -97,23 +111,39 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
                 avatarUrl: incomingAvatarUrl,
             });
         });
-    }, [activeDmFriend, onProfile, updatePeerProfile]);
+    }, [activeDmFriendId, onProfile, updatePeerProfile]);
 
     useEffect(() => {
-        if (!activeDmFriend) return;
-        sendProfile(activeDmFriend.id, {
+        if (!activeDmFriendId) return;
+        sendProfile(activeDmFriendId, {
             username: displayName || 'Anonymous',
             avatarSeed,
             avatarUrl: avatarUrl || null,
         });
-    }, [activeDmFriend, avatarSeed, avatarUrl, displayName, sendProfile]);
+    }, [activeDmFriendId, avatarSeed, avatarUrl, displayName, sendProfile]);
 
     // Initialize WebRTC for file transfers when friend is active
     useEffect(() => {
-        if (!activeDmFriend) return;
+        if (!activeDmFriendId) return;
 
-        console.log(`[DmChatArea] Initializing WebRTC for friend: ${activeDmFriend.id.slice(0, 15)}…`);
-        initWebRTC(activeDmFriend.id);
+        const nextAttempt = (dmWebRtcInitAttemptsRef.current.get(activeDmFriendId) ?? 0) + 1;
+        dmWebRtcInitAttemptsRef.current.set(activeDmFriendId, nextAttempt);
+
+        if (initializedWebRtcFriendRef.current !== activeDmFriendId) {
+            const nextSuccess = (dmWebRtcInitSuccessRef.current.get(activeDmFriendId) ?? 0) + 1;
+            dmWebRtcInitSuccessRef.current.set(activeDmFriendId, nextSuccess);
+            console.log(
+                `[DmChatArea] Initializing WebRTC for friend: ${activeDmFriendId.slice(0, 15)}… (attempt=${nextAttempt}, success=${nextSuccess})`,
+            );
+            initWebRTC(activeDmFriendId);
+            initializedWebRtcFriendRef.current = activeDmFriendId;
+        } else {
+            const nextSkip = (dmWebRtcInitSkipsRef.current.get(activeDmFriendId) ?? 0) + 1;
+            dmWebRtcInitSkipsRef.current.set(activeDmFriendId, nextSkip);
+            console.debug(
+                `[DmChatArea] Skipping duplicate WebRTC init for friend: ${activeDmFriendId.slice(0, 15)}… (attempt=${nextAttempt}, skipped=${nextSkip})`,
+            );
+        }
 
         const attachChannelHandlers = (channel: RTCDataChannel) => {
             channel.binaryType = 'arraybuffer';
@@ -123,7 +153,7 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
         };
 
         // Get existing data channel if available
-        const existingChannel = getDataChannel(activeDmFriend.id);
+        const existingChannel = getDataChannel(activeDmFriendId);
         if (existingChannel) {
             fileTransferChannelRef.current = existingChannel;
             attachChannelHandlers(existingChannel);
@@ -131,7 +161,7 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
 
         // Register callback for new data channels
         const unregister = onDataChannel((channel, from) => {
-            if (from === activeDmFriend.id) {
+            if (from === activeDmFriendIdRef.current) {
                 fileTransferChannelRef.current = channel;
                 attachChannelHandlers(channel);
                 console.log(`[DmChatArea] Data channel received for friend: ${from.slice(0, 15)}…`);
@@ -140,9 +170,8 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
 
         return () => {
             unregister();
-            fileTransferChannelRef.current = null;
         };
-    }, [activeDmFriend, initWebRTC, getDataChannel, onDataChannel, receiveChunk]);
+    }, [activeDmFriendId, initWebRTC, getDataChannel, onDataChannel, receiveChunk]);
 
     const handleTyping = useCallback((isTyping: boolean) => {
         if (activeDmFriend) {
@@ -203,10 +232,10 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
                 const arrayBuffer = await file.arrayBuffer();
                 const uint8Array = new Uint8Array(arrayBuffer);
 
-                // Shrink to fit under 500KB or 1280px max dimension
-                const compressed = compressor.compress_to_webp(uint8Array, 1280, 1280);
+                // Shrink to fit under 500KB using JPEG (iteratively reduces dimensions)
+                const compressed = compressor.shrink_to_fit(uint8Array, 500);
 
-                const blob = new Blob([compressed], { type: "image/webp" });
+                const blob = new Blob([compressed], { type: "image/jpeg" });
                 console.log(
                     "[DmChatArea] Compression complete:",
                     (blob.size / 1024).toFixed(1),
@@ -284,16 +313,50 @@ export function DmChatArea({ onBack }: DmChatAreaProps) {
                     continue;
                 }
 
-                try {
-                    console.log(`[DmChatArea] Sending file: ${file.name}`);
-                    const fileToSend = processedBlob instanceof File
-                        ? processedBlob
-                        : new File([processedBlob], file.name, { type: processedBlob.type });
-                    await sendFile(channel, fileToSend);
+                const fileToSend = processedBlob instanceof File
+                    ? processedBlob
+                    : new File([processedBlob], file.name, { type: processedBlob.type });
+                let sent = false;
+                let sendError: unknown = null;
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                    const activeChannel = attempt === 0 ? channel : fileTransferChannelRef.current;
+                    if (!activeChannel || activeChannel.readyState !== 'open') {
+                        const channelOpened = await waitForDataChannelOpen();
+                        if (!channelOpened) {
+                            sendError = new Error('Data channel not ready for file transfer');
+                            break;
+                        }
+                        continue;
+                    }
+                    try {
+                        console.log(`[DmChatArea] Sending file: ${file.name}, attempt ${attempt + 1}`);
+                        await sendFile(activeChannel, fileToSend);
+                        sent = true;
+                        sendError = null;
+                        break;
+                    } catch (err) {
+                        sendError = err;
+                        const errorMessage = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+                        const retryable =
+                            attempt === 0 &&
+                            (errorMessage.includes('network') ||
+                                errorMessage.includes('datachannel') ||
+                                errorMessage.includes('readystate') ||
+                                errorMessage.includes('not open'));
+                        if (!retryable) {
+                            break;
+                        }
+                        const channelOpened = await waitForDataChannelOpen();
+                        if (!channelOpened) {
+                            break;
+                        }
+                    }
+                }
+                if (sent) {
                     console.log(`[DmChatArea] File sent successfully: ${file.name}`);
                     updatePeerActivity();
-                } catch (err) {
-                    console.error("[DmChatArea] Failed to send file:", err);
+                } else {
+                    console.error("[DmChatArea] Failed to send file:", sendError);
                 }
             }
         },

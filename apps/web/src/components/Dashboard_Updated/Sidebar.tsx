@@ -7,9 +7,8 @@ import {
   MicIcon, SoundIcon, SettingsIcon, MenuIcon, ScreenShareIcon, ScreenShareStopIcon
 } from './Icons';
 import SidebarList from './SidebarList';
-import SettingsPopover from './SettingsPopover';
 import ProfilePopover from './ProfilePopover';
-import PremiumCard from './PremiumCard';
+import SettingsPopover from './SettingsPopover';
 
 interface SidebarProps {
   activeTab: 'chat' | 'friends';
@@ -27,29 +26,43 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
   const { isMicOn, requestStart: requestMicStart, requestStop: requestMicStop } = useVoiceChatStore();
   const dicebearUrl = `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${avatarSeed}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`;
   const avatarSrc = avatarUrl || dicebearUrl;
-  const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent.toLowerCase() : '';
+  const isMobileOrTablet = /android|iphone|ipad|ipod|mobile|tablet/.test(userAgent);
+  const supportsDisplayMedia =
+    typeof navigator !== 'undefined' &&
+    typeof navigator.mediaDevices?.getDisplayMedia === 'function';
+  const isScreenShareSupported = supportsDisplayMedia && !isMobileOrTablet;
+  const canUseScreenShare = isInChat && isScreenShareSupported;
+  const screenShareTitle = !isInChat
+    ? 'Join a chat to share screen'
+    : !isScreenShareSupported
+      ? 'Screen sharing is available on desktop browsers only'
+      : isLocalSharing
+        ? 'Stop sharing'
+        : 'Share your screen';
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
-        setShowSettings(false);
-      }
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setShowProfile(false);
       }
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setShowSettings(false);
+      }
     };
 
-    if (showSettings || showProfile) {
+    if (showProfile || showSettings) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showSettings, showProfile]);
+  }, [showProfile, showSettings]);
 
   return (
     <>
@@ -61,14 +74,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
 
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50 
-        h-full w-64 min-w-64 bg-panel lg:bg-popover border-r-0 flex flex-col
+        h-full w-64 min-w-64 bg-panel lg:bg-popover border-r-0 flex flex-col pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] lg:pt-0 lg:pb-0
         transition-all duration-300 ease-in-out
         ${isOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0 lg:w-0 lg:min-w-0 pointer-events-none'}
       `}>
         {/* Mobile Header in Sidebar */}
         <div className="flex h-12 w-full items-center justify-between px-4 lg:hidden border-b border-black/20 dark:border-white/10 shrink-0">
           <span className="font-bold text-lg">Menu</span>
-          <button onClick={onClose} className="p-1">
+          <button onClick={onClose} className="p-1" aria-label="Close menu" title="Close menu">
             <MenuIcon />
           </button>
         </div>
@@ -83,33 +96,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
           <div className="bg-panel px-1 relative z-10">
             {/* Room Action Buttons */}
             <div className="px-1.5 py-1.5 space-y-1 mt-1">
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent('open-join-room-modal'))}
-                className="group w-full flex items-center gap-2.5 p-1.5 hover:bg-accent disabled:select-none rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 transition-all text-foreground"
-              >
-                <div className="flex shrink-0 items-center justify-center h-7 w-7 rounded-md bg-zinc-500/10 text-zinc-500 group-hover:bg-zinc-500/20 group-hover:text-foreground transition-all duration-200">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                </div>
-                <span className="font-semibold text-foreground/80 group-hover:text-foreground transition-colors">Join Room</span>
-              </button>
-
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent('join-room-type', { detail: { type: 'help' } }))}
-                className="group w-full flex items-center gap-2.5 p-1.5 hover:bg-accent disabled:select-none rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 transition-all text-foreground"
-              >
-                <div className="flex shrink-0 items-center justify-center h-7 w-7 rounded-md bg-blue-500/10 text-blue-500 group-hover:bg-blue-500/20 group-hover:text-blue-400 transition-all duration-200">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                    <path d="M12 17h.01" />
-                  </svg>
-                </div>
-                <span className="font-semibold text-foreground/80 group-hover:text-foreground transition-colors">Help Channel</span>
-              </button>
-
               {useSessionStore.getState().adminAccessKey && (
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('join-room-type', { detail: { type: 'admin' } }))}
@@ -125,7 +111,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
               )}
             </div>
 
-            <div className="shrink-0 bg-border h-[1px] w-full mt-0.5 mb-1.5"></div>
+            <div className="shrink-0 h-[2px] w-full my-2 rounded-full bg-[hsl(var(--foreground)/0.15)]"></div>
 
             {/* User Profile */}
             <div className="flex flex-row items-center gap-0.5 rounded-sm pb-1">
@@ -155,39 +141,64 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onEditProfil
                   />
                 )}
               </div>
-              <button
-                onClick={() => isMicOn ? requestMicStop() : requestMicStart()}
-                disabled={!isInChat}
+              <span
+                className="inline-flex"
                 title={!isInChat ? 'Join a chat to use mic' : isMicOn ? 'Mute mic' : 'Unmute mic'}
-                className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground w-8 h-8 transition-colors ${isMicOn ? 'text-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30' : ''
-                  }`}
+                aria-label={!isInChat ? 'Join a chat to use mic' : isMicOn ? 'Mute mic' : 'Unmute mic'}
               >
-                {isMicOn ? <MicIcon /> : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                    <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .71-.11 1.39-.3 2.05" />
-                    <line x1="12" y1="19" x2="12" y2="23" />
-                    <line x1="8" y1="23" x2="16" y2="23" />
-                  </svg>
-                )}
-              </button>
-              <button className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground w-8 h-8">
+                <button
+                  onClick={() => isMicOn ? requestMicStop() : requestMicStart()}
+                  disabled={!isInChat}
+                  aria-label={!isInChat ? 'Join a chat to use mic' : isMicOn ? 'Mute mic' : 'Unmute mic'}
+                  className={`inline-flex disabled:select-none items-center justify-center rounded-lg text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 w-8 h-8 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95 ${
+                    isMicOn 
+                      ? 'text-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30 hover:text-emerald-300' 
+                      : 'text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100'
+                  }`}
+                >
+                  {isMicOn ? <MicIcon /> : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                      <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                      <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .71-.11 1.39-.3 2.05" />
+                      <line x1="12" y1="19" x2="12" y2="23" />
+                      <line x1="8" y1="23" x2="16" y2="23" />
+                    </svg>
+                  )}
+                </button>
+              </span>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('open-settings-modal'))}
+                className="inline-flex disabled:select-none items-center justify-center rounded-lg text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 w-8 h-8 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100"
+                title="Settings"
+                aria-label="Settings"
+              >
                 <SoundIcon />
               </button>
-              <button
-                onClick={() => isLocalSharing ? requestStop() : requestStart()}
-                disabled={!isInChat}
-                title={!isInChat ? 'Join a chat to share screen' : isLocalSharing ? 'Stop sharing' : 'Share your screen'}
-                className={`inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground w-8 h-8 transition-colors ${isLocalSharing ? 'text-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30' : ''
-                  }`}
+              <span
+                className="inline-flex"
+                title={screenShareTitle}
+                aria-label={screenShareTitle}
               >
-                {isLocalSharing ? <ScreenShareStopIcon /> : <ScreenShareIcon />}
-              </button>
+                <button
+                  onClick={() => isLocalSharing ? requestStop() : requestStart()}
+                  disabled={!canUseScreenShare}
+                  aria-label={screenShareTitle}
+                  className={`inline-flex disabled:select-none items-center justify-center rounded-lg text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 w-8 h-8 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95 ${
+                    isLocalSharing 
+                      ? 'text-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30 hover:text-emerald-300' 
+                      : 'text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100'
+                  }`}
+                >
+                  {isLocalSharing ? <ScreenShareStopIcon /> : <ScreenShareIcon />}
+                </button>
+              </span>
               <div className="relative w-10" ref={settingsRef}>
                 <button
                   onClick={() => setShowSettings(!showSettings)}
-                  className="inline-flex disabled:select-none items-center justify-center rounded-md text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10"
+                  className="inline-flex disabled:select-none items-center justify-center rounded-lg text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 w-8 h-8 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100"
+                  title="More"
+                  aria-label="More"
                 >
                   <SettingsIcon />
                 </button>

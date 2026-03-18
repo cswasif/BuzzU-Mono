@@ -210,7 +210,7 @@ const MainContent: React.FC<MainContentProps> = ({ onManageInterests }) => {
 
           <span className="text-xs md:text-xs text-foreground-muted w-full self-center text-center flex items-center justify-center pb-1.5 md:pb-2 gap-1">
             <span>Be respectful and follow our</span>
-            <a href="https://www.chitchat.gg/guidelines" target="_blank" rel="noreferrer" className="underline text-[hsl(var(--link-color))]">chat rules</a>
+            <a href="/guidelines" className="underline text-[hsl(var(--link-color))]">chat rules</a>
           </span>
         </div>
       </div>

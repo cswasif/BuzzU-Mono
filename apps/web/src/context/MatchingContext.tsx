@@ -4,7 +4,9 @@ import { sendMatchmakerDisconnect, useSessionStore } from "../stores/sessionStor
 const MATCHMAKER_URL =
     process.env.MATCHMAKER_URL ||
     import.meta.env.VITE_MATCHMAKER_URL ||
-    "wss://buzzu-matchmaker.buzzu.workers.dev";
+    "wss://buzzu-matchmaker.cswasif.workers.dev";
+const MATCHMAKER_HTTP_URL = MATCHMAKER_URL.replace(/^ws/i, "http");
+const PRESENCE_SNAPSHOT_MIN_INTERVAL_MS = 60000;
 
 const sanitizeRoutingPartition = (value: string) => {
     const normalized = value
@@ -31,6 +33,8 @@ export const buildMatchmakerWsUrl = (params: {
 
 export const buildMatchmakerSearchMessage = (params: {
     interests: string[];
+    matchWithInterests: boolean;
+    interestTimeoutSec: number;
     gender: string;
     genderFilter: string;
     isVerified: boolean;
@@ -41,7 +45,9 @@ export const buildMatchmakerSearchMessage = (params: {
     blockedPeerIds: string[];
 }) => ({
     type: "Search" as const,
-    interests: params.interests,
+    interests: params.matchWithInterests ? params.interests : [],
+    with_interests: params.matchWithInterests,
+    interest_timeout: Math.max(0, Math.min(600, Math.round(params.interestTimeoutSec))),
     gender: params.gender,
     filter: params.genderFilter,
     is_verified: params.isVerified,
@@ -65,6 +71,28 @@ const computeBackoffMs = (attempt: number, maxMs: number) => {
     const base = Math.min(1000 * Math.pow(2, attempt), maxMs);
     const jitter = 0.7 + randomFloat() * 0.6;
     return Math.round(base * jitter);
+};
+
+const primeMatchmakerSession = async (peerId: string) => {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeout = setTimeout(() => controller?.abort(), 3000);
+    const fetchPromise = fetch(
+        `${MATCHMAKER_HTTP_URL}/users/me?peer_id=${encodeURIComponent(peerId)}`,
+        {
+            method: "GET",
+            credentials: "include",
+            signal: controller?.signal,
+        },
+    )
+        .catch(() => undefined)
+        .finally(() => {
+            clearTimeout(timeout);
+        });
+
+    await Promise.race([
+        fetchPromise,
+        new Promise<void>((resolve) => setTimeout(resolve, 3200)),
+    ]);
 };
 
 export const shouldSuppressAudioPlayError = (err: unknown): boolean => {
@@ -103,6 +131,8 @@ interface MatchingContextType {
     setMatchData: (data: MatchData | null) => void;
     error: string | null;
     waitPosition: number | null;
+    textActiveUsers: number;
+    videoActiveUsers: number;
     startMatching: (force?: boolean) => void;
     stopMatching: (cancelQueue?: boolean) => void;
 }
@@ -114,6 +144,8 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [matchData, setMatchData] = useState<MatchData | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [waitPosition, setWaitPosition] = useState<number | null>(null);
+    const [textActiveUsers, setTextActiveUsers] = useState(0);
+    const [videoActiveUsers, setVideoActiveUsers] = useState(0);
 
     const wsRef = useRef<WebSocket | null>(null);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -126,12 +158,16 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const userInitiatedStopRef = useRef(false);
     const retryTimersRef = useRef<Set<NodeJS.Timeout>>(new Set());
     const userStopResetTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const lastPresenceSnapshotAtRef = useRef(0);
+    const wsSessionRef = useRef(0);
 
     const {
         peerId,
         deviceId,
         tabId,
         interests,
+        matchWithInterests,
+        interestTimeoutSec,
         gender,
         genderFilter,
         isVerified,
@@ -139,6 +175,7 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         chatMode,
         selectedInstitution,
         joinRoom,
+        notificationSoundEnabled,
         isUserBlocked,
         blockedUsers,
     } = useSessionStore();
@@ -162,6 +199,7 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         async (cancelQueue: boolean, updateState: boolean) => {
             console.log("[MatchingProvider] stopMatching, cancelQueue:", cancelQueue);
             isMatchingRef.current = false;
+            wsSessionRef.current += 1;
             retryCountRef.current = 0;
             lastMessageAtRef.current = null;
 
@@ -215,6 +253,8 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const latestBlocked = useSessionStore.getState().blockedUsers.map((user) => user.id);
         return buildMatchmakerSearchMessage({
             interests,
+            matchWithInterests,
+            interestTimeoutSec,
             gender,
             genderFilter,
             isVerified,
@@ -224,7 +264,41 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             tabId,
             blockedPeerIds: latestBlocked,
         });
-    }, [interests, gender, genderFilter, isVerified, verifiedOnly, chatMode, deviceId, tabId]);
+    }, [interests, matchWithInterests, interestTimeoutSec, gender, genderFilter, isVerified, verifiedOnly, chatMode, deviceId, tabId]);
+
+    const refreshPresenceSnapshot = useCallback(async (options?: { force?: boolean }) => {
+        if (!peerId) return;
+        if (!options?.force && isMatchingRef.current) return;
+        const now = Date.now();
+        if (!options?.force && now - lastPresenceSnapshotAtRef.current < PRESENCE_SNAPSHOT_MIN_INTERVAL_MS) {
+            return;
+        }
+        try {
+            const params = new URLSearchParams({
+                peer_id: peerId,
+                chat_mode: sanitizeRoutingPartition(chatMode || "text"),
+                region: sanitizeRoutingPartition(selectedInstitution || "global"),
+            });
+            const response = await fetch(`${MATCHMAKER_HTTP_URL}/metrics?${params.toString()}`, {
+                method: "GET",
+                credentials: "include",
+            });
+            if (!response.ok) return;
+            const payload = await response.json() as {
+                activeByMode?: { text?: number; video?: number };
+            };
+            const text = payload?.activeByMode?.text;
+            const video = payload?.activeByMode?.video;
+            if (typeof text === "number") {
+                setTextActiveUsers(text);
+            }
+            if (typeof video === "number") {
+                setVideoActiveUsers(video);
+            }
+            lastPresenceSnapshotAtRef.current = Date.now();
+        } catch {
+        }
+    }, [peerId, chatMode, selectedInstitution]);
 
     const startMatching = useCallback((force: boolean = false) => {
         if (!force && isMatchingRef.current) {
@@ -237,6 +311,8 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
 
         console.log("[MatchingProvider] startMatching, force:", force);
+        const wsSession = wsSessionRef.current + 1;
+        wsSessionRef.current = wsSession;
         isMatchingRef.current = true;
         userInitiatedStopRef.current = false;
         setError(null);
@@ -259,53 +335,47 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
 
         try {
-            const wsUrl = buildMatchmakerWsUrl({
-                baseUrl: MATCHMAKER_URL,
-                peerId,
-                chatMode,
-                selectedInstitution,
-            });
-            const ws = new WebSocket(wsUrl);
-            wsRef.current = ws;
+            const attachSocketHandlers = (ws: WebSocket, session: number) => {
+                ws.onopen = () => {
+                    if (wsRef.current !== ws || wsSessionRef.current !== session) return;
+                    console.log("[MatchingProvider] Connected to matchmaker");
+                    logEvent("info", "matchmaker_connected", { peerId });
+                    lastMessageAtRef.current = Date.now();
+                    retryCountRef.current = 0;
 
-            ws.onopen = () => {
-                console.log("[MatchingProvider] Connected to matchmaker");
-                logEvent("info", "matchmaker_connected", { peerId });
-                lastMessageAtRef.current = Date.now();
-                retryCountRef.current = 0;
+                    ws.send(JSON.stringify(createSearchMessage()));
 
-                ws.send(JSON.stringify(createSearchMessage()));
-
-                const tick = () => {
-                    if (!isMatchingRef.current || wsRef.current !== ws) return;
-                    const now = Date.now();
-                    const lastMessageAt = lastMessageAtRef.current ?? now;
-                    if (now - lastMessageAt > 30000) {
-                        retryCountRef.current += 1;
-                        if (retryCountRef.current <= 4) {
-                            ws.send(JSON.stringify(createSearchMessage()));
-                            lastMessageAtRef.current = now;
-                        } else {
-                            logEvent("warn", "matchmaker_watchdog_timeout", {
-                                peerId,
-                                retryCount: retryCountRef.current,
-                            });
-                            stopMatchingInternal(true, true);
-                            const restartDelay = computeBackoffMs(consecutiveFailuresRef.current, 16000);
-                            consecutiveFailuresRef.current += 1;
-                            scheduleManagedTimeout(() => {
-                                startMatching();
-                            }, restartDelay);
-                            return;
+                    const tick = () => {
+                        if (!isMatchingRef.current || wsRef.current !== ws) return;
+                        const now = Date.now();
+                        const lastMessageAt = lastMessageAtRef.current ?? now;
+                        if (now - lastMessageAt > 30000) {
+                            retryCountRef.current += 1;
+                            if (retryCountRef.current <= 4) {
+                                ws.send(JSON.stringify(createSearchMessage()));
+                                lastMessageAtRef.current = now;
+                            } else {
+                                logEvent("warn", "matchmaker_watchdog_timeout", {
+                                    peerId,
+                                    retryCount: retryCountRef.current,
+                                });
+                                stopMatchingInternal(true, true);
+                                const restartDelay = computeBackoffMs(consecutiveFailuresRef.current, 16000);
+                                consecutiveFailuresRef.current += 1;
+                                scheduleManagedTimeout(() => {
+                                    startMatching();
+                                }, restartDelay);
+                                return;
+                            }
                         }
-                    }
+                        watchdogRef.current = setTimeout(tick, 5000);
+                    };
+                    if (watchdogRef.current) clearTimeout(watchdogRef.current);
                     watchdogRef.current = setTimeout(tick, 5000);
                 };
-                if (watchdogRef.current) clearTimeout(watchdogRef.current);
-                watchdogRef.current = setTimeout(tick, 5000);
-            };
 
-            ws.onmessage = (event) => {
+                ws.onmessage = (event) => {
+                if (wsRef.current !== ws || wsSessionRef.current !== session) return;
                 try {
                     const message = JSON.parse(event.data);
                     lastMessageAtRef.current = Date.now();
@@ -330,15 +400,16 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                             ) {
                                 break;
                             }
-                            try {
-                                const audio = new Audio('/sounds/matched.mp3');
-                                audio.play().catch(e => {
-                                    if (!shouldSuppressAudioPlayError(e)) {
-                                        console.warn('Audio play failed:', e);
-                                    }
-                                });
-                            } catch (e) {
-                                // Ignore audio errors
+                            if (notificationSoundEnabled) {
+                                try {
+                                    const audio = new Audio('/sounds/matched.mp3');
+                                    audio.play().catch(e => {
+                                        if (!shouldSuppressAudioPlayError(e)) {
+                                            console.warn('Audio play failed:', e);
+                                        }
+                                    });
+                                } catch (e) {
+                                }
                             }
                             setMatchData({
                                 room_id: message.room_id,
@@ -372,6 +443,11 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                             setIsMatching(false);
                             stopMatching();
                             break;
+                        case "Presence":
+                            setTextActiveUsers(typeof message.text_active === "number" ? message.text_active : 0);
+                            setVideoActiveUsers(typeof message.video_active === "number" ? message.video_active : 0);
+                            lastPresenceSnapshotAtRef.current = Date.now();
+                            break;
                     }
                 } catch (err) {
                     console.error("[MatchingProvider] Message parse error", err);
@@ -380,9 +456,10 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         error: err instanceof Error ? err.message : String(err),
                     });
                 }
-            };
+                };
 
-            ws.onerror = () => {
+                ws.onerror = () => {
+                if (wsRef.current !== ws || wsSessionRef.current !== session) return;
                 if (!userInitiatedStopRef.current) {
                     consecutiveFailuresRef.current += 1;
                     const backoffMs = computeBackoffMs(consecutiveFailuresRef.current, 30000);
@@ -392,7 +469,9 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         backoffMs,
                     });
                     setError("Connection failed - retrying...");
-                    wsRef.current = null;
+                    if (wsRef.current === ws) {
+                        wsRef.current = null;
+                    }
                     if (consecutiveFailuresRef.current <= 5) {
                         scheduleManagedTimeout(() => {
                             if (!userInitiatedStopRef.current && matchDataRef.current === null) {
@@ -405,14 +484,17 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         setIsMatching(false);
                     }
                 }
-            };
+                };
 
-            ws.onclose = (event) => {
+                ws.onclose = (event) => {
+                if (wsSessionRef.current !== session) return;
                 const wasMatching = isMatchingRef.current;
                 const hasMatchData = matchDataRef.current !== null;
                 const wasUserStop = userInitiatedStopRef.current;
                 isMatchingRef.current = false;
-                wsRef.current = null;
+                if (wsRef.current === ws) {
+                    wsRef.current = null;
+                }
 
                 if (event.code === 1000) return;
 
@@ -434,13 +516,32 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         }, backoffMs);
                     }
                 }
+                };
             };
+
+            const connectWebSocket = async () => {
+                await primeMatchmakerSession(peerId);
+                if (!isMatchingRef.current || wsRef.current !== null) {
+                    return;
+                }
+                const wsUrl = buildMatchmakerWsUrl({
+                    baseUrl: MATCHMAKER_URL,
+                    peerId,
+                    chatMode,
+                    selectedInstitution,
+                });
+                const ws = new WebSocket(wsUrl);
+                wsRef.current = ws;
+                attachSocketHandlers(ws, wsSession);
+            };
+
+            void connectWebSocket();
         } catch (err) {
             isMatchingRef.current = false;
             setError("Failed to connect");
             setIsMatching(false);
         }
-    }, [peerId, chatMode, selectedInstitution, joinRoom, isUserBlocked, stopMatching, stopMatchingInternal, createSearchMessage, scheduleManagedTimeout, clearManagedTimeouts]);
+    }, [peerId, chatMode, selectedInstitution, joinRoom, isUserBlocked, stopMatching, stopMatchingInternal, createSearchMessage, scheduleManagedTimeout, clearManagedTimeouts, notificationSoundEnabled]);
 
     useEffect(() => {
         if (!isMatching) return;
@@ -448,6 +549,32 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
         ws.send(JSON.stringify(createSearchMessage()));
     }, [blockedUsers, isMatching, createSearchMessage]);
+
+    useEffect(() => {
+        if (typeof document === "undefined") return;
+        if (document.visibilityState !== "visible") return;
+        void refreshPresenceSnapshot({ force: true });
+    }, [refreshPresenceSnapshot, peerId, chatMode, selectedInstitution]);
+
+    useEffect(() => {
+        if (isMatching) return;
+        const tick = () => {
+            if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+            void refreshPresenceSnapshot();
+        };
+        const timer = setInterval(tick, PRESENCE_SNAPSHOT_MIN_INTERVAL_MS);
+        return () => clearInterval(timer);
+    }, [isMatching, refreshPresenceSnapshot]);
+
+    useEffect(() => {
+        if (typeof document === "undefined") return;
+        const onVisibilityChange = () => {
+            if (document.visibilityState !== "visible") return;
+            void refreshPresenceSnapshot({ force: true });
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    }, [refreshPresenceSnapshot]);
 
     useEffect(() => {
         return () => {
@@ -463,6 +590,8 @@ export const MatchingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 setMatchData,
                 error,
                 waitPosition,
+                textActiveUsers,
+                videoActiveUsers,
                 startMatching,
                 stopMatching,
             }}

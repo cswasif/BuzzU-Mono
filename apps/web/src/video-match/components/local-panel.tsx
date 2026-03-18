@@ -3,6 +3,7 @@ import { AnimatedBackground } from "./animated-background";
 import { RedditIcon, XIcon, WavingHandIcon, ReportFlagIcon, SkipArrowIcon } from "./icons";
 import buzzuLogo from "figma:asset/buzzu.svg";
 import { useSignalingContext } from "../../context/SignalingContext";
+import { useMatching } from "../../hooks/useMatching";
 import { ShieldCheck } from "lucide-react";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useLobbyProbe } from "../../hooks/useLobbyProbe";
@@ -43,6 +44,7 @@ interface LocalPanelProps {
 
 export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, onSkip, onReport }: LocalPanelProps) {
   const { remoteStream } = useSignalingContext();
+  const { videoActiveUsers } = useMatching();
   const { partnerIsVerified } = useSessionStore();
   const { quality, rtt, isUdpBlocked, warnings, isProbing } = useLobbyProbe();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -368,7 +370,7 @@ export function LocalPanel({ onStartChat, isSearching, isConnecting, isMatched, 
                 <div className="flex flex-col justify-center items-center h-full max-h-32 gap-3">
                   <div className="flex items-center gap-1.5 transition-all duration-500 opacity-100">
                     <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-sm md:text-lg text-white">10,281 users online</span>
+                    <span className="text-sm md:text-lg text-white">{videoActiveUsers.toLocaleString()} users online</span>
                   </div>
 
                   {/* Network Quality Indicator */}

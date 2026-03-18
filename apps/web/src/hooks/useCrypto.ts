@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useWasm } from './useWasm';
+import { fingerprintBytes, fingerprintValue, parseJsonSafe, traceE2E } from "../utils/e2eTrace";
 
 const SESSION_KEY_STORAGE_KEY = 'buzzu_session_key';
 
@@ -18,6 +19,17 @@ export function useCrypto() {
         }
         return null;
     });
+
+    const describeSessionState = useCallback((peerId?: string) => {
+        const peerCount = Object.keys(signalSessionsRef.current).length;
+        return {
+            targetPeerId: peerId ?? null,
+            hasTargetSession: peerId ? !!signalSessionsRef.current[peerId] : null,
+            activeSessionPeers: peerCount,
+            signalSessionVersion,
+            wasmReady: !!wasm,
+        };
+    }, [signalSessionVersion, wasm]);
 
     useEffect(() => {
         if (typeof window !== 'undefined' && sessionKey) {
@@ -42,9 +54,13 @@ export function useCrypto() {
         if (!signalProtocolRef.current) {
             console.log('[useCrypto] [Signal Debug] Creating new SignalProtocol instance');
             signalProtocolRef.current = new wasm.SignalProtocol();
+            traceE2E("crypto.signal_protocol.init", {
+                ...describeSessionState(),
+                protocolHandleCreated: true,
+            }, "debug");
         }
         return signalProtocolRef.current;
-    }, [wasm]);
+    }, [describeSessionState, wasm]);
 
     // Helper to recursively convert Map to Object - robust for cross-context Maps
     const mapToObject = (input: any): any => {
@@ -89,8 +105,19 @@ export function useCrypto() {
             bundle = JSON.stringify(bundle);
         }
 
+        const parsed = parseJsonSafe<Record<string, string | null>>(bundle);
+        traceE2E("crypto.prekey_bundle.generated", {
+            ...describeSessionState(),
+            bundleLength: bundle.length,
+            identityKeyFp: fingerprintValue(parsed?.identity_key ?? null),
+            signedPreKeyFp: fingerprintValue(parsed?.signed_prekey ?? null),
+            ratchetKeyFp: fingerprintValue(parsed?.ratchet_key ?? null),
+            signatureFp: fingerprintValue(parsed?.signed_prekey_signature ?? null),
+            certificateValidationResult: "local_signed_prekey_bundle_created",
+        }, "info");
+
         return bundle;
-    }, [getSignalProtocol]);
+    }, [describeSessionState, getSignalProtocol]);
 
     const initiateSignalSession = useCallback((peerId: string, bundleStr: string) => {
         console.log('[useCrypto] [Signal Debug] Initiating Signal session for peerId:', peerId, 'bundle length:', bundleStr?.length);
@@ -101,7 +128,29 @@ export function useCrypto() {
 
         // NEW API: initiate_session() returns a proper SignalSession WASM handle.
         // The handshake initiation data is stored on the protocol object.
-        const session = protocol.initiate_session(bundlePayload);
+        const parsedBundle = parseJsonSafe<Record<string, string | null>>(bundlePayload);
+        traceE2E("crypto.session.initiate.start", {
+            ...describeSessionState(peerId),
+            bundleLength: bundlePayload.length,
+            remoteIdentityKeyFp: fingerprintValue(parsedBundle?.identity_key ?? null),
+            remoteSignedPreKeyFp: fingerprintValue(parsedBundle?.signed_prekey ?? null),
+            remoteRatchetKeyFp: fingerprintValue(parsedBundle?.ratchet_key ?? null),
+            remoteSignatureFp: fingerprintValue(parsedBundle?.signed_prekey_signature ?? null),
+            certificateValidationExpected: "signed_prekey_signature_verify",
+        }, "info");
+
+        let session: any;
+        try {
+            session = protocol.initiate_session(bundlePayload);
+        } catch (error) {
+            traceE2E("crypto.session.initiate.failed", {
+                ...describeSessionState(peerId),
+                bundleLength: bundlePayload.length,
+                certificateValidationResult: "failed",
+                error: error instanceof Error ? error.message : String(error),
+            }, "error");
+            throw error;
+        }
         console.log('[useCrypto] [Signal Debug] Session initiated, session type:', typeof session, 'has encrypt:', typeof session?.encrypt);
 
         // Retrieve the handshake data to send to the peer
@@ -116,16 +165,46 @@ export function useCrypto() {
         signalSessionsRef.current = { ...signalSessionsRef.current, [peerId]: session };
         setSignalSessionVersion(v => v + 1);
         console.log('[useCrypto] [Signal Debug] Session stored for peerId:', peerId);
+        const parsedInitiation = parseJsonSafe<Record<string, string | null>>(initiationJson);
+        traceE2E("crypto.session.initiate.success", {
+            ...describeSessionState(peerId),
+            initiationLength: initiationJson.length,
+            certificateValidationResult: "verified",
+            localIdentityKeyFp: fingerprintValue(parsedInitiation?.identity_key ?? null),
+            localEphemeralKeyFp: fingerprintValue(parsedInitiation?.ephemeral_key ?? null),
+            localRatchetKeyFp: fingerprintValue(parsedInitiation?.ratchet_key ?? null),
+            hasEncryptMethod: typeof session?.encrypt === "function",
+        }, "info");
 
         return initiationJson; // Alice sends this to Bob (stringified SessionInitiation)
-    }, [getSignalProtocol]);
+    }, [describeSessionState, getSignalProtocol]);
 
     const respondToSignalSession = useCallback((peerId: string, initiationStr: string) => {
         console.log('[useCrypto] [Signal Debug] Responding to Signal session for peerId:', peerId, 'initiation length:', initiationStr?.length);
         const protocol = getSignalProtocol();
 
         const initiationPayload = typeof initiationStr === 'string' ? initiationStr : JSON.stringify(initiationStr);
-        const session = protocol.respond_to_session(initiationPayload);
+        const parsedInitiation = parseJsonSafe<Record<string, string | null>>(initiationPayload);
+        traceE2E("crypto.session.respond.start", {
+            ...describeSessionState(peerId),
+            initiationLength: initiationPayload.length,
+            remoteIdentityKeyFp: fingerprintValue(parsedInitiation?.identity_key ?? null),
+            remoteEphemeralKeyFp: fingerprintValue(parsedInitiation?.ephemeral_key ?? null),
+            remoteRatchetKeyFp: fingerprintValue(parsedInitiation?.ratchet_key ?? null),
+            certificateValidationExpected: "session_initiation_structure_and_keys",
+        }, "info");
+        let session: any;
+        try {
+            session = protocol.respond_to_session(initiationPayload);
+        } catch (error) {
+            traceE2E("crypto.session.respond.failed", {
+                ...describeSessionState(peerId),
+                initiationLength: initiationPayload.length,
+                certificateValidationResult: "failed",
+                error: error instanceof Error ? error.message : String(error),
+            }, "error");
+            throw error;
+        }
 
         console.log('[useCrypto] [Signal Debug] Session responded, session type:', typeof session, 'has encrypt:', typeof session?.encrypt);
 
@@ -133,8 +212,13 @@ export function useCrypto() {
         signalSessionsRef.current = { ...signalSessionsRef.current, [peerId]: session };
         setSignalSessionVersion(v => v + 1);
         console.log('[useCrypto] [Signal Debug] Session stored for peerId:', peerId);
+        traceE2E("crypto.session.respond.success", {
+            ...describeSessionState(peerId),
+            certificateValidationResult: "verified",
+            hasEncryptMethod: typeof session?.encrypt === "function",
+        }, "info");
         return session;
-    }, [getSignalProtocol]);
+    }, [describeSessionState, getSignalProtocol]);
 
     const normalizeBytes = useCallback((input: any): Uint8Array => {
         if (input instanceof Uint8Array) return input;
@@ -155,16 +239,58 @@ export function useCrypto() {
         const session = signalSessionsRef.current[peerId];
         if (!session) throw new Error(`No Signal session for ${peerId}`);
         const data = new TextEncoder().encode(plaintext);
-        const raw = session.encrypt(data);
-        return normalizeBytes(raw);
-    }, [normalizeBytes]);
+        traceE2E("crypto.message.encrypt.start", {
+            ...describeSessionState(peerId),
+            plaintextLength: data.byteLength,
+        }, "debug");
+        try {
+            const raw = session.encrypt(data);
+            const bytes = normalizeBytes(raw);
+            traceE2E("crypto.message.encrypt.success", {
+                ...describeSessionState(peerId),
+                plaintextLength: data.byteLength,
+                ciphertextLength: bytes.byteLength,
+                ciphertextFp: fingerprintBytes(bytes),
+            }, "debug");
+            return bytes;
+        } catch (error) {
+            traceE2E("crypto.message.encrypt.failed", {
+                ...describeSessionState(peerId),
+                plaintextLength: data.byteLength,
+                error: error instanceof Error ? error.message : String(error),
+            }, "error");
+            throw error;
+        }
+    }, [describeSessionState, normalizeBytes]);
 
     const decryptMessage = useCallback((peerId: string, ciphertext: Uint8Array) => {
         const session = signalSessionsRef.current[peerId];
         if (!session) throw new Error(`No Signal session for ${peerId}`);
         const payload = normalizeBytes(ciphertext);
-        return session.decrypt(payload);
-    }, [normalizeBytes]);
+        traceE2E("crypto.message.decrypt.start", {
+            ...describeSessionState(peerId),
+            ciphertextLength: payload.byteLength,
+            ciphertextFp: fingerprintBytes(payload),
+        }, "debug");
+        try {
+            const decrypted = session.decrypt(payload);
+            const decryptedBytes = normalizeBytes(decrypted);
+            traceE2E("crypto.message.decrypt.success", {
+                ...describeSessionState(peerId),
+                ciphertextLength: payload.byteLength,
+                plaintextLength: decryptedBytes.byteLength,
+            }, "debug");
+            return decryptedBytes;
+        } catch (error) {
+            traceE2E("crypto.message.decrypt.failed", {
+                ...describeSessionState(peerId),
+                ciphertextLength: payload.byteLength,
+                ciphertextFp: fingerprintBytes(payload),
+                error: error instanceof Error ? error.message : String(error),
+            }, "error");
+            throw error;
+        }
+    }, [describeSessionState, normalizeBytes]);
 
     const hasSignalSession = useCallback((peerId: string) => {
         return !!signalSessionsRef.current[peerId];
@@ -197,21 +323,27 @@ export function useCrypto() {
     }, [getEngine, sessionKey]);
 
     const clearSignalSessions = useCallback(() => {
+        traceE2E("crypto.session.clear_all", {
+            ...describeSessionState(),
+        }, "info");
         signalSessionsRef.current = {};
         setSignalSessionVersion(v => v + 1);
         // Also clear any stale localStorage data from old versions
         if (typeof window !== 'undefined') {
             localStorage.removeItem('buzzu_signal_sessions');
         }
-    }, []);
+    }, [describeSessionState]);
 
     const clearSignalSession = useCallback((peerId: string) => {
         if (!signalSessionsRef.current[peerId]) return;
+        traceE2E("crypto.session.clear_one", {
+            ...describeSessionState(peerId),
+        }, "info");
         const next = { ...signalSessionsRef.current };
         delete next[peerId];
         signalSessionsRef.current = next;
         setSignalSessionVersion(v => v + 1);
-    }, []);
+    }, [describeSessionState]);
 
     const clearSessionKey = useCallback(() => {
         setSessionKey(null);

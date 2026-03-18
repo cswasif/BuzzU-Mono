@@ -12,15 +12,40 @@ interface ProfileModalProps {
     avatarSeed: string;
     avatarUrl?: string | null;
     isVerified?: boolean;
+    interests?: string[];
+    joinedAt?: string | null;
+    badgeVisibility?: 'Everyone' | 'Friends' | 'Nobody';
+    interestsVisibility?: 'Everyone' | 'Friends' | 'Nobody';
     onAddFriend?: () => void;
     onAcceptFriend?: () => void;
     onDeclineFriend?: () => void;
     requestStatus?: 'none' | 'sent' | 'received' | 'friends';
 }
 
-export function ProfileModal({ isOpen, onClose, peerId, username, avatarSeed, avatarUrl, isVerified, onAddFriend, onAcceptFriend, onDeclineFriend, requestStatus = 'none' }: ProfileModalProps) {
+export function ProfileModal({
+    isOpen,
+    onClose,
+    peerId,
+    username,
+    avatarSeed,
+    avatarUrl,
+    isVerified,
+    interests,
+    joinedAt,
+    badgeVisibility,
+    interestsVisibility,
+    onAddFriend,
+    onAcceptFriend,
+    onDeclineFriend,
+    requestStatus = 'none'
+}: ProfileModalProps) {
     const navigate = useNavigate();
+    const selfPeerId = useSessionStore(s => s.peerId);
     const selfDisplayName = useSessionStore(s => s.displayName);
+    const selfJoinedAt = useSessionStore(s => s.joinedAt);
+    const selfInterests = useSessionStore(s => s.interests);
+    const selfBadgeVisibility = useSessionStore(s => s.badgeVisibility);
+    const selfInterestsVisibility = useSessionStore(s => s.interestsVisibility);
     const setDmFriend = useSessionStore(s => s.setDmFriend);
     const friendList = useSessionStore(s => s.friendList);
     const blockUser = useSessionStore(s => s.blockUser);
@@ -29,6 +54,25 @@ export function ProfileModal({ isOpen, onClose, peerId, username, avatarSeed, av
     const actionMenuRef = useRef<HTMLDivElement>(null);
 
     const isSelf = username === 'Me' || username === selfDisplayName;
+    const canViewFriendOnly = requestStatus === 'friends';
+    const effectiveBadgeVisibility = isSelf ? selfBadgeVisibility : (badgeVisibility || 'Nobody');
+    const effectiveInterestsVisibility = isSelf ? selfInterestsVisibility : (interestsVisibility || 'Nobody');
+    const shouldShowVerifiedBadge = Boolean(isVerified) && (
+        effectiveBadgeVisibility === 'Everyone' ||
+        (effectiveBadgeVisibility === 'Friends' && canViewFriendOnly) ||
+        isSelf
+    );
+    const shouldHideInterests = !isSelf && (
+        effectiveInterestsVisibility === 'Nobody' ||
+        (effectiveInterestsVisibility === 'Friends' && !canViewFriendOnly)
+    );
+    const profileInterests = isSelf ? selfInterests : (interests || []);
+    const effectiveJoinedAt = isSelf ? selfJoinedAt : joinedAt;
+    const joinedDateLabel = (() => {
+        const date = new Date(effectiveJoinedAt || '');
+        if (Number.isNaN(date.getTime())) return 'Unknown';
+        return date.toLocaleDateString('en-GB');
+    })();
     const targetPeerId = peerId || friendList.find(f => f.username === username)?.id || useSessionStore.getState().partnerId || '';
 
     const getButtonText = () => {
@@ -79,8 +123,7 @@ export function ProfileModal({ isOpen, onClose, peerId, username, avatarSeed, av
         }
     };
 
-    // Mock ID based on seed for consistency
-    const userId = avatarSeed || '699ec54eee0505687ea59468';
+    const userId = peerId || (isSelf ? selfPeerId : avatarSeed) || 'Unknown';
     const avatarSrc = avatarUrl || `https://api.dicebear.com/5.x/thumbs/png?shapeColor=FD8A8A,F1F7B5,82AAE3,9EA1D4,A084CA,EBC7E8,A7D2CB,F07DEA,EC7272,FFDBA4,59CE8F,ABC270,FF74B1,31C6D4&backgroundColor=554994,594545,495579,395144,3F3B6C,2B3A55,404258,344D67&translateY=5&seed=${userId}&scale=110&eyesColor=000000,ffffff&faceOffsetY=0&size=80`;
 
     useEffect(() => {
@@ -143,7 +186,7 @@ export function ProfileModal({ isOpen, onClose, peerId, username, avatarSeed, av
                         <div className="bg-action rounded-md my-2.5 mx-5 flex items-center justify-center flex-col overflow-y-auto relative z-30">
                             <span className="flex items-center gap-1 font-semibold w-full justify-center mt-8 text-foreground">
                                 {username}
-                                {isVerified && <ShieldCheck className="h-4 w-4 text-blue-500 fill-blue-500/10 ml-0.5" />}
+                                {shouldShowVerifiedBadge && <ShieldCheck className="h-4 w-4 text-blue-500 fill-blue-500/10 ml-0.5" />}
                             </span>
                             <div className="flex flex-col items-center justify-center px-2 pb-4 w-full">
                                 <code className="text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded text-[10px] mt-1">
@@ -205,27 +248,40 @@ export function ProfileModal({ isOpen, onClose, peerId, username, avatarSeed, av
                             <div className="mb-2 text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
                                 BuzzU JOIN DATE
                             </div>
-                            <div className="text-xs font-medium">25/02/2026</div>
+                            <div className="text-xs font-medium">{joinedDateLabel}</div>
 
                             <div className="text-[10px] text-muted-foreground mt-4 mb-2 font-bold uppercase tracking-wider">
                                 Interests
                             </div>
 
                             <div className="mt-1 w-full rounded-md bg-panel/50 px-2 py-3 text-center relative overflow-hidden group">
-                                {/* Blurred Interests Preview */}
-                                <div className="select-none blur-[3px] opacity-40 flex flex-wrap justify-center gap-1">
-                                    <span className="px-2 py-0.5 text-[10px] bg-placeholder rounded-full">No interests</span>
-                                    <span className="px-2 py-0.5 text-[10px] bg-placeholder rounded-full">Hello</span>
-                                    <span className="px-2 py-0.5 text-[10px] bg-placeholder rounded-full">Dont</span>
-                                    <span className="px-2 py-0.5 text-[10px] bg-placeholder rounded-full">Mess</span>
-                                </div>
-
-                                {/* Overlaid Lock Icon */}
-                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent z-20">
-                                    <Lock className="h-5 w-5 mb-1 text-foreground/70" />
-                                    <span className="text-xs font-bold text-foreground">Hidden</span>
-                                </div>
+                                {shouldHideInterests ? (
+                                    <>
+                                        <div className="select-none blur-[3px] opacity-40 flex flex-wrap justify-center gap-1">
+                                            <span className="px-2 py-0.5 text-[10px] bg-placeholder rounded-full">No interests</span>
+                                            <span className="px-2 py-0.5 text-[10px] bg-placeholder rounded-full">Hidden</span>
+                                            <span className="px-2 py-0.5 text-[10px] bg-placeholder rounded-full">Private</span>
+                                        </div>
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent z-20">
+                                            <Lock className="h-5 w-5 mb-1 text-foreground/70" />
+                                            <span className="text-xs font-bold text-foreground">Hidden</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="select-none flex flex-wrap justify-center gap-1">
+                                        {(profileInterests.length > 0 ? profileInterests : ['No interests']).map((interest) => (
+                                            <span key={interest} className="px-2 py-0.5 text-[10px] bg-placeholder rounded-full">
+                                                {interest}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
+                            {isSelf && (
+                                <div className="mt-2 text-[10px] text-muted-foreground">
+                                    Visible to {effectiveInterestsVisibility}
+                                </div>
+                            )}
                         </div>
                     </div>
 
